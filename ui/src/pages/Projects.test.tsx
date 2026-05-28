@@ -2,6 +2,7 @@
 
 import { Component, type ReactNode } from "react";
 import { act } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Project } from "@penclipai/shared";
@@ -225,18 +226,19 @@ describeOnWindows("Projects", () => {
     const currentRoot = createRoot(container);
     root = currentRoot;
 
-    await act(() => new Promise<void>((resolve) => {
-      currentRoot.render(
-        <QueryClientProvider client={queryClient}>
-          <ToastProvider>
-            <TestErrorBoundary>
-              <Projects />
-            </TestErrorBoundary>
-          </ToastProvider>
-        </QueryClientProvider>,
-      );
-      window.setTimeout(resolve, 0);
-    }));
+    await act(async () => {
+      flushSync(() => {
+        currentRoot.render(
+          <QueryClientProvider client={queryClient}>
+            <ToastProvider>
+              <TestErrorBoundary>
+                <Projects />
+              </TestErrorBoundary>
+            </ToastProvider>
+          </QueryClientProvider>,
+        );
+      });
+    });
     await flushReact();
     await flushReact();
     await vi.waitFor(() => {

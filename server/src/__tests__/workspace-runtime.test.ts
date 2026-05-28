@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -2912,6 +2913,8 @@ describe("resolveWorkspaceRuntimeReadinessTimeoutSec", () => {
 describe("resolveShell (shell fallback)", () => {
   const originalShell = process.env.SHELL;
   const originalPlatform = process.platform;
+  const windowsGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+  const windowsShellFallback = existsSync(windowsGitBash) ? windowsGitBash : "sh";
 
   afterEach(() => {
     if (originalShell !== undefined) {
@@ -2946,7 +2949,7 @@ describe("resolveShell (shell fallback)", () => {
   it("falls back to Git Bash on Windows when available and SHELL is unset", () => {
     delete process.env.SHELL;
     Object.defineProperty(process, "platform", { value: "win32" });
-    expect(resolveShell()).toBe("C:\\Program Files\\Git\\bin\\bash.exe");
+    expect(resolveShell()).toBe(windowsShellFallback);
   }, 15_000);
 
   it("falls back to /bin/sh on darwin when SHELL is unset", () => {
@@ -2964,13 +2967,13 @@ describe("resolveShell (shell fallback)", () => {
   it("treats whitespace-only SHELL as unset and uses platform fallback", () => {
     process.env.SHELL = "   ";
     Object.defineProperty(process, "platform", { value: "win32" });
-    expect(resolveShell()).toBe("C:\\Program Files\\Git\\bin\\bash.exe");
+    expect(resolveShell()).toBe(windowsShellFallback);
   }, 15_000);
 
   it("ignores Windows command shells that do not support POSIX -c semantics", () => {
     process.env.SHELL = "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
     Object.defineProperty(process, "platform", { value: "win32" });
-    expect(resolveShell()).toBe("C:\\Program Files\\Git\\bin\\bash.exe");
+    expect(resolveShell()).toBe(windowsShellFallback);
   }, 15_000);
 
   it("falls back when SHELL points to a missing absolute path", () => {

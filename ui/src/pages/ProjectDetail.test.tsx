@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Project } from "@penclipai/shared";
 import type { ReactNode } from "react";
 import { act } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { queryKeys } from "../lib/queryKeys";
@@ -205,11 +206,13 @@ describeOnWindows("ProjectDetail", () => {
 
     await act(async () => {
       root = createRoot(container);
-      root.render(
-        <QueryClientProvider client={queryClient}>
-          <ProjectDetail />
-        </QueryClientProvider>,
-      );
+      flushSync(() => {
+        root?.render(
+          <QueryClientProvider client={queryClient}>
+            <ProjectDetail />
+          </QueryClientProvider>,
+        );
+      });
     });
     await act(async () => {
       await Promise.resolve();
