@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, MailPlus } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { Check, Copy, ExternalLink, MailPlus } from "lucide-react";
 import { accessApi } from "@/api/access";
 import { ApiError } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -15,8 +14,8 @@ const inviteRoleOptions = [
   {
     value: "viewer",
     label: "Viewer",
-    description: "Can view company work and follow along without operational permissions.",
-    gets: "No built-in grants.",
+    description: "Can view company work and follow along.",
+    gets: "View-only company membership.",
   },
   {
     value: "operator",
@@ -33,8 +32,8 @@ const inviteRoleOptions = [
   {
     value: "owner",
     label: "Owner",
-    description: "Full company access, including membership and permission management.",
-    gets: "Everything in Admin, plus managing members and permission grants.",
+    description: "Full company access, including membership management.",
+    gets: "Everything in Admin, plus managing members.",
   },
 ] as const;
 
@@ -46,7 +45,6 @@ function isInviteHistoryRow(value: unknown): value is Awaited<ReturnType<typeof 
 }
 
 export function CompanyInvites() {
-  const { t } = useTranslation();
   const { selectedCompany, selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { pushToast } = useToast();
@@ -54,6 +52,7 @@ export function CompanyInvites() {
   const [humanRole, setHumanRole] = useState<"owner" | "admin" | "operator" | "viewer">("operator");
   const [latestInviteUrl, setLatestInviteUrl] = useState<string | null>(null);
   const [latestInviteCopied, setLatestInviteCopied] = useState(false);
+  const latestInviteInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!latestInviteCopied) return;
@@ -63,33 +62,67 @@ export function CompanyInvites() {
     return () => window.clearTimeout(timeout);
   }, [latestInviteCopied]);
 
-  async function copyInviteUrl(url: string) {
+  function selectLatestInviteUrl() {
+    latestInviteInputRef.current?.focus();
+    latestInviteInputRef.current?.select();
+  }
+
+  async function copyText(text: string, unavailableBody: string, afterFallback?: () => void) {
     try {
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(text);
         return true;
       }
     } catch {
       // Fall through to the unavailable message below.
     }
 
+    const canUseLegacyCopy =
+      typeof document !== "undefined" &&
+      typeof document.execCommand === "function" &&
+      (typeof document.queryCommandSupported !== "function" || document.queryCommandSupported("copy"));
+    if (canUseLegacyCopy) {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.top = "0";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+
+      try {
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        afterFallback?.();
+        if (copied) return true;
+      } catch {
+        document.body.removeChild(textarea);
+      }
+    }
+
+    afterFallback?.();
     pushToast({
-      title: t("Clipboard unavailable", { defaultValue: "Clipboard unavailable" }),
-      body: t("Copy the invite URL manually from the field below.", {
-        defaultValue: "Copy the invite URL manually from the field below.",
-      }),
+      title: "Clipboard unavailable",
+      body: unavailableBody,
       tone: "warn",
     });
     return false;
   }
 
+  async function copyInviteUrl(url: string) {
+    return copyText(url, "The invite URL is selected. Copy it manually from the field.", selectLatestInviteUrl);
+  }
+
   useEffect(() => {
     setBreadcrumbs([
-      { label: selectedCompany?.name ?? t("Company", { defaultValue: "Company" }), href: "/dashboard" },
-      { label: t("Settings", { defaultValue: "Settings" }), href: "/company/settings" },
-      { label: t("Invites", { defaultValue: "Invites" }) },
+      { label: selectedCompany?.name ?? "Company", href: "/dashboard" },
+      { label: "Settings", href: "/company/settings" },
+      { label: "Invites" },
     ]);
-  }, [selectedCompany?.name, setBreadcrumbs, t]);
+  }, [selectedCompany?.name, setBreadcrumbs]);
 
   const inviteHistoryQueryKey = queryKeys.access.invites(selectedCompanyId ?? "", "all", INVITE_HISTORY_PAGE_SIZE);
   const invitesQuery = useInfiniteQuery({
@@ -121,23 +154,19 @@ export function CompanyInvites() {
     onSuccess: async (invite) => {
       setLatestInviteUrl(invite.inviteUrl);
       setLatestInviteCopied(false);
-      const copied = await copyInviteUrl(invite.inviteUrl);
+      const copied = await copyText(invite.inviteUrl, "Copy the invite URL manually from the field below.");
 
       await queryClient.invalidateQueries({ queryKey: inviteHistoryQueryKey });
       pushToast({
-        title: t("Invite created", { defaultValue: "Invite created" }),
-        body: copied
-          ? t("Invite ready below and copied to clipboard.", {
-            defaultValue: "Invite ready below and copied to clipboard.",
-          })
-          : t("Invite ready below.", { defaultValue: "Invite ready below." }),
+        title: "Invite created",
+        body: copied ? "Invite ready below and copied to clipboard." : "Invite ready below.",
         tone: "success",
       });
     },
     onError: (error) => {
       pushToast({
-        title: t("Failed to create invite", { defaultValue: "Failed to create invite" }),
-        body: error instanceof Error ? error.message : t("Unknown error", { defaultValue: "Unknown error" }),
+        title: "Failed to create invite",
+        body: error instanceof Error ? error.message : "Unknown error",
         tone: "error",
       });
     },
@@ -147,38 +176,32 @@ export function CompanyInvites() {
     mutationFn: (inviteId: string) => accessApi.revokeInvite(inviteId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: inviteHistoryQueryKey });
-      pushToast({ title: t("Invite revoked", { defaultValue: "Invite revoked" }), tone: "success" });
+      pushToast({ title: "Invite revoked", tone: "success" });
     },
     onError: (error) => {
       pushToast({
-        title: t("Failed to revoke invite", { defaultValue: "Failed to revoke invite" }),
-        body: error instanceof Error ? error.message : t("Unknown error", { defaultValue: "Unknown error" }),
+        title: "Failed to revoke invite",
+        body: error instanceof Error ? error.message : "Unknown error",
         tone: "error",
       });
     },
   });
 
   if (!selectedCompanyId) {
-    return <div className="text-sm text-muted-foreground">{t("Select a company to manage invites.", {
-      defaultValue: "Select a company to manage invites.",
-    })}</div>;
+    return <div className="text-sm text-muted-foreground">Select a company to manage invites.</div>;
   }
 
   if (invitesQuery.isLoading) {
-    return <div className="text-sm text-muted-foreground">{t("Loading invites…", {
-      defaultValue: "Loading invites…",
-    })}</div>;
+    return <div className="text-sm text-muted-foreground">Loading invites…</div>;
   }
 
   if (invitesQuery.error) {
     const message =
       invitesQuery.error instanceof ApiError && invitesQuery.error.status === 403
-        ? t("You do not have permission to manage company invites.", {
-          defaultValue: "You do not have permission to manage company invites.",
-        })
+        ? "You do not have permission to manage company invites."
         : invitesQuery.error instanceof Error
           ? invitesQuery.error.message
-          : t("Failed to load invites.", { defaultValue: "Failed to load invites." });
+          : "Failed to load invites.";
     return <div className="text-sm text-destructive">{message}</div>;
   }
 
@@ -187,27 +210,23 @@ export function CompanyInvites() {
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <MailPlus className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold">{t("Company Invites", { defaultValue: "Company Invites" })}</h1>
+          <h1 className="text-lg font-semibold">Company Invites</h1>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          {t("Create human invite links for company access. New invite links are copied to your clipboard when they are generated.", {
-            defaultValue: "Create human invite links for company access. New invite links are copied to your clipboard when they are generated.",
-          })}
+          Invite people to request access to this company. New invite links are copied to your clipboard when they are generated.
         </p>
       </div>
 
       <section className="space-y-4 rounded-xl border border-border p-5">
         <div className="space-y-1">
-          <h2 className="text-sm font-semibold">{t("Create invite", { defaultValue: "Create invite" })}</h2>
+          <h2 className="text-sm font-semibold">Invite a person</h2>
           <p className="text-sm text-muted-foreground">
-            {t("Generate a human invite link and choose the default access it should request.", {
-              defaultValue: "Generate a human invite link and choose the default access it should request.",
-            })}
+            Generate a human invite link and choose the default access it should request.
           </p>
         </div>
 
         <fieldset className="space-y-3">
-          <legend className="text-sm font-medium">{t("Choose a role", { defaultValue: "Choose a role" })}</legend>
+          <legend className="text-sm font-medium">Choose a role</legend>
           <div className="rounded-xl border border-border">
             {inviteRoleOptions.map((option, index) => {
               const checked = humanRole === option.value;
@@ -226,17 +245,15 @@ export function CompanyInvites() {
                   />
                   <span className="min-w-0 space-y-1">
                     <span className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">{t(option.label, { defaultValue: option.label })}</span>
+                      <span className="text-sm font-medium">{option.label}</span>
                       {option.value === "operator" ? (
                         <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                          {t("Default", { defaultValue: "Default" })}
+                          Default
                         </span>
                       ) : null}
                     </span>
-                    <span className="block max-w-2xl text-sm text-muted-foreground">
-                      {t(option.description, { defaultValue: option.description })}
-                    </span>
-                    <span className="block text-sm text-foreground">{t(option.gets, { defaultValue: option.gets })}</span>
+                    <span className="block max-w-2xl text-sm text-muted-foreground">{option.description}</span>
+                    <span className="block text-sm text-foreground">{option.gets}</span>
                   </span>
                 </label>
               );
@@ -245,57 +262,61 @@ export function CompanyInvites() {
         </fieldset>
 
         <div className="rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground">
-          {t("Each invite link is single-use. The first successful use consumes the link and creates or reuses the matching join request before approval.", {
-            defaultValue: "Each invite link is single-use. The first successful use consumes the link and creates or reuses the matching join request before approval.",
-          })}
+          Each invite link is single-use. Human invitees get the selected role immediately after sign-in; agent invites still create a join request for approval.
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={() => createInviteMutation.mutate()} disabled={createInviteMutation.isPending}>
-            {createInviteMutation.isPending
-              ? t("Creating…", { defaultValue: "Creating…" })
-              : t("Create invite", { defaultValue: "Create invite" })}
+            {createInviteMutation.isPending ? "Creating…" : "Create invite"}
           </Button>
-          <span className="text-sm text-muted-foreground">
-            {t("Invite history below keeps the audit trail.", {
-              defaultValue: "Invite history below keeps the audit trail.",
-            })}
-          </span>
+          <span className="text-sm text-muted-foreground">Invite history below keeps the audit trail.</span>
         </div>
 
         {latestInviteUrl ? (
           <div className="space-y-3 rounded-lg border border-border px-4 py-4">
             <div className="space-y-1">
               <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium">{t("Latest invite link", { defaultValue: "Latest invite link" })}</div>
+                <div className="text-sm font-medium">Latest invite link</div>
                 {latestInviteCopied ? (
                   <div className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
                     <Check className="h-3.5 w-3.5" />
-                    {t("Copied", { defaultValue: "Copied" })}
+                    Copied
                   </div>
                 ) : null}
               </div>
               <div className="text-sm text-muted-foreground">
-                {t("This URL includes the current Paperclip domain returned by the server.", {
-                  defaultValue: "This URL includes the current Paperclip domain returned by the server.",
-                })}
+                This URL includes the current Paperclip domain returned by the server.
               </div>
             </div>
-            <button
-              type="button"
-              onClick={async () => {
-                const copied = await copyInviteUrl(latestInviteUrl);
-                setLatestInviteCopied(copied);
-              }}
-              className="w-full rounded-md border border-border bg-muted/60 px-3 py-2 text-left text-sm break-all transition-colors hover:bg-background"
-            >
-              {latestInviteUrl}
-            </button>
+            <label className="block space-y-1">
+              <span className="sr-only">Latest invite URL</span>
+              <input
+                ref={latestInviteInputRef}
+                readOnly
+                value={latestInviteUrl}
+                onFocus={(event) => event.currentTarget.select()}
+                onClick={(event) => event.currentTarget.select()}
+                className="w-full rounded-md border border-border bg-muted/60 px-3 py-2 text-sm text-foreground outline-none transition-colors selection:bg-primary selection:text-primary-foreground focus:border-ring"
+                aria-label="Latest invite URL"
+              />
+            </label>
             <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  const copied = await copyInviteUrl(latestInviteUrl);
+                  setLatestInviteCopied(copied);
+                }}
+              >
+                <Copy className="h-4 w-4" />
+                Copy link
+              </Button>
               <Button size="sm" variant="outline" asChild>
                 <a href={latestInviteUrl} target="_blank" rel="noreferrer">
                   <ExternalLink className="h-4 w-4" />
-                  {t("Open invite", { defaultValue: "Open invite" })}
+                  Open invite
                 </a>
               </Button>
             </div>
@@ -306,23 +327,19 @@ export function CompanyInvites() {
       <section className="rounded-xl border border-border">
         <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold">{t("Invite history", { defaultValue: "Invite history" })}</h2>
+            <h2 className="text-sm font-semibold">Invite history</h2>
             <p className="text-sm text-muted-foreground">
-              {t("Review invite status, role, inviter, and any linked join request.", {
-                defaultValue: "Review invite status, role, inviter, and any linked join request.",
-              })}
+              Review invite status, audience, inviter, and any linked join request.
             </p>
           </div>
           <Link to="/inbox/requests" className="text-sm underline underline-offset-4">
-            {t("Open join request queue", { defaultValue: "Open join request queue" })}
+            Open join request queue
           </Link>
         </div>
 
         {inviteHistory.length === 0 ? (
           <div className="border-t border-border px-5 py-8 text-sm text-muted-foreground">
-            {t("No invites have been created for this company yet.", {
-              defaultValue: "No invites have been created for this company yet.",
-            })}
+            No invites have been created for this company yet.
           </div>
         ) : (
           <div className="border-t border-border">
@@ -330,12 +347,12 @@ export function CompanyInvites() {
               <table className="min-w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-5 py-3 font-medium text-muted-foreground">{t("State", { defaultValue: "State" })}</th>
-                    <th className="px-5 py-3 font-medium text-muted-foreground">{t("Role", { defaultValue: "Role" })}</th>
-                    <th className="px-5 py-3 font-medium text-muted-foreground">{t("Invited by", { defaultValue: "Invited by" })}</th>
-                    <th className="px-5 py-3 font-medium text-muted-foreground">{t("Created", { defaultValue: "Created" })}</th>
-                    <th className="px-5 py-3 font-medium text-muted-foreground">{t("Join request", { defaultValue: "Join request" })}</th>
-                    <th className="px-5 py-3 text-right font-medium text-muted-foreground">{t("Action", { defaultValue: "Action" })}</th>
+                    <th className="px-5 py-3 font-medium text-muted-foreground">State</th>
+                    <th className="px-5 py-3 font-medium text-muted-foreground">For</th>
+                    <th className="px-5 py-3 font-medium text-muted-foreground">Invited by</th>
+                    <th className="px-5 py-3 font-medium text-muted-foreground">Created</th>
+                    <th className="px-5 py-3 font-medium text-muted-foreground">Join request</th>
+                    <th className="px-5 py-3 text-right font-medium text-muted-foreground">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -343,12 +360,12 @@ export function CompanyInvites() {
                     <tr key={invite.id} className="border-b border-border last:border-b-0">
                       <td className="px-5 py-3 align-top">
                         <span className="inline-flex rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                          {t(formatInviteState(invite.state), { defaultValue: formatInviteState(invite.state) })}
+                          {formatInviteState(invite.state)}
                         </span>
                       </td>
-                      <td className="px-5 py-3 align-top">{invite.humanRole ?? "—"}</td>
+                      <td className="px-5 py-3 align-top">{formatInviteAudience(invite)}</td>
                       <td className="px-5 py-3 align-top">
-                        <div>{invite.invitedByUser?.name || invite.invitedByUser?.email || t("Unknown inviter", { defaultValue: "Unknown inviter" })}</div>
+                        <div>{invite.invitedByUser?.name || invite.invitedByUser?.email || "Unknown inviter"}</div>
                         {invite.invitedByUser?.email && invite.invitedByUser.name ? (
                           <div className="text-xs text-muted-foreground">{invite.invitedByUser.email}</div>
                         ) : null}
@@ -359,7 +376,7 @@ export function CompanyInvites() {
                       <td className="px-5 py-3 align-top">
                         {invite.relatedJoinRequestId ? (
                           <Link to="/inbox/requests" className="underline underline-offset-4">
-                            {t("Review request", { defaultValue: "Review request" })}
+                            Review request
                           </Link>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -373,10 +390,10 @@ export function CompanyInvites() {
                             onClick={() => revokeMutation.mutate(invite.id)}
                             disabled={revokeMutation.isPending}
                           >
-                            {t("Revoke", { defaultValue: "Revoke" })}
+                            Revoke
                           </Button>
                         ) : (
-                          <span className="text-xs text-muted-foreground">{t("Inactive", { defaultValue: "Inactive" })}</span>
+                          <span className="text-xs text-muted-foreground">Inactive</span>
                         )}
                       </td>
                     </tr>
@@ -392,9 +409,7 @@ export function CompanyInvites() {
                   onClick={() => invitesQuery.fetchNextPage()}
                   disabled={invitesQuery.isFetchingNextPage}
                 >
-                  {invitesQuery.isFetchingNextPage
-                    ? t("Loading more…", { defaultValue: "Loading more…" })
-                    : t("View more", { defaultValue: "View more" })}
+                  {invitesQuery.isFetchingNextPage ? "Loading more…" : "View more"}
                 </Button>
               </div>
             ) : null}
@@ -407,4 +422,10 @@ export function CompanyInvites() {
 
 function formatInviteState(state: "active" | "accepted" | "expired" | "revoked") {
   return state.charAt(0).toUpperCase() + state.slice(1);
+}
+
+function formatInviteAudience(invite: Awaited<ReturnType<typeof accessApi.listInvites>>["invites"][number]) {
+  if (invite.allowedJoinTypes === "agent") return "Agent";
+  if (invite.allowedJoinTypes === "both") return invite.humanRole ? `Human or agent · ${invite.humanRole}` : "Human or agent";
+  return invite.humanRole ?? "Human";
 }

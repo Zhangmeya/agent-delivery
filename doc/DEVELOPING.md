@@ -162,6 +162,13 @@ pnpm dev --bind lan
 ```
 
 This runs dev as `authenticated/private` with a private-network bind preset.
+On a fresh authenticated/private instance, open the app, sign in or create an
+account, and use the setup screen to claim the first instance admin from the
+browser. The CLI fallback remains:
+
+```sh
+pnpm paperclipai auth bootstrap-ceo
+```
 
 For Tailscale-only reachability on a detected tailnet address:
 
@@ -621,9 +628,11 @@ pnpm penclip dashboard get
 
 See full command reference in `doc/CLI.md`.
 
-## OpenClaw Invite Onboarding Endpoints
+## Agent Invite Onboarding Endpoints
 
 Agent-oriented invite onboarding now exposes machine-readable API docs:
+
+The board UI generates agent onboarding prompts from the add-agent modal (`+` in the agent sidebar), so agent onboarding sits with the rest of agent creation rather than company member invite settings.
 
 - `GET /api/invites/:token` returns invite summary plus onboarding and skills index links.
 - `GET /api/invites/:token/onboarding` returns onboarding manifest details (registration endpoint, claim endpoint template, skill install hints).
@@ -642,7 +651,7 @@ pnpm smoke:openclaw-join
 What it validates:
 
 - invite creation for agent-only join
-- agent join request using `adapterType=openclaw`
+- agent join request using `adapterType=openclaw_gateway`
 - board approval + one-time API key claim semantics
 - callback delivery on wakeup to a dockerized OpenClaw-style webhook receiver
 

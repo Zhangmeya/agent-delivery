@@ -910,7 +910,7 @@ describe("worktree helpers", () => {
       }
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, process.platform === "win32" ? 15_000 : 5_000);
 
   it("worktree init with --no-seed preserves the current worktree identity and keeps or safely bumps the db port", async () => {
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-worktree-reseed-"));

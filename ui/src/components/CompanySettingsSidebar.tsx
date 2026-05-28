@@ -1,18 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
-import { ChevronLeft, KeyRound, MailPlus, MonitorCog, Settings, Shield, SlidersHorizontal } from "lucide-react";
+import { ChevronLeft, CloudUpload, KeyRound, MailPlus, MonitorCog, Puzzle, Settings, SlidersHorizontal, Users } from "lucide-react";
 import { sidebarBadgesApi } from "@/api/sidebarBadges";
+import { instanceSettingsApi } from "@/api/instanceSettings";
 import { ApiError } from "@/api/client";
 import { Link } from "@/lib/router";
 import { queryKeys } from "@/lib/queryKeys";
 import { useCompany } from "@/context/CompanyContext";
 import { useSidebar } from "@/context/SidebarContext";
+import { usePluginSlots } from "@/plugins/slots";
 import { SidebarNavItem } from "./SidebarNavItem";
 
 export function CompanySettingsSidebar() {
-  const { t } = useTranslation();
   const { selectedCompany, selectedCompanyId } = useCompany();
   const { isMobile, setSidebarOpen } = useSidebar();
+  const { slots: companySettingsPluginSlots } = usePluginSlots({
+    slotTypes: ["companySettingsPage"],
+    companyId: selectedCompanyId,
+    enabled: !!selectedCompanyId,
+  });
   const { data: badges } = useQuery({
     queryKey: selectedCompanyId
       ? queryKeys.sidebarBadges(selectedCompanyId)
@@ -31,6 +36,11 @@ export function CompanySettingsSidebar() {
     retry: false,
     refetchInterval: 15_000,
   });
+  const { data: experimentalSettings } = useQuery({
+    queryKey: queryKeys.instance.experimentalSettings,
+    queryFn: () => instanceSettingsApi.getExperimental(),
+  });
+  const showCloudUpstream = experimentalSettings?.enableCloudSync === true;
 
   return (
     <aside className="w-full h-full min-h-0 border-r border-border bg-background flex flex-col">
@@ -43,49 +53,53 @@ export function CompanySettingsSidebar() {
           className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
           <ChevronLeft className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{selectedCompany?.name ?? t("Company", { defaultValue: "Company" })}</span>
+          <span className="truncate">{selectedCompany?.name ?? "Company"}</span>
         </Link>
         <div className="flex items-center gap-2 px-2 py-1">
           <Settings className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="flex-1 truncate text-sm font-bold text-foreground">
-            {t("Company Settings", { defaultValue: "Company Settings" })}
+            Company Settings
           </span>
         </div>
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide px-3 py-2">
         <div className="flex flex-col gap-0.5">
-          <SidebarNavItem
-            to="/company/settings"
-            label={t("General", { defaultValue: "General" })}
-            icon={SlidersHorizontal}
-            end
-          />
+          <SidebarNavItem to="/company/settings" label="General" icon={SlidersHorizontal} end />
           <SidebarNavItem
             to="/company/settings/environments"
-            label={t("companySettings.environments", { defaultValue: "Environments" })}
+            label="Environments"
             icon={MonitorCog}
             end
           />
+          {showCloudUpstream ? (
+            <SidebarNavItem
+              to="/company/settings/cloud-upstream"
+              label="Cloud upstream"
+              icon={CloudUpload}
+              end
+            />
+          ) : null}
           <SidebarNavItem
-            to="/company/settings/access"
-            label={t("Access", { defaultValue: "Access" })}
-            icon={Shield}
+            to="/company/settings/members"
+            label="Members"
+            icon={Users}
             badge={badges?.joinRequests ?? 0}
             end
           />
-          <SidebarNavItem
-            to="/company/settings/invites"
-            label={t("Invites", { defaultValue: "Invites" })}
-            icon={MailPlus}
-            end
-          />
-          <SidebarNavItem
-            to="/company/settings/secrets"
-            label={t("Secrets", { defaultValue: "Secrets" })}
-            icon={KeyRound}
-            end
-          />
+          {companySettingsPluginSlots
+            .filter((slot) => slot.routePath)
+            .map((slot) => (
+              <SidebarNavItem
+                key={`${slot.pluginKey}:${slot.id}`}
+                to={`/company/settings/${slot.routePath}`}
+                label={slot.displayName}
+                icon={Puzzle}
+                end
+              />
+            ))}
+          <SidebarNavItem to="/company/settings/invites" label="Invites" icon={MailPlus} end />
+          <SidebarNavItem to="/company/settings/secrets" label="Secrets" icon={KeyRound} end />
         </div>
       </nav>
     </aside>

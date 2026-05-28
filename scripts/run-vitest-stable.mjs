@@ -7,7 +7,6 @@ import path from "node:path";
 const repoRoot = process.cwd();
 const serverRoot = path.join(repoRoot, "server");
 const serverTestsDir = path.join(repoRoot, "server", "src", "__tests__");
-const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const nonServerProjects = [
   "@penclipai/shared",
   "@penclipai/db",
@@ -27,15 +26,12 @@ const additionalSerializedServerTests = new Set([
   "server/src/__tests__/companies-route-path-guard.test.ts",
   "server/src/__tests__/company-portability.test.ts",
   "server/src/__tests__/costs-service.test.ts",
-  "server/src/__tests__/cursor-local-execute.test.ts",
   "server/src/__tests__/express5-auth-wildcard.test.ts",
   "server/src/__tests__/health-dev-server-token.test.ts",
   "server/src/__tests__/health.test.ts",
-  "server/src/__tests__/heartbeat-comment-wake-batching.test.ts",
   "server/src/__tests__/heartbeat-dependency-scheduling.test.ts",
   "server/src/__tests__/heartbeat-issue-liveness-escalation.test.ts",
   "server/src/__tests__/heartbeat-process-recovery.test.ts",
-  "server/src/__tests__/heartbeat-stale-queue-invalidation.test.ts",
   "server/src/__tests__/invite-accept-existing-member.test.ts",
   "server/src/__tests__/invite-accept-gateway-defaults.test.ts",
   "server/src/__tests__/invite-accept-replay.test.ts",
@@ -59,6 +55,30 @@ const generalWorkspacesBGroupName = "general-workspaces-b";
 const generalWorkspacesAProjects = ["@penclipai/ui", "penclip"];
 const generalWorkspacesBProjects = nonServerProjects.filter((project) => !generalWorkspacesAProjects.includes(project));
 const generalGroupNames = [generalServerGroupName, generalWorkspacesAGroupName, generalWorkspacesBGroupName];
+const serializedServerVitestArgs = [
+  "--no-file-parallelism",
+  "--maxWorkers=1",
+  "--minWorkers=1",
+];
+
+function quoteCmdArg(value) {
+  if (/^[A-Za-z0-9_/:=.,@+-]+$/.test(value)) return value;
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function resolvePnpmInvocation(args) {
+  const npmExecPath = process.env.npm_execpath;
+  if (npmExecPath && /pnpm/i.test(npmExecPath)) {
+    return { command: process.execPath, args: [npmExecPath, ...args] };
+  }
+  if (process.platform === "win32") {
+    return {
+      command: process.env.ComSpec || "cmd.exe",
+      args: ["/d", "/s", "/c", ["pnpm", ...args].map(quoteCmdArg).join(" ")],
+    };
+  }
+  return { command: "pnpm", args };
+}
 
 function walk(dir) {
   const entries = readdirSync(dir);
@@ -245,16 +265,17 @@ function runVitest(args, label) {
   // Keep per-run paths compact so Unix socket fixtures stay under macOS path limits.
   const env = {
     ...process.env,
+    NODE_ENV: "test",
     PAPERCLIP_HOME: path.join(testRoot, "h"),
     PAPERCLIP_INSTANCE_ID: `vt-${process.pid}-${invocationIndex}`,
     TMPDIR: path.join(testRoot, "t"),
   };
   mkdirSync(env.PAPERCLIP_HOME, { recursive: true });
   mkdirSync(env.TMPDIR, { recursive: true });
-  const result = spawnSync(pnpmCommand, ["exec", "vitest", "run", ...args], {
+  const pnpmInvocation = resolvePnpmInvocation(["exec", "vitest", "run", ...args]);
+  const result = spawnSync(pnpmInvocation.command, pnpmInvocation.args, {
     cwd: repoRoot,
     env,
-    shell: process.platform === "win32",
     stdio: "inherit",
   });
   if (result.error) {
@@ -282,7 +303,12 @@ function runGeneralGroup(routeTests, groupName) {
   if (groupName === generalServerGroupName) {
     const excludeRouteArgs = routeTests.flatMap((file) => ["--exclude", file.serverPath]);
     runVitest(
-      ["--project", "@penclipai/server", ...excludeRouteArgs],
+      [
+        "--project",
+        "@penclipai/server",
+        ...serializedServerVitestArgs,
+        ...excludeRouteArgs,
+      ],
       `${groupName} server suites excluding ${routeTests.length} serialized suites`,
     );
     return;
@@ -315,7 +341,6 @@ function runSerializedSuites(routeTests, shardIndex, shardCount) {
         routeTest.repoPath,
         "--pool=forks",
         "--poolOptions.forks.isolate=true",
-        "--teardownTimeout=1000",
       ],
       routeTest.repoPath,
     );

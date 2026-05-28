@@ -31,10 +31,12 @@ import { readExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { readProjectWorkspaceRuntimeConfig } from "./project-workspace-runtime-config.js";
 
 export function resolveShell(): string {
-  const fallback = process.platform === "win32" ? "sh" : "/bin/sh";
+  const windowsGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+  const fallback = process.platform === "win32" && existsSync(windowsGitBash) ? windowsGitBash : process.platform === "win32" ? "sh" : "/bin/sh";
   const shell = process.env.SHELL?.trim();
   if (!shell) return fallback;
   if (path.isAbsolute(shell) && !existsSync(shell)) return fallback;
+  if (process.platform === "win32" && /(?:^|[\\/])(?:powershell|pwsh|cmd)(?:\.exe)?$/i.test(shell)) return fallback;
   return shell;
 }
 
@@ -67,6 +69,7 @@ export interface RealizedExecutionWorkspace extends ExecutionWorkspaceInput {
   worktreePath: string | null;
   warnings: string[];
   created: boolean;
+  baseRefSha?: string | null;
 }
 
 export interface RuntimeServiceRef {
@@ -271,16 +274,13 @@ export async function ensureServerWorkspaceLinksCurrent(
   for (const mismatch of mismatches) {
     const linkPath = path.join(workspaceRoot, "server", "node_modules", ...mismatch.packageName.split("/"));
     await fs.mkdir(path.dirname(linkPath), { recursive: true });
-    try {
+    const linkStats = await fs.lstat(linkPath).catch(() => null);
+    if (linkStats?.isSymbolicLink()) {
       await fs.unlink(linkPath);
-    } catch {
+    } else {
       await fs.rm(linkPath, { recursive: true, force: true });
     }
-    await fs.symlink(
-      path.resolve(mismatch.expectedPath),
-      linkPath,
-      process.platform === "win32" ? "junction" : "dir",
-    );
+    await fs.symlink(mismatch.expectedPath, linkPath, process.platform === "win32" ? "junction" : "dir");
   }
 
   const remainingMismatches = findServerWorkspaceLinkMismatches(workspaceRoot);
@@ -427,138 +427,6 @@ function formatCommandForDisplay(command: string, args: string[]) {
     .join(" ");
 }
 
-function normalizeGitArgsForDisplay(args: string[]) {
-  if (
-    args[0] === "-c" &&
-    args[1] === "core.autocrlf=false" &&
-    args[2] === "-c" &&
-    args[3] === "core.eol=lf"
-  ) {
-    return args.slice(4);
-  }
-  return args;
-}
-
-function buildGitWorktreeCheckoutArgs(args: string[]) {
-  if (process.platform !== "win32") return args;
-  return ["-c", "core.autocrlf=false", "-c", "core.eol=lf", ...args];
-}
-
-function normalizeWindowsAbsolutePath(value: string): string {
-  if (process.platform !== "win32") return value;
-  if (/^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\")) {
-    return path.normalize(value);
-  }
-  return value;
-}
-
-function toBashPath(value: string): string {
-  const normalized = normalizeWindowsAbsolutePath(value);
-  if (process.platform !== "win32") return normalized;
-  if (/^[A-Za-z]:[\\/]/.test(normalized)) {
-    return normalized.replace(/\\/g, "/");
-  }
-  if (normalized.startsWith("\\\\")) {
-    return normalized.replace(/\\/g, "/");
-  }
-  return normalized;
-}
-
-function decodeQuotedCommandArg(value: string, quote: `"` | `'`): string {
-  if (quote === `"`) {
-    return JSON.parse(`${quote}${value}${quote}`) as string;
-  }
-  return value.replace(/'\\''/g, "'");
-}
-
-function quoteForBash(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function decodeShellWord(value: string): string {
-  if (
-    (value.startsWith(`"`) && value.endsWith(`"`)) ||
-    (value.startsWith(`'`) && value.endsWith(`'`))
-  ) {
-    return decodeQuotedCommandArg(value.slice(1, -1), value[0] as `"` | `'`);
-  }
-  return value;
-}
-
-function resolveDirectCommand(
-  command: string,
-  env: NodeJS.ProcessEnv,
-): { command: string; args: string[] } | null {
-  const trimmed = command.trim();
-  const nodeEvalMatch = /^node\s+-e\s+(["'])([\s\S]*)\1$/u.exec(trimmed);
-  if (nodeEvalMatch) {
-    const quote = nodeEvalMatch[1] as `"` | `'`;
-    const source = decodeQuotedCommandArg(nodeEvalMatch[2] ?? "", quote);
-    return {
-      command: process.execPath,
-      args: ["-e", source],
-    };
-  }
-
-  const nodeScriptMatch = /^node\s+(.+)$/u.exec(trimmed);
-  if (nodeScriptMatch) {
-    const args = (nodeScriptMatch[1] ?? "")
-      .match(/"[^"]*"|'[^']*'|[^\s]+/g)
-      ?.map(decodeShellWord) ?? [];
-    if (args.length > 0) {
-      return {
-        command: process.execPath,
-        args,
-      };
-    }
-  }
-
-  const bashScriptMatch = /^bash\s+(.+)$/u.exec(trimmed);
-  if (bashScriptMatch) {
-    const args = (bashScriptMatch[1] ?? "")
-      .match(/"[^"]*"|'[^']*'|[^\s]+/g)
-      ?.map(decodeShellWord) ?? [];
-    if (args.length === 0) return null;
-    if (process.platform === "win32") {
-      const inlineEnv = Object.entries(env)
-        .filter(
-          (entry): entry is [string, string] =>
-            entry[0].startsWith("PAPERCLIP_") && typeof entry[1] === "string" && entry[1].length > 0,
-        )
-        .map(([key, value]) => `export ${key}=${quoteForBash(value)};`)
-        .join(" ");
-      const bashArgs = args.map((arg, index) => (index === 0 ? toBashPath(arg) : arg));
-      const bashCommand = `bash ${bashArgs.map(quoteForBash).join(" ")}`;
-      return {
-        command: "bash",
-        args: ["-lc", `${inlineEnv} ${bashCommand}`.trim()],
-      };
-    }
-    return {
-      command: "bash",
-      args: args.map((arg, index) => (process.platform === "win32" && index === 0 ? toBashPath(arg) : arg)),
-    };
-  }
-
-  return null;
-}
-
-function resolveShellCommand(command: string, env: NodeJS.ProcessEnv): { command: string; args: string[] } {
-  const direct = resolveDirectCommand(command, env);
-  if (direct) return direct;
-  const shell = resolveShell();
-  if (/([\\/]|^)cmd(?:\.exe)?$/i.test(shell)) {
-    return {
-      command: shell,
-      args: ["/d", "/s", "/c", command],
-    };
-  }
-  return {
-    command: shell,
-    args: ["-lc", command],
-  };
-}
-
 function trimToLastBytes(value: string, limit: number) {
   const byteLength = Buffer.byteLength(value, "utf8");
   if (byteLength <= limit) return value;
@@ -664,10 +532,109 @@ async function runGit(args: string[], cwd: string): Promise<string> {
   return proc.stdout.trim();
 }
 
+function formatShortSha(value: string | null | undefined) {
+  return value ? value.slice(0, 12) : "unknown";
+}
+
 function gitErrorIncludes(error: unknown, needle: string) {
   const message = error instanceof Error ? error.message : String(error);
   return message.toLowerCase().includes(needle.toLowerCase());
 }
+
+function parseRemoteTrackingRef(ref: string): { remote: string; branch: string } | null {
+  const trimmed = ref.trim();
+  const refsRemotesPrefix = "refs/remotes/";
+  const normalized = trimmed.startsWith(refsRemotesPrefix)
+    ? trimmed.slice(refsRemotesPrefix.length)
+    : trimmed;
+  const slashIndex = normalized.indexOf("/");
+  if (slashIndex <= 0 || slashIndex === normalized.length - 1) return null;
+  const remote = normalized.slice(0, slashIndex);
+  const branch = normalized.slice(slashIndex + 1);
+  if (!/^[A-Za-z0-9._-]+$/.test(remote)) return null;
+  return { remote, branch };
+}
+
+async function refreshRemoteTrackingBaseRef(repoRoot: string, baseRef: string): Promise<string[]> {
+  const remoteTracking = parseRemoteTrackingRef(baseRef);
+  if (!remoteTracking) return [];
+
+  const remoteExists = await runGit(["remote", "get-url", remoteTracking.remote], repoRoot)
+    .then(() => true)
+    .catch(() => false);
+  if (!remoteExists) return [];
+
+  try {
+    await runGit([
+      "fetch",
+      "--prune",
+      remoteTracking.remote,
+      `+refs/heads/${remoteTracking.branch}:refs/remotes/${remoteTracking.remote}/${remoteTracking.branch}`,
+    ], repoRoot);
+    return [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [`Could not refresh base ref ${baseRef} before preparing the execution workspace: ${message}`];
+  }
+}
+
+async function resolveBaseRefSha(repoRoot: string, baseRef: string): Promise<string | null> {
+  return await runGit(["rev-parse", "--verify", `${baseRef}^{commit}`], repoRoot).catch(() => null);
+}
+
+function readRecordedBaseRefSha(metadata: Record<string, unknown> | null | undefined): string | null {
+  const snapshot = parseObject(metadata?.baseRefSnapshot);
+  const resolvedSha = snapshot.resolvedSha;
+  return typeof resolvedSha === "string" && resolvedSha.trim().length > 0 ? resolvedSha.trim() : null;
+}
+
+export async function inspectExecutionWorkspaceBaseDrift(input: {
+  repoRoot: string;
+  worktreePath: string;
+  branchName: string | null;
+  baseRef: string | null;
+  recordedBaseRefSha?: string | null;
+  skipRefresh?: boolean;
+}): Promise<{
+  warnings: string[];
+  currentBaseRefSha: string | null;
+  branchBaseRefSha: string | null;
+}> {
+  const baseRef = input.baseRef?.trim();
+  if (!baseRef) {
+    return { warnings: [], currentBaseRefSha: null, branchBaseRefSha: null };
+  }
+
+  const warnings = input.skipRefresh ? [] : await refreshRemoteTrackingBaseRef(input.repoRoot, baseRef);
+  const currentBaseRefSha = await resolveBaseRefSha(input.repoRoot, baseRef);
+  if (!currentBaseRefSha) {
+    warnings.push(`Could not resolve base ref ${baseRef} while checking execution workspace freshness.`);
+    return { warnings, currentBaseRefSha: null, branchBaseRefSha: null };
+  }
+
+  const branchBaseRefSha = await runGit(["merge-base", "HEAD", baseRef], input.worktreePath).catch(() => null);
+  if (!branchBaseRefSha) {
+    warnings.push(`Could not compare execution workspace ${input.branchName ?? "branch"} against base ref ${baseRef}.`);
+    return { warnings, currentBaseRefSha, branchBaseRefSha: null };
+  }
+
+  if (branchBaseRefSha !== currentBaseRefSha) {
+    const behindCountRaw = await runGit(["rev-list", "--count", `HEAD..${baseRef}`], input.worktreePath).catch(() => "");
+    const behindCount = Number.parseInt(behindCountRaw, 10);
+    const behindText = Number.isFinite(behindCount) && behindCount > 0
+      ? `${behindCount} commit${behindCount === 1 ? "" : "s"}`
+      : "newer commits";
+    const recordedText = input.recordedBaseRefSha
+      ? `recorded base ${formatShortSha(input.recordedBaseRefSha)}`
+      : `merge-base ${formatShortSha(branchBaseRefSha)}`;
+    warnings.push(
+      `Execution workspace branch ${input.branchName ? `"${input.branchName}"` : "HEAD"} is behind ${baseRef} by ${behindText}: ${recordedText}, current base ${formatShortSha(currentBaseRefSha)}. Refresh or rebase the workspace before relying on recent base-branch fixes.`,
+    );
+  }
+
+  return { warnings, currentBaseRefSha, branchBaseRefSha };
+}
+
 
 type GitWorktreeListEntry = {
   worktree: string;
@@ -731,23 +698,28 @@ async function isGitCheckout(cwd: string): Promise<boolean> {
 }
 
 async function detectDefaultBranch(repoRoot: string): Promise<string | null> {
+  // Try the explicit remote HEAD first (set by git clone or git remote set-head)
   try {
     const remoteHead = await runGit(
       ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
       repoRoot,
     );
-    const branch = remoteHead.startsWith("origin/") ? remoteHead.slice("origin/".length) : remoteHead;
-    if (branch) return branch;
+    if (remoteHead) {
+      await refreshRemoteTrackingBaseRef(repoRoot, remoteHead);
+      if (await resolveBaseRefSha(repoRoot, remoteHead)) return remoteHead;
+    }
   } catch {
-    // Fall through to common default-branch names.
+    // Not set — fall through to heuristic
   }
 
-  for (const candidate of ["main", "master"]) {
+  // Fallback: check for common default branch names on the remote
+  for (const candidate of ["origin/master", "origin/main", "main", "master"]) {
     try {
-      await runGit(["rev-parse", "--verify", `refs/remotes/origin/${candidate}`], repoRoot);
+      await refreshRemoteTrackingBaseRef(repoRoot, candidate);
+      await runGit(["rev-parse", "--verify", `${candidate}^{commit}`], repoRoot);
       return candidate;
     } catch {
-      // Try the next candidate.
+      // Not found — try next
     }
   }
 
@@ -859,7 +831,17 @@ function quoteShellArg(value: string) {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-async function syncRepoManagedWorkspaceCommand(command: string, repoRoot: string, workspacePath: string) {
+function toShellPath(value: string) {
+  if (process.platform !== "win32") return value;
+  const normalized = path.resolve(value).replace(/\\/g, "/");
+  const driveMatch = normalized.match(/^([A-Za-z]):\/(.*)$/);
+  if (driveMatch) {
+    return `/${driveMatch[1].toLowerCase()}/${driveMatch[2]}`;
+  }
+  return normalized;
+}
+
+function resolveRepoManagedWorkspaceCommand(command: string, repoRoot: string) {
   const patterns = [
     /^(?<prefix>(?:bash|sh|zsh)\s+)(?<quote>["']?)(?<relative>\.\/[^"'\s]+)\k<quote>(?<suffix>(?:\s.*)?)$/s,
     /^(?<quote>["']?)(?<relative>\.\/[^"'\s]+)\k<quote>(?<suffix>(?:\s.*)?)$/s,
@@ -870,13 +852,12 @@ async function syncRepoManagedWorkspaceCommand(command: string, repoRoot: string
     if (!match?.groups) continue;
 
     const relativePath = match.groups.relative;
-    const resolvedRepoManagedPath = path.join(repoRoot, relativePath.slice(2));
-    if (!existsSync(resolvedRepoManagedPath)) return command;
+    const repoManagedPath = path.join(repoRoot, relativePath.slice(2));
+    if (!existsSync(repoManagedPath)) continue;
 
-    const workspaceManagedPath = path.join(workspacePath, relativePath.slice(2));
-    await fs.mkdir(path.dirname(workspaceManagedPath), { recursive: true });
-    await fs.copyFile(resolvedRepoManagedPath, workspaceManagedPath);
-    return command;
+    const prefix = match.groups.prefix ?? "";
+    const suffix = match.groups.suffix ?? "";
+    return `${prefix}${quoteShellArg(toShellPath(repoManagedPath))}${suffix}`;
   }
 
   return command;
@@ -889,10 +870,10 @@ async function runWorkspaceCommand(input: {
   env: NodeJS.ProcessEnv;
   label: string;
 }) {
-  const shellCommand = resolveShellCommand(input.resolvedCommand ?? input.command, input.env);
+  const shell = resolveShell();
   const proc = await executeProcess({
-    command: shellCommand.command,
-    args: shellCommand.args,
+    command: shell,
+    args: ["-c", input.resolvedCommand ?? input.command],
     cwd: input.cwd,
     env: input.env,
   });
@@ -926,7 +907,7 @@ async function recordGitOperation(
   let code: number | null = null;
   await recorder.recordOperation({
     phase: input.phase,
-    command: formatCommandForDisplay("git", normalizeGitArgsForDisplay(input.args)),
+    command: formatCommandForDisplay("git", input.args),
     cwd: input.cwd,
     metadata: input.metadata ?? null,
     run: async () => {
@@ -995,10 +976,10 @@ async function recordWorkspaceCommandOperation(
     cwd: input.cwd,
     metadata: input.metadata ?? null,
     run: async () => {
-      const shellCommand = resolveShellCommand(input.resolvedCommand ?? input.command, input.env);
+      const shell = resolveShell();
       const result = await executeProcess({
-        command: shellCommand.command,
-        args: shellCommand.args,
+        command: shell,
+        args: ["-c", input.resolvedCommand ?? input.command],
         cwd: input.cwd,
         env: input.env,
       });
@@ -1047,11 +1028,12 @@ async function provisionExecutionWorktree(input: {
 }) {
   const provisionCommand = asString(input.strategy.provisionCommand, "").trim();
   if (!provisionCommand) return;
-  await syncRepoManagedWorkspaceCommand(provisionCommand, input.repoRoot, input.worktreePath);
+  const resolvedProvisionCommand = resolveRepoManagedWorkspaceCommand(provisionCommand, input.repoRoot);
 
   await recordWorkspaceCommandOperation(input.recorder, {
     phase: "workspace_provision",
     command: provisionCommand,
+    resolvedCommand: resolvedProvisionCommand,
     cwd: input.worktreePath,
     env: buildWorkspaceCommandEnv({
       base: input.base,
@@ -1068,6 +1050,7 @@ async function provisionExecutionWorktree(input: {
       worktreePath: input.worktreePath,
       branchName: input.branchName,
       created: input.created,
+      resolvedCommand: resolvedProvisionCommand === provisionCommand ? null : resolvedProvisionCommand,
     },
     successMessage: `Provisioned workspace at ${input.worktreePath}\n`,
   });
@@ -1140,6 +1123,7 @@ export async function realizeExecutionWorkspace(input: {
       worktreePath: null,
       warnings: [],
       created: false,
+      baseRefSha: null,
     };
   }
 
@@ -1157,15 +1141,26 @@ export async function realizeExecutionWorkspace(input: {
     ? resolveConfiguredPath(configuredParentDir, repoRoot)
     : path.join(repoRoot, ".paperclip", "worktrees");
   const worktreePath = path.join(worktreeParentDir, branchName);
-  const configuredBaseRef =
-    typeof rawStrategy.baseRef === "string" && rawStrategy.baseRef.trim().length > 0
-      ? rawStrategy.baseRef.trim()
-      : input.base.repoRef;
-  const baseRef = configuredBaseRef ?? await detectDefaultBranch(repoRoot) ?? "HEAD";
+  const configuredBaseRef = typeof rawStrategy.baseRef === "string" && rawStrategy.baseRef.length > 0
+    ? rawStrategy.baseRef
+    : input.base.repoRef ?? null;
+  const baseRef = configuredBaseRef
+    ?? await detectDefaultBranch(repoRoot)
+    ?? "HEAD";
+  const baseRefreshWarnings = await refreshRemoteTrackingBaseRef(repoRoot, baseRef);
+  const currentBaseRefSha = await resolveBaseRefSha(repoRoot, baseRef);
 
   await fs.mkdir(worktreeParentDir, { recursive: true });
 
   async function reuseExistingWorktree(reusablePath: string) {
+    const baseDrift = await inspectExecutionWorkspaceBaseDrift({
+      repoRoot,
+      worktreePath: reusablePath,
+      branchName,
+      baseRef,
+      recordedBaseRefSha: null,
+      skipRefresh: true,
+    });
     if (input.recorder) {
       await input.recorder.recordOperation({
         phase: "worktree_prepare",
@@ -1175,6 +1170,8 @@ export async function realizeExecutionWorkspace(input: {
           worktreePath: reusablePath,
           branchName,
           baseRef,
+          currentBaseRefSha: baseDrift.currentBaseRefSha,
+          branchBaseRefSha: baseDrift.branchBaseRefSha,
           created: false,
           reused: true,
         },
@@ -1202,8 +1199,9 @@ export async function realizeExecutionWorkspace(input: {
       cwd: reusablePath,
       branchName,
       worktreePath: reusablePath,
-      warnings: [],
+      warnings: [...baseRefreshWarnings, ...baseDrift.warnings],
       created: false,
+      baseRefSha: baseDrift.branchBaseRefSha ?? baseDrift.currentBaseRefSha,
     };
   }
 
@@ -1238,13 +1236,14 @@ export async function realizeExecutionWorkspace(input: {
   try {
     await recordGitOperation(input.recorder, {
       phase: "worktree_prepare",
-      args: buildGitWorktreeCheckoutArgs(["worktree", "add", "-b", branchName, worktreePath, baseRef]),
+      args: ["worktree", "add", "-b", branchName, worktreePath, baseRef],
       cwd: repoRoot,
       metadata: {
         repoRoot,
         worktreePath,
         branchName,
         baseRef,
+        baseRefSha: currentBaseRefSha,
         created: true,
       },
       successMessage: `Created git worktree at ${worktreePath}\n`,
@@ -1257,13 +1256,14 @@ export async function realizeExecutionWorkspace(input: {
     try {
       await recordGitOperation(input.recorder, {
         phase: "worktree_prepare",
-        args: buildGitWorktreeCheckoutArgs(["worktree", "add", worktreePath, branchName]),
+        args: ["worktree", "add", worktreePath, branchName],
         cwd: repoRoot,
         metadata: {
           repoRoot,
           worktreePath,
           branchName,
           baseRef,
+          baseRefSha: currentBaseRefSha,
           created: false,
           reusedExistingBranch: true,
         },
@@ -1299,8 +1299,9 @@ export async function realizeExecutionWorkspace(input: {
     cwd: worktreePath,
     branchName,
     worktreePath,
-    warnings: [],
+    warnings: baseRefreshWarnings,
     created: true,
+    baseRefSha: currentBaseRefSha,
   };
 }
 
@@ -1316,6 +1317,7 @@ export async function ensurePersistedExecutionWorkspaceAvailable(input: {
     repoUrl: string | null | undefined;
     baseRef: string | null | undefined;
     branchName: string | null | undefined;
+    metadata?: Record<string, unknown> | null;
     config?: {
       provisionCommand?: string | null;
     } | null;
@@ -1341,15 +1343,26 @@ export async function ensurePersistedExecutionWorkspaceAvailable(input: {
     worktreePath: strategy === "git_worktree" ? (input.workspace.providerRef ?? cwd) : null,
     warnings: [],
     created: false,
+    baseRefSha: readRecordedBaseRefSha(input.workspace.metadata),
   };
   const provisionCommand = asString(input.workspace.config?.provisionCommand, "").trim();
 
   if (strategy !== "git_worktree") {
     return realized;
   }
+  const repoRoot = await runGit(["rev-parse", "--show-toplevel"], input.base.baseCwd);
+  const recordedBaseRefSha = readRecordedBaseRefSha(input.workspace.metadata);
   if (await directoryExists(cwd)) {
+    const baseDrift = await inspectExecutionWorkspaceBaseDrift({
+      repoRoot,
+      worktreePath: realized.worktreePath ?? cwd,
+      branchName: realized.branchName,
+      baseRef: input.workspace.baseRef ?? input.base.repoRef ?? null,
+      recordedBaseRefSha,
+    });
+    realized.warnings = baseDrift.warnings;
+    realized.baseRefSha = recordedBaseRefSha ?? baseDrift.branchBaseRefSha ?? baseDrift.currentBaseRefSha;
     if (provisionCommand) {
-      const repoRoot = await runGit(["rev-parse", "--show-toplevel"], input.base.baseCwd);
       await provisionExecutionWorktree({
         strategy: {
           type: "git_worktree",
@@ -1368,7 +1381,6 @@ export async function ensurePersistedExecutionWorkspaceAvailable(input: {
     return realized;
   }
 
-  const repoRoot = await runGit(["rev-parse", "--show-toplevel"], input.base.baseCwd);
   const worktreePath = realized.worktreePath ?? cwd;
   const branchName = asString(input.workspace.branchName, "").trim();
   if (!branchName) {
@@ -1377,6 +1389,9 @@ export async function ensurePersistedExecutionWorkspaceAvailable(input: {
 
   await fs.mkdir(path.dirname(worktreePath), { recursive: true });
   await runGit(["worktree", "prune"], repoRoot).catch(() => {});
+  const restoreBaseRef = input.workspace.baseRef ?? input.base.repoRef ?? null;
+  const restoreRefreshWarnings = restoreBaseRef ? await refreshRemoteTrackingBaseRef(repoRoot, restoreBaseRef) : [];
+  const restoreCurrentBaseRefSha = restoreBaseRef ? await resolveBaseRefSha(repoRoot, restoreBaseRef) : null;
 
   let created = false;
   try {
@@ -1389,6 +1404,7 @@ export async function ensurePersistedExecutionWorkspaceAvailable(input: {
         worktreePath,
         branchName,
         baseRef: input.workspace.baseRef ?? input.base.repoRef ?? null,
+        currentBaseRefSha: restoreCurrentBaseRefSha,
         created: false,
         restored: true,
       },
@@ -1404,6 +1420,7 @@ export async function ensurePersistedExecutionWorkspaceAvailable(input: {
       throw error;
     }
     const baseRef = input.workspace.baseRef ?? await detectDefaultBranch(repoRoot) ?? "HEAD";
+    const recreatedBaseRefSha = await resolveBaseRefSha(repoRoot, baseRef);
     await recordGitOperation(input.recorder, {
       phase: "worktree_prepare",
       args: ["worktree", "add", "-b", branchName, worktreePath, baseRef],
@@ -1413,6 +1430,7 @@ export async function ensurePersistedExecutionWorkspaceAvailable(input: {
         worktreePath,
         branchName,
         baseRef,
+        baseRefSha: recreatedBaseRefSha,
         created: true,
         restored: true,
       },
@@ -1421,6 +1439,15 @@ export async function ensurePersistedExecutionWorkspaceAvailable(input: {
     });
     created = true;
   }
+
+  const baseDrift = await inspectExecutionWorkspaceBaseDrift({
+    repoRoot,
+    worktreePath,
+    branchName,
+    baseRef: input.workspace.baseRef ?? input.base.repoRef ?? null,
+    recordedBaseRefSha,
+    skipRefresh: true,
+  });
 
   await provisionExecutionWorktree({
     strategy: {
@@ -1441,7 +1468,12 @@ export async function ensurePersistedExecutionWorkspaceAvailable(input: {
     ...realized,
     cwd: worktreePath,
     worktreePath,
+    warnings: [...restoreRefreshWarnings, ...baseDrift.warnings],
     created,
+    baseRefSha:
+      recordedBaseRefSha
+      ?? (created ? restoreCurrentBaseRefSha : baseDrift.branchBaseRefSha)
+      ?? baseDrift.currentBaseRefSha,
   };
 }
 
@@ -1490,16 +1522,13 @@ export async function cleanupExecutionWorkspaceArtifacts(input: {
 
   for (const command of cleanupCommands) {
     try {
-      if (repoRoot) {
-        await syncRepoManagedWorkspaceCommand(
-          command,
-          repoRoot,
-          workspacePath ?? input.projectWorkspace?.cwd ?? process.cwd(),
-        );
-      }
+      const resolvedCommand = repoRoot
+        ? resolveRepoManagedWorkspaceCommand(command, repoRoot)
+        : command;
       await recordWorkspaceCommandOperation(input.recorder, {
         phase: "workspace_teardown",
         command,
+        resolvedCommand,
         cwd: workspacePath ?? input.projectWorkspace?.cwd ?? process.cwd(),
         env: cleanupEnv,
         label: `Execution workspace cleanup command "${command}"`,
@@ -1508,6 +1537,7 @@ export async function cleanupExecutionWorkspaceArtifacts(input: {
           workspacePath,
           branchName: input.workspace.branchName,
           providerType: input.workspace.providerType,
+          resolvedCommand: resolvedCommand === command ? null : resolvedCommand,
         },
         successMessage: `Completed cleanup command "${command}"\n`,
       });
@@ -1518,7 +1548,7 @@ export async function cleanupExecutionWorkspaceArtifacts(input: {
 
   if (input.workspace.providerType === "git_worktree" && workspacePath) {
     const worktreeExists = await directoryExists(workspacePath);
-    if (worktreeExists && createdByRuntime) {
+    if (worktreeExists) {
       if (!repoRoot) {
         warnings.push(`Could not resolve git repo root for "${workspacePath}".`);
       } else {
@@ -1665,7 +1695,7 @@ function renderRuntimeServiceEnv(input: {
   const rendered: Record<string, string> = {};
   for (const [key, value] of Object.entries(input.envConfig)) {
     if (typeof value !== "string") continue;
-    rendered[key] = normalizeWindowsAbsolutePath(renderTemplate(value, input.templateData));
+    rendered[key] = renderTemplate(value, input.templateData);
   }
   return rendered;
 }
@@ -2218,8 +2248,8 @@ async function startLocalRuntimeService(input: {
     onLog: input.onLog,
   });
 
-  const shellCommand = resolveShellCommand(command, env);
-  const child = spawn(shellCommand.command, shellCommand.args, {
+  const shell = resolveShell();
+  const child = spawn(shell, ["-lc", command], {
     cwd: serviceCwd,
     env,
     detached: process.platform !== "win32",

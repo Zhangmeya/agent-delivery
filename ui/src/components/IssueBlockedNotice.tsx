@@ -2,13 +2,17 @@ import type {
   IssueBlockerAttention,
   IssueRecoveryAction,
   IssueRelationIssueSummary,
+  IssueScheduledRetry,
   SuccessfulRunHandoffState,
 } from "@penclipai/shared";
-import { AlertTriangle, Flag } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { AlertTriangle, CheckCircle2, Flag, Loader2, RotateCcw } from "lucide-react";
 import { Link } from "@/lib/router";
+import { Button } from "@/components/ui/button";
 import { createIssueDetailPath } from "../lib/issueDetailBreadcrumb";
+import { formatMonitorOffset } from "../lib/issue-monitor";
+import { useRetryNowMutation } from "../hooks/useRetryNowMutation";
 import { IssueLinkQuicklook } from "./IssueLinkQuicklook";
+import { RetryErrorBand } from "./IssueScheduledRetryCard";
 import { isAssignedBacklogBlocker } from "../lib/issue-blockers";
 import {
   deriveActiveRecoveryDisplayState,
@@ -16,53 +20,117 @@ import {
 } from "../lib/recovery-display";
 
 function BlockerRecoveryIndicator({ action }: { action: IssueRecoveryAction }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const state = deriveActiveRecoveryDisplayState(action);
   if (!state) return null;
   const tone = RECOVERY_CHIP_DEFAULT_TONE[state];
   const Icon = tone.icon;
-  const label = t(tone.labelKey, { defaultValue: tone.label });
-  const title = t("recoveryChip.openSourceIssueTitle", {
-    label,
-    defaultValue: "{{label}} - open the source issue to act.",
-  });
   return (
     <span
       data-testid="issue-blocked-notice-recovery-indicator"
       data-recovery-state={state}
       role="status"
-      aria-label={label}
-      title={title}
+      aria-label={tone.label}
+      title={`${tone.label} — open the source issue to act.`}
       className={`inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${tone.className}`}
     >
       <Icon className="h-2.5 w-2.5" aria-hidden />
-      {label}
+      {tone.label}
     </span>
   );
 }
 
+function SuccessfulRunRetryNowControl({
+  issueId,
+  scheduledRetry,
+}: {
+  issueId: string;
+  scheduledRetry: IssueScheduledRetry;
+}) {
+  const retryNow = useRetryNowMutation(issueId);
+  const dueAtIso = scheduledRetry.scheduledRetryAt
+    ? new Date(scheduledRetry.scheduledRetryAt).toISOString()
+    : null;
+  const relative = dueAtIso ? formatMonitorOffset(dueAtIso) : null;
+  const scheduleLabel = relative === "now"
+    ? "due now"
+    : relative
+      ? `scheduled ${relative}`
+      : "scheduled";
+  const success = retryNow.isSuccess
+    && (retryNow.data?.outcome === "promoted" || retryNow.data?.outcome === "already_promoted");
+
+  return (
+    <div className="mt-2 rounded-md border border-amber-300/70 bg-background/80 p-2 dark:border-amber-500/40 dark:bg-background/40">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 text-xs leading-5 text-amber-900 dark:text-amber-100">
+          Corrective wake {scheduleLabel}. Retry now starts the same recovery path immediately.
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 border-amber-300/80 bg-background/80 text-amber-950 shadow-none hover:bg-amber-100 dark:border-amber-500/50 dark:bg-background/40 dark:text-amber-100 dark:hover:bg-amber-500/15"
+          onClick={() => retryNow.mutate()}
+          disabled={retryNow.isPending || success}
+          data-testid="issue-next-step-retry-now"
+        >
+          {retryNow.isPending ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              Retrying...
+            </span>
+          ) : success ? (
+            <span className="inline-flex items-center gap-1.5">
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              {retryNow.data?.outcome === "already_promoted" ? "Already promoted" : "Promoted"}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              Retry now
+            </span>
+          )}
+        </Button>
+      </div>
+      <RetryErrorBand
+        error={retryNow.lastError}
+        className="mt-2 border-amber-300/70 bg-amber-100/70 text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-100"
+        onRetry={() => {
+          retryNow.reset();
+          retryNow.mutate();
+        }}
+      />
+    </div>
+  );
+}
+
 export function IssueBlockedNotice({
+  issueId,
   issueStatus,
   blockers,
   blockerAttention,
   successfulRunHandoff,
+  scheduledRetry,
   agentName,
 }: {
+  issueId?: string | null;
   issueStatus?: string;
   blockers: IssueRelationIssueSummary[];
   blockerAttention?: IssueBlockerAttention | null;
   successfulRunHandoff?: SuccessfulRunHandoffState | null;
+  scheduledRetry?: IssueScheduledRetry | null;
   agentName?: string | null;
 }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   if (issueStatus === "done" || issueStatus === "cancelled") return null;
   const showSuccessfulRunHandoff = successfulRunHandoff?.required === true;
   if (!showSuccessfulRunHandoff && blockers.length === 0 && issueStatus !== "blocked") return null;
+  const successfulRunRetryNow = showSuccessfulRunHandoff
+    && issueId
+    && scheduledRetry?.status === "scheduled_retry"
+      ? { issueId, scheduledRetry }
+      : null;
 
-  const blockerLabel = blockers.length === 1
-    ? t("issueBlocked.linkedIssue", { defaultValue: "the linked issue" })
-    : t("issueBlocked.linkedIssues", { defaultValue: "the linked issues" });
-  const assigneeLabel = agentName ?? t("issueBlocked.assignee", { defaultValue: "the assignee" });
+  const blockerLabel = blockers.length === 1 ? "the linked issue" : "the linked issues";
   const terminalBlockers = blockers
     .flatMap((blocker) => blocker.terminalBlockers ?? [])
     .filter((blocker, index, all) => all.findIndex((candidate) => candidate.id === blocker.id) === index);
@@ -137,27 +205,19 @@ export function IssueBlockedNotice({
         <div className="min-w-0 space-y-1.5">
           {showSuccessfulRunHandoff ? (
             <>
-              <p className="font-medium leading-5">
-                {t("issueBlocked.success.title", {
-                  defaultValue: "This issue still needs a next step.",
-                })}
-              </p>
+              <p className="font-medium leading-5">This issue still needs a next step.</p>
               <p className="leading-5">
-                {t("issueBlocked.success.bodyPrefix", {
-                  defaultValue: "A run finished successfully, but this issue is still open in",
-                })}{" "}
+                A run finished successfully, but this issue is still open in{" "}
                 <code className="rounded bg-amber-100 px-1 py-0.5 text-[12px] dark:bg-amber-400/15">
                   in_progress
                 </code>{" "}
-                {t("issueBlocked.success.bodySuffix", {
-                  defaultValue: "with no clear owner for the next action.",
-                })}
+                with no clear owner for the next action.
               </p>
               <ul className="list-disc space-y-1 pl-5 text-xs leading-5 text-amber-900 dark:text-amber-100">
-                <li>{t("issueBlocked.success.action.done", { defaultValue: "Mark it done or cancelled." })}</li>
-                <li>{t("issueBlocked.success.action.review", { defaultValue: "Send it for review or ask for input." })}</li>
-                <li>{t("issueBlocked.success.action.blocked", { defaultValue: "Mark it blocked with a blocker owner." })}</li>
-                <li>{t("issueBlocked.success.action.delegate", { defaultValue: "Delegate follow-up work or queue a continuation." })}</li>
+                <li>Mark it done or cancelled.</li>
+                <li>Send it for review or ask for input.</li>
+                <li>Mark it blocked with a blocker owner.</li>
+                <li>Delegate follow-up work or queue a continuation.</li>
               </ul>
               <div className="flex flex-wrap gap-1.5 text-xs">
                 {successfulRunHandoff.sourceRunId && successfulRunHandoff.assigneeAgentId ? (
@@ -165,33 +225,27 @@ export function IssueBlockedNotice({
                     to={`/agents/${successfulRunHandoff.assigneeAgentId}/runs/${successfulRunHandoff.sourceRunId}`}
                     className="rounded-md border border-amber-300/70 bg-background/80 px-2 py-1 font-mono text-amber-950 hover:border-amber-500 hover:bg-amber-100 hover:underline dark:border-amber-500/40 dark:bg-background/40 dark:text-amber-100 dark:hover:bg-amber-500/15"
                   >
-                    {t("issueBlocked.runShort", {
-                      id: successfulRunHandoff.sourceRunId.slice(0, 8),
-                      defaultValue: "run {{id}}",
-                    })}
+                    run {successfulRunHandoff.sourceRunId.slice(0, 8)}
                   </Link>
                 ) : successfulRunHandoff.sourceRunId ? (
                   <span className="rounded-md border border-amber-300/70 bg-background/80 px-2 py-1 font-mono text-amber-950 dark:border-amber-500/40 dark:bg-background/40 dark:text-amber-100">
-                    {t("issueBlocked.runShort", {
-                      id: successfulRunHandoff.sourceRunId.slice(0, 8),
-                      defaultValue: "run {{id}}",
-                    })}
+                    run {successfulRunHandoff.sourceRunId.slice(0, 8)}
                   </span>
                 ) : null}
                 <span className="rounded-md border border-amber-300/70 bg-background/80 px-2 py-1 text-amber-900 dark:border-amber-500/40 dark:bg-background/40 dark:text-amber-100">
-                  {t("issueBlocked.correctiveWakeQueued", {
-                    agentName: assigneeLabel,
-                    defaultValue: "Corrective wake queued for {{agentName}}",
-                  })}
+                  Corrective wake queued for {agentName ?? "the assignee"}
                 </span>
               </div>
               {successfulRunHandoff.detectedProgressSummary ? (
                 <p className="text-xs leading-5 text-amber-800 dark:text-amber-200">
-                  {t("issueBlocked.detectedProgress", {
-                    summary: successfulRunHandoff.detectedProgressSummary,
-                    defaultValue: "Detected progress: {{summary}}",
-                  })}
+                  Detected progress: {successfulRunHandoff.detectedProgressSummary}
                 </p>
+              ) : null}
+              {successfulRunRetryNow ? (
+                <SuccessfulRunRetryNowControl
+                  issueId={successfulRunRetryNow.issueId}
+                  scheduledRetry={successfulRunRetryNow.scheduledRetry}
+                />
               ) : null}
             </>
           ) : null}
@@ -204,26 +258,10 @@ export function IssueBlockedNotice({
                 {blockers.length > 0
                   ? isStalled
                     ? stalledLeafBlockers.length > 1
-                      ? t("issueBlocked.stalledMany", {
-                        blockerLabel,
-                        defaultValue: "Work on this issue is blocked by {{blockerLabel}}, but the chain is stalled in review without a clear next step. Resolve the stalled reviews below or remove them as blockers.",
-                      })
-                      : t("issueBlocked.stalledOne", {
-                        blockerLabel,
-                        defaultValue: "Work on this issue is blocked by {{blockerLabel}}, but the chain is stalled in review without a clear next step. Resolve the stalled review below or remove it as a blocker.",
-                      })
-                    : blockers.length === 1
-                      ? t("issueBlocked.blockedByOne", {
-                        blockerLabel,
-                        defaultValue: "Work on this issue is blocked by {{blockerLabel}} until it is complete. Comments still wake the assignee for questions or triage.",
-                      })
-                      : t("issueBlocked.blockedByMany", {
-                        blockerLabel,
-                        defaultValue: "Work on this issue is blocked by {{blockerLabel}} until they are complete. Comments still wake the assignee for questions or triage.",
-                      })
-                  : t("issueBlocked.blockedNoLinks", {
-                    defaultValue: "Work on this issue is blocked until it is moved back to todo. Comments still wake the assignee for questions or triage.",
-                  })}
+                      ? <>Work on this issue is blocked by {blockerLabel}, but the chain is stalled in review without a clear next step. Resolve the stalled reviews below or remove them as blockers.</>
+                      : <>Work on this issue is blocked by {blockerLabel}, but the chain is stalled in review without a clear next step. Resolve the stalled review below or remove it as a blocker.</>
+                    : <>Work on this issue is blocked by {blockerLabel} until {blockers.length === 1 ? "it is" : "they are"} complete. Comments still wake the assignee for questions or triage.</>
+                  : <>Work on this issue is blocked until it is moved back to todo. Comments still wake the assignee for questions or triage.</>}
               </p>
               {blockers.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
@@ -233,14 +271,14 @@ export function IssueBlockedNotice({
               {showStalledRow ? (
                 <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                   <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
-                    {t("issueBlocked.stalledInReview", { defaultValue: "Stalled in review" })}
+                    Stalled in review
                   </span>
                   {stalledLeafBlockers.map(renderBlockerChip)}
                 </div>
               ) : terminalBlockers.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                   <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
-                    {t("issueBlocked.ultimatelyWaitingOn", { defaultValue: "Ultimately waiting on" })}
+                    Ultimately waiting on
                   </span>
                   {terminalBlockers.map(renderBlockerChip)}
                 </div>
@@ -252,7 +290,7 @@ export function IssueBlockedNotice({
                 >
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 dark:text-amber-200">
                     <Flag className="h-3 w-3" aria-hidden />
-                    {t("issueBlocked.parkedWork", { defaultValue: "Blocked by parked work" })}
+                    Blocked by parked work
                   </span>
                   {parkedBlockers.map(renderBlockerChip)}
                 </div>

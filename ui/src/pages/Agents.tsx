@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useLocation } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { agentsApi, type OrgNode } from "../api/agents";
@@ -10,6 +9,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useSidebar } from "../context/SidebarContext";
 import { queryKeys } from "../lib/queryKeys";
 import { StatusBadge } from "../components/StatusBadge";
+import { MembershipAction } from "../components/MembershipAction";
 import { agentStatusDot, agentStatusDotDefault } from "../lib/status-colors";
 import { EntityRow } from "../components/EntityRow";
 import { EmptyState } from "../components/EmptyState";
@@ -20,6 +20,12 @@ import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Bot, Plus, List, GitBranch, SlidersHorizontal } from "lucide-react";
 import { AGENT_ROLE_LABELS, type Agent } from "@penclipai/shared";
+import {
+  resourceMembershipState,
+  useResourceMembershipMutation,
+  useResourceMemberships,
+} from "../hooks/useResourceMemberships";
+
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
 
 const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
@@ -61,7 +67,6 @@ function filterOrgTree(nodes: OrgNode[], tab: FilterTab, showTerminated: boolean
 }
 
 export function Agents() {
-  const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { openNewAgent } = useDialogActions();
   const { setBreadcrumbs } = useBreadcrumbs();
@@ -94,6 +99,8 @@ export function Agents() {
     enabled: !!selectedCompanyId,
     refetchInterval: 15_000,
   });
+  const membershipsQuery = useResourceMemberships(selectedCompanyId);
+  const membershipMutation = useResourceMembershipMutation(selectedCompanyId);
 
   // Map agentId -> first live run + live run count
   const liveRunByAgent = useMemo(() => {
@@ -117,11 +124,11 @@ export function Agents() {
   }, [agents]);
 
   useEffect(() => {
-    setBreadcrumbs([{ label: t("Agents", { defaultValue: "Agents" }) }]);
-  }, [setBreadcrumbs, t]);
+    setBreadcrumbs([{ label: "Agents" }]);
+  }, [setBreadcrumbs]);
 
   if (!selectedCompanyId) {
-    return <EmptyState icon={Bot} message={t("Select a company to view agents.")} />;
+    return <EmptyState icon={Bot} message="Select a company to view agents." />;
   }
 
   if (isLoading) {
@@ -137,10 +144,10 @@ export function Agents() {
         <Tabs value={tab} onValueChange={(v) => navigate(`/agents/${v}`)}>
           <PageTabBar
             items={[
-              { value: "all", label: t("All") },
-              { value: "active", label: t("Active") },
-              { value: "paused", label: t("Paused") },
-              { value: "error", label: t("Error") },
+              { value: "all", label: "All" },
+              { value: "active", label: "Active" },
+              { value: "paused", label: "Paused" },
+              { value: "error", label: "Error" },
             ]}
             value={tab}
             onValueChange={(v) => navigate(`/agents/${v}`)}
@@ -157,7 +164,7 @@ export function Agents() {
               onClick={() => setFiltersOpen(!filtersOpen)}
             >
               <SlidersHorizontal className="h-3 w-3" />
-              {t("Filters", { defaultValue: "Filters" })}
+              Filters
               {showTerminated && <span className="ml-0.5 px-1 bg-foreground/10 rounded text-[10px]">1</span>}
             </button>
             {filtersOpen && (
@@ -172,7 +179,7 @@ export function Agents() {
                   )}>
                     {showTerminated && <span className="text-background text-[10px] leading-none">&#10003;</span>}
                   </span>
-                  {t("Show terminated", { defaultValue: "Show terminated" })}
+                  Show terminated
                 </button>
               </div>
             )}
@@ -202,18 +209,13 @@ export function Agents() {
           )}
           <Button size="sm" variant="outline" onClick={openNewAgent}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
-            {t("New Agent", { defaultValue: "New Agent" })}
+            New Agent
           </Button>
         </div>
       </div>
 
       {filtered.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {t("agents.count", {
-            count: filtered.length,
-            defaultValue: filtered.length === 1 ? "1 agent" : `${filtered.length} agents`,
-          })}
-        </p>
+        <p className="text-xs text-muted-foreground">{filtered.length} agent{filtered.length !== 1 ? "s" : ""}</p>
       )}
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
@@ -221,8 +223,8 @@ export function Agents() {
       {agents && agents.length === 0 && (
         <EmptyState
           icon={Bot}
-          message={t("Create your first agent to get started.")}
-          action={t("New Agent")}
+          message="Create your first agent to get started."
+          action="New Agent"
           onAction={openNewAgent}
         />
       )}
@@ -237,7 +239,11 @@ export function Agents() {
                 title={agent.name}
                 subtitle={`${roleLabels[agent.role] ?? agent.role}${agent.title ? ` - ${agent.title}` : ""}`}
                 to={agentUrl(agent)}
-                className={agent.pausedAt && tab !== "paused" ? "opacity-50" : ""}
+                className={cn(
+                  "group",
+                  agent.pausedAt && tab !== "paused" ? "opacity-50" : "",
+                  resourceMembershipState(membershipsQuery.data, "agent", agent.id) === "left" ? "text-foreground/55" : "",
+                )}
                 leading={
                   <span className="relative flex h-2.5 w-2.5">
                     <span
@@ -282,6 +288,34 @@ export function Agents() {
                         <StatusBadge status={agent.status} />
                       </span>
                     </div>
+                    <MembershipAction
+                      state={resourceMembershipState(membershipsQuery.data, "agent", agent.id)}
+                      pending={
+                        membershipMutation.isPending &&
+                        membershipMutation.variables?.resourceType === "agent" &&
+                        membershipMutation.variables.resourceId === agent.id
+                      }
+                      pendingState={
+                        membershipMutation.isPending &&
+                        membershipMutation.variables?.resourceType === "agent" &&
+                        membershipMutation.variables.resourceId === agent.id
+                          ? membershipMutation.variables.state
+                          : null
+                      }
+                      resourceName={agent.name}
+                      onJoin={() => membershipMutation.mutate({
+                        resourceType: "agent",
+                        resourceId: agent.id,
+                        resourceName: agent.name,
+                        state: "joined",
+                      })}
+                      onLeave={() => membershipMutation.mutate({
+                        resourceType: "agent",
+                        resourceId: agent.id,
+                        resourceName: agent.name,
+                        state: "left",
+                      })}
+                    />
                   </div>
                 }
               />
@@ -292,7 +326,7 @@ export function Agents() {
 
       {effectiveView === "list" && agents && agents.length > 0 && filtered.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-8">
-          {t("No agents match the selected filter.", { defaultValue: "No agents match the selected filter." })}
+          No agents match the selected filter.
         </p>
       )}
 
@@ -300,20 +334,29 @@ export function Agents() {
       {effectiveView === "org" && filteredOrg.length > 0 && (
         <div className="border border-border py-1">
           {filteredOrg.map((node) => (
-            <OrgTreeNode key={node.id} node={node} depth={0} agentMap={agentMap} liveRunByAgent={liveRunByAgent} tab={tab} />
+            <OrgTreeNode
+              key={node.id}
+              node={node}
+              depth={0}
+              agentMap={agentMap}
+              liveRunByAgent={liveRunByAgent}
+              tab={tab}
+              memberships={membershipsQuery.data}
+              membershipMutation={membershipMutation}
+            />
           ))}
         </div>
       )}
 
       {effectiveView === "org" && orgTree && orgTree.length > 0 && filteredOrg.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-8">
-          {t("No agents match the selected filter.", { defaultValue: "No agents match the selected filter." })}
+          No agents match the selected filter.
         </p>
       )}
 
       {effectiveView === "org" && orgTree && orgTree.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-8">
-          {t("No organizational hierarchy defined.", { defaultValue: "No organizational hierarchy defined." })}
+          No organizational hierarchy defined.
         </p>
       )}
     </div>
@@ -326,15 +369,22 @@ function OrgTreeNode({
   agentMap,
   liveRunByAgent,
   tab,
+  memberships,
+  membershipMutation,
 }: {
   node: OrgNode;
   depth: number;
   agentMap: Map<string, Agent>;
   liveRunByAgent: Map<string, { runId: string; liveCount: number }>;
   tab: FilterTab;
+  memberships: ReturnType<typeof useResourceMemberships>["data"];
+  membershipMutation: ReturnType<typeof useResourceMembershipMutation>;
 }) {
-  const { t } = useTranslation();
   const agent = agentMap.get(node.id);
+  const membershipState = resourceMembershipState(memberships, "agent", node.id);
+  const pending = membershipMutation.isPending &&
+    membershipMutation.variables?.resourceType === "agent" &&
+    membershipMutation.variables.resourceId === node.id;
 
   const statusColor = agentStatusDot[node.status] ?? agentStatusDotDefault;
 
@@ -342,7 +392,11 @@ function OrgTreeNode({
     <div style={{ paddingLeft: depth * 24 }}>
       <Link
         to={agent ? agentUrl(agent) : `/agents/${node.id}`}
-        className={cn("flex items-center gap-3 px-3 py-2 hover:bg-accent/30 transition-colors w-full text-left no-underline text-inherit", agent?.pausedAt && tab !== "paused" && "opacity-50")}
+        className={cn(
+          "group flex items-center gap-3 px-3 py-2 hover:bg-accent/30 transition-colors w-full text-left no-underline text-inherit",
+          agent?.pausedAt && tab !== "paused" && "opacity-50",
+          membershipState === "left" && "text-foreground/55",
+        )}
       >
         <span className="relative flex h-2.5 w-2.5 shrink-0">
           <span className={`absolute inline-flex h-full w-full rounded-full ${statusColor}`} />
@@ -394,12 +448,39 @@ function OrgTreeNode({
               <StatusBadge status={node.status} />
             </span>
           </div>
+          <MembershipAction
+            state={membershipState}
+            pending={pending}
+            pendingState={pending ? membershipMutation.variables?.state : null}
+            resourceName={node.name}
+            onJoin={() => membershipMutation.mutate({
+              resourceType: "agent",
+              resourceId: node.id,
+              resourceName: node.name,
+              state: "joined",
+            })}
+            onLeave={() => membershipMutation.mutate({
+              resourceType: "agent",
+              resourceId: node.id,
+              resourceName: node.name,
+              state: "left",
+            })}
+          />
         </div>
       </Link>
       {node.reports && node.reports.length > 0 && (
         <div className="border-l border-border/50 ml-4">
           {node.reports.map((child) => (
-            <OrgTreeNode key={child.id} node={child} depth={depth + 1} agentMap={agentMap} liveRunByAgent={liveRunByAgent} tab={tab} />
+            <OrgTreeNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              agentMap={agentMap}
+              liveRunByAgent={liveRunByAgent}
+              tab={tab}
+              memberships={memberships}
+              membershipMutation={membershipMutation}
+            />
           ))}
         </div>
       )}
@@ -416,8 +497,6 @@ function LiveRunIndicator({
   runId: string;
   liveCount: number;
 }) {
-  const { t } = useTranslation();
-
   return (
     <Link
       to={`/agents/${agentRef}/runs/${runId}`}
@@ -429,7 +508,7 @@ function LiveRunIndicator({
         <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
       </span>
       <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">
-        {t("Live", { defaultValue: "Live" })}{liveCount > 1 ? ` (${liveCount})` : ""}
+        Live{liveCount > 1 ? ` (${liveCount})` : ""}
       </span>
     </Link>
   );

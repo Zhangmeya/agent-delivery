@@ -60,8 +60,8 @@ export interface PluginBundlerPresets {
  */
 export function createPluginBundlerPresets(input: PluginBundlerPresetInput = {}): PluginBundlerPresets {
   const uiExternal = [
-    "@paperclipai/plugin-sdk/ui",
-    "@paperclipai/plugin-sdk/ui/hooks",
+    "@penclipai/plugin-sdk/ui",
+    "@penclipai/plugin-sdk/ui/hooks",
     "@penclipai/plugin-sdk/ui",
     "@penclipai/plugin-sdk/ui/hooks",
     "react",
@@ -96,7 +96,7 @@ export function createPluginBundlerPresets(input: PluginBundlerPresetInput = {})
     platform: "node",
     target: "node20",
     sourcemap,
-    external: ["@paperclipai/plugin-sdk"],
+    external: ["@penclipai/plugin-sdk"],
   };
 
   const esbuildUi = uiEntry
@@ -132,7 +132,7 @@ export function createPluginBundlerPresets(input: PluginBundlerPresetInput = {})
       sourcemap,
       entryFileNames: "manifest.js",
     },
-    external: ["@paperclipai/plugin-sdk", "@penclipai/plugin-sdk"],
+    external: ["@penclipai/plugin-sdk", "@penclipai/plugin-sdk"],
   };
 
   const rollupUi = uiEntry

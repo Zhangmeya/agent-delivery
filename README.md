@@ -1,21 +1,19 @@
 <p align="center">
-  <img src="doc/assets/header.png" alt="Paperclip CN — runs your business" width="720" />
+  <img src="doc/assets/banner.jpg" alt="Paperclip CN — runs your business" width="720" />
 </p>
 
 <p align="center">
   <a href="#quickstart"><strong>Quickstart</strong></a> &middot;
-  <a href="https://penclip.ing/docs"><strong>Docs</strong></a> &middot;
-  <a href="https://github.com/penclipai/paperclip-cn"><strong>GitHub</strong></a> &middot;
-  <a href="./README.zh-CN.md"><strong>中文 README</strong></a> &middot;
+  <a href="https://paperclip.ing/docs"><strong>Docs</strong></a> &middot;
+  <a href="https://github.com/paperclipai/paperclip"><strong>GitHub</strong></a> &middot;
   <a href="https://discord.gg/m4HZY7xNG3"><strong>Discord</strong></a> &middot;
-  <a href="https://x.com/papercliping"><strong>Twitter</strong></a>
+  <a href="https://x.com/papercliping"><strong>Twitter</strong></a> &middot;
+  <a href="https://paperclip.ing"><strong>Website</strong></a>
 </p>
 
-> **Paperclip CN** is the Chinese-enhanced MIT fork of [Paperclip](https://github.com/paperclipai/paperclip), maintained by `penclipai` for Chinese UX, Windows compatibility, and domestic model integrations. The public fork now lives at `penclipai/paperclip-cn`. See [README.zh-CN](./README.zh-CN.md) for the localized overview.
-
 <p align="center">
-  <a href="https://github.com/penclipai/paperclip-cn/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
-  <a href="https://github.com/penclipai/paperclip-cn/stargazers"><img src="https://img.shields.io/github/stars/penclipai/paperclip-cn?style=flat" alt="Stars" /></a>
+  <a href="https://github.com/paperclipai/paperclip/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
+  <a href="https://github.com/paperclipai/paperclip/stargazers"><img src="https://img.shields.io/github/stars/paperclipai/paperclip?style=flat" alt="Stars" /></a>
   <a href="https://discord.gg/m4HZY7xNG3"><img src="https://img.shields.io/discord/000000000?label=discord" alt="Discord" /></a>
 </p>
 
@@ -29,13 +27,13 @@
 
 ## What is Paperclip CN?
 
-# Open-source orchestration for zero-human companies
+Open-source orchestration for teams of AI agents.
 
-**If OpenClaw is an _employee_, Paperclip CN is the _company_**
+**If OpenClaw is an _employee_, Paperclip CN is the _company_.**
 
 Paperclip CN is a Node.js server and React UI that orchestrates a team of AI agents to run a business. Bring your own agents, assign goals, and track your agents' work and costs from one dashboard.
 
-It looks like a task manager — but under the hood it has org charts, budgets, governance, goal alignment, and agent coordination.
+It looks like a task manager. Under the hood: org charts, budgets, governance, goal alignment, and agent coordination.
 
 **Manage business goals, not pull requests.**
 
@@ -44,10 +42,6 @@ It looks like a task manager — but under the hood it has org charts, budgets, 
 | **01** | Define the goal | _"Build the #1 AI note-taking app to $1M MRR."_                    |
 | **02** | Hire the team   | CEO, CTO, engineers, designers, marketers — any bot, any provider. |
 | **03** | Approve and run | Review strategy. Set budgets. Hit go. Monitor from the dashboard.  |
-
-<br/>
-
-> **COMING SOON: Clipmart** — Download and run entire companies with one click. Browse pre-built company templates — full org structures, agent configs, and skills — and import them into your Paperclip instance in seconds.
 
 <br/>
 
@@ -116,7 +110,7 @@ Every conversation traced. Every decision explained. Full tool-call tracing and 
 <tr>
 <td align="center">
 <h3>🛡️ Governance</h3>
-You're the board. Approve hires, override strategy, pause or terminate any agent — at any time.
+Approve hires, override strategy, pause or terminate any agent — at any time.
 </td>
 <td align="center">
 <h3>📊 Org Chart</h3>
@@ -225,7 +219,7 @@ Paperclip is a full control plane, not a wrapper. Before you build any of this y
 </td>
 <td>
 
-**Governance & Approvals** — Board approval workflows, execution policies with review/approval stages, decision tracking, budget hard-stops, agent pause/resume/terminate, and full audit logging. You're the board — nothing ships without your sign-off.
+**Governance & Approvals** — Board approval workflows, execution policies with review/approval stages, decision tracking, budget hard-stops, agent pause/resume/terminate, and full audit logging. Nothing ships without your sign-off.
 
 </td>
 </tr>
@@ -287,24 +281,24 @@ Paperclip is a full control plane, not a wrapper. Before you build any of this y
 Open source. Self-hosted. No Paperclip account required.
 
 ```bash
-npx penclip onboard --yes
+npx paperclipai onboard --yes
 ```
 
 That quickstart path now defaults to trusted local loopback mode for the fastest first run. To start in authenticated/private mode instead, choose a bind preset explicitly:
 
 ```bash
-npx penclip onboard --yes --bind lan
+npx paperclipai onboard --yes --bind lan
 # or:
-npx penclip onboard --yes --bind tailnet
+npx paperclipai onboard --yes --bind tailnet
 ```
 
-If you already have Paperclip configured, rerunning `onboard` keeps the existing config in place. Use `npx penclip configure` to edit settings.
+If you already have Paperclip configured, rerunning `onboard` keeps the existing config in place. Use `paperclipai configure` to edit settings.
 
 Or manually:
 
 ```bash
-git clone https://github.com/penclipai/paperclip-cn.git
-cd paperclip-cn
+git clone https://github.com/paperclipai/paperclip.git
+cd paperclip
 pnpm install
 pnpm dev
 ```
@@ -320,7 +314,7 @@ This starts the API server at `http://localhost:3100`. An embedded PostgreSQL da
 **What does a typical setup look like?**
 Locally, a single Node.js process manages an embedded Postgres and local file storage. For production, point it at your own Postgres and deploy however you like. Configure projects, agents, and goals — the agents take care of the rest.
 
-If you're a solo-entreprenuer you can use Tailscale to access Paperclip on the go. Then later you can deploy to e.g. Vercel when you need it.
+If you're a solo entrepreneur you can use Tailscale to access Paperclip on the go. Then later you can deploy to e.g. Vercel when you need it.
 
 **Can I run multiple companies?**
 Yes. A single deployment can run an unlimited number of companies with complete data isolation.
@@ -411,31 +405,26 @@ We welcome contributions. See the [contributing guide](CONTRIBUTING.md) for deta
 <br/>
 
 ## Community
-<img width="915" height="327" alt="image" src="https://github.com/user-attachments/assets/10cb4c01-6e4e-4d1f-ada9-50943d224595" />
 
 - [Discord](https://discord.gg/m4HZY7xNG3) — Join the community
 - [Twitter / X](https://x.com/papercliping) — Follow updates and announcements
-- [GitHub Issues](https://github.com/penclipai/paperclip-cn/issues) — bugs and feature requests
-- [GitHub Discussions](https://github.com/penclipai/paperclip-cn/discussions) — ideas and RFC
+- [GitHub Issues](https://github.com/paperclipai/paperclip/issues) — bugs and feature requests
+- [GitHub Discussions](https://github.com/paperclipai/paperclip/discussions) — ideas and RFC
 
 <br/>
 
 ## License
 
-MIT &copy; 2026 Paperclip
+MIT &copy; 2026 [Paperclip Labs, Inc](https://paperclip.ing)
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/image?repos=penclipai/paperclip-cn&type=date&legend=top-left)](https://www.star-history.com/?repos=penclipai%2Fpaperclip-cn&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/image?repos=paperclipai/paperclip&type=date&legend=top-left)](https://www.star-history.com/?repos=paperclipai%2Fpaperclip&type=date&legend=top-left)
 
 <br/>
 
 ---
 
 <p align="center">
-  <img src="doc/assets/footer.jpg" alt="" width="720" />
-</p>
-
-<p align="center">
-  <sub>Open source under MIT. Built for people who want to run companies, not babysit agents.</sub>
+  <sub>Open source under MIT. Built for people who want to get work done, not babysit agents.</sub>
 </p>

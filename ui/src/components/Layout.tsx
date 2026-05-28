@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useNavigate, useNavigationType, useParams } from "@/lib/router";
 import { Sidebar } from "./Sidebar";
 import { InstanceSidebar } from "./InstanceSidebar";
 import { CompanySettingsSidebar } from "./CompanySettingsSidebar";
+import { CompanySettingsNav } from "./access/CompanySettingsNav";
 import { BreadcrumbBar } from "./BreadcrumbBar";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { CommandPalette } from "./CommandPalette";
@@ -44,7 +44,6 @@ import { NotFoundPage } from "../pages/NotFound";
 import { PluginSlotMount, resolveRouteSidebarSlot, usePluginSlots } from "../plugins/slots";
 
 const INSTANCE_SETTINGS_MEMORY_KEY = "paperclip.lastInstanceSettingsPath";
-const DOCS_URL = "https://docs.paperclip.ing/";
 
 function getCompanyRouteSegment(pathname: string, companyPrefix: string | undefined): string | null {
   if (!companyPrefix) return null;
@@ -64,7 +63,6 @@ function readRememberedInstanceSettingsPath(): string {
 }
 
 export function Layout() {
-  const { t } = useTranslation();
   const { sidebarOpen, setSidebarOpen, toggleSidebar, isMobile } = useSidebar();
   const { openNewIssue, openOnboarding } = useDialogActions();
   const { togglePanelVisible } = usePanel();
@@ -76,7 +74,10 @@ export function Layout() {
     selectionSource,
     setSelectedCompanyId,
   } = useCompany();
-  const { companyPrefix } = useParams<{ companyPrefix: string }>();
+  const {
+    companyPrefix,
+    pluginRoutePath: matchedPluginRoutePath,
+  } = useParams<{ companyPrefix: string; pluginRoutePath?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const navigationType = useNavigationType();
@@ -97,8 +98,8 @@ export function Layout() {
   const hasUnknownCompanyPrefix =
     Boolean(companyPrefix) && !companiesLoading && companies.length > 0 && !matchedCompany;
   const pluginRoutePath = useMemo(
-    () => getCompanyRouteSegment(location.pathname, companyPrefix),
-    [companyPrefix, location.pathname],
+    () => matchedPluginRoutePath?.toLowerCase() ?? getCompanyRouteSegment(location.pathname, companyPrefix),
+    [companyPrefix, location.pathname, matchedPluginRoutePath],
   );
   const routeSidebarCompanyId = matchedCompany?.id ?? null;
   const routeSidebarCompanyPrefix = matchedCompany?.issuePrefix ?? null;
@@ -350,17 +351,15 @@ export function Layout() {
     <GeneralSettingsProvider value={{ keyboardShortcutsEnabled }}>
       <div
       className={cn(
-        "box-border bg-background text-foreground pt-[env(safe-area-inset-top)]",
-        isMobile
-          ? "min-h-[var(--paperclip-available-height)]"
-          : "flex h-[var(--paperclip-available-height)] max-h-[var(--paperclip-available-height)] flex-col overflow-hidden",
+        "bg-background text-foreground pt-[env(safe-area-inset-top)]",
+        isMobile ? "min-h-dvh" : "flex h-dvh flex-col overflow-hidden",
       )}
       >
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[200] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {t("layout.skipToMainContent", { defaultValue: "Skip to Main Content" })}
+        Skip to Main Content
       </a>
       <WorktreeBanner />
       <DevRestartBanner devServer={health?.devServer} />
@@ -425,19 +424,12 @@ export function Layout() {
               isMobile && "sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85",
             )}
           >
-            <div className="flex items-center justify-between gap-3 px-4 md:px-6">
-              <div className="min-w-0 flex-1">
-                <BreadcrumbBar />
+            <BreadcrumbBar />
+            {isMobile && isCompanySettingsRoute ? (
+              <div className="border-b border-border px-4 pb-3">
+                <CompanySettingsNav />
               </div>
-              <a
-                href={DOCS_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="shrink-0 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {t("Documentation", { defaultValue: "Documentation" })}
-              </a>
-            </div>
+            ) : null}
           </div>
           <div className={cn(isMobile ? "block" : "flex flex-1 min-h-0")}>
             <main

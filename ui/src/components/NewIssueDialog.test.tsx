@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { act } from "react";
 import type { ComponentProps, ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -63,6 +63,7 @@ const mockIssuesApi = vi.hoisted(() => ({
 
 const mockExecutionWorkspacesApi = vi.hoisted(() => ({
   list: vi.fn(),
+  listSummaries: vi.fn(),
 }));
 
 const mockProjectsApi = vi.hoisted(() => ({
@@ -237,6 +238,16 @@ vi.mock("@/components/ui/popover", () => ({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+function act(callback: () => void | Promise<void>): void | Promise<void> {
+  let result: unknown;
+  flushSync(() => {
+    result = callback();
+  });
+  return result && typeof (result as Promise<void>).then === "function"
+    ? (result as Promise<void>).then(() => undefined)
+    : undefined;
+}
+
 async function flush() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -311,7 +322,9 @@ describe("NewIssueDialog", () => {
     mockIssuesApi.create.mockReset();
     mockIssuesApi.upsertDocument.mockReset();
     mockIssuesApi.uploadAttachment.mockReset();
-    mockExecutionWorkspacesApi.list.mockResolvedValue([]);
+    mockExecutionWorkspacesApi.list.mockReset();
+    mockExecutionWorkspacesApi.listSummaries.mockReset();
+    mockExecutionWorkspacesApi.listSummaries.mockResolvedValue([]);
     mockProjectsApi.list.mockResolvedValue([
       {
         id: "project-1",
@@ -383,13 +396,15 @@ describe("NewIssueDialog", () => {
         },
       },
     ]);
-    mockExecutionWorkspacesApi.list.mockResolvedValue([
+    mockExecutionWorkspacesApi.listSummaries.mockResolvedValue([
       {
         id: "workspace-1",
         name: "Parent workspace",
+        mode: "isolated_workspace",
         status: "active",
         branchName: "feature/pap-1",
         cwd: "/tmp/workspace-1",
+        projectWorkspaceId: null,
         lastUsedAt: new Date("2026-04-06T16:00:00.000Z"),
       },
     ]);
@@ -406,6 +421,15 @@ describe("NewIssueDialog", () => {
 
     const { root } = renderDialog(container);
     await flush();
+
+    await waitForAssertion(() => {
+      expect(mockExecutionWorkspacesApi.listSummaries).toHaveBeenCalledWith("company-1", {
+        projectId: "project-1",
+        projectWorkspaceId: undefined,
+        reuseEligible: true,
+      });
+    });
+    expect(mockExecutionWorkspacesApi.list).not.toHaveBeenCalled();
 
     const submitButton = Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("Create Sub-Issue"));
@@ -495,7 +519,7 @@ describe("NewIssueDialog", () => {
         },
       },
     ]);
-    mockExecutionWorkspacesApi.list.mockResolvedValue([
+    mockExecutionWorkspacesApi.listSummaries.mockResolvedValue([
       {
         id: "workspace-1",
         name: "PAP-100",
@@ -503,6 +527,7 @@ describe("NewIssueDialog", () => {
         status: "active",
         branchName: "feature/pap-100",
         cwd: "/tmp/workspace-1",
+        projectWorkspaceId: "project-workspace-2",
         lastUsedAt: new Date("2026-04-06T16:00:00.000Z"),
       },
     ]);
@@ -733,10 +758,12 @@ describe("NewIssueDialog", () => {
     await flush();
 
     const dialogContent = Array.from(container.querySelectorAll("div")).find((element) =>
-      typeof element.className === "string" && element.className.includes("max-h-[calc(100dvh-2rem)]"),
+      typeof element.className === "string" && element.className.includes("max-h-[var(--new-issue-dialog-height)]"),
     );
-    expect(dialogContent?.className).toContain("h-[calc(100dvh-2rem)]");
+    expect(dialogContent?.className).toContain("h-[var(--new-issue-dialog-height)]");
     expect(dialogContent?.className).toContain("overflow-hidden");
+    expect(dialogContent?.getAttribute("style")).toContain("env(safe-area-inset-top)");
+    expect(dialogContent?.getAttribute("style")).toContain("env(safe-area-inset-bottom)");
 
     const descriptionInput = container.querySelector('textarea[aria-label="Add description..."]');
     const bodyScrollRegion = Array.from(container.querySelectorAll("div")).find((element) =>
@@ -745,6 +772,28 @@ describe("NewIssueDialog", () => {
     expect(bodyScrollRegion?.className).toContain("flex-1");
     expect(bodyScrollRegion?.className).toContain("overflow-y-auto");
     expect(bodyScrollRegion?.contains(descriptionInput ?? null)).toBe(true);
+
+    act(() => root.unmount());
+  });
+
+  it("keeps priority under the mobile overflow menu", async () => {
+    const { root } = renderDialog(container);
+    await flush();
+
+    const priorityChip = container.querySelector('[data-testid="new-issue-priority-chip"]');
+    expect(priorityChip?.className).toContain("hidden");
+    expect(priorityChip?.className).toContain("sm:inline-flex");
+
+    const highPriorityOption = container.querySelector('[data-testid="new-issue-more-priority-high"]');
+    expect(highPriorityOption?.textContent).toContain("High");
+
+    await act(async () => {
+      highPriorityOption?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    const selectedHighPriorityOption = container.querySelector('[data-testid="new-issue-more-priority-high"]');
+    expect(selectedHighPriorityOption?.className).toContain("bg-accent");
 
     act(() => root.unmount());
   });
@@ -784,21 +833,25 @@ describe("NewIssueDialog", () => {
         },
       },
     ]);
-    mockExecutionWorkspacesApi.list.mockResolvedValue([
+    mockExecutionWorkspacesApi.listSummaries.mockResolvedValue([
       {
         id: "workspace-1",
         name: "Parent workspace",
+        mode: "isolated_workspace",
         status: "active",
         branchName: "feature/pap-1",
         cwd: "/tmp/workspace-1",
+        projectWorkspaceId: null,
         lastUsedAt: new Date("2026-04-06T16:00:00.000Z"),
       },
       {
         id: "workspace-2",
         name: "Other workspace",
+        mode: "isolated_workspace",
         status: "active",
         branchName: "feature/pap-2",
         cwd: "/tmp/workspace-2",
+        projectWorkspaceId: null,
         lastUsedAt: new Date("2026-04-06T16:01:00.000Z"),
       },
     ]);

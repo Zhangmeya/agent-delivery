@@ -1,5 +1,5 @@
 /// <reference path="./types/express.d.ts" />
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -16,9 +16,10 @@ import {
   applyPendingMigrations,
   createEmbeddedPostgresLogBuffer,
   cleanupOrphanedEmbeddedPostgresForkchildren,
+  prepareEmbeddedPostgresNativeRuntime,
   recoverEmbeddedPostgresStart,
-  resetIncompleteEmbeddedPostgresDataDir,
   reconcilePendingMigrationHistory,
+  resetIncompleteEmbeddedPostgresDataDir,
   shouldRetryEmbeddedPostgresStart,
   formatDatabaseBackupResult,
   runDatabaseBackup,
@@ -27,7 +28,6 @@ import {
   companyMemberships,
   instanceUserRoles,
 } from "@penclipai/db";
-import { loadEmbeddedPostgresCtor } from "@penclipai/db/embedded-postgres-runtime-installer";
 import detectPort from "detect-port";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
@@ -35,8 +35,10 @@ import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import {
   feedbackService,
+  backfillPrincipalAccessCompatibility,
   heartbeatService,
   instanceSettingsService,
+  reconcileCloudUpstreamRunsOnStartup,
   reconcilePersistedRuntimeServicesOnStartup,
   routineService,
 } from "./services/index.js";
@@ -70,6 +72,18 @@ type EmbeddedPostgresInstance = {
   start(): Promise<void>;
   stop(): Promise<void>;
 };
+
+type EmbeddedPostgresCtor = new (opts: {
+  databaseDir: string;
+  user: string;
+  password: string;
+  port: number;
+  persistent: boolean;
+  initdbFlags?: string[];
+  onLog?: (message: unknown) => void;
+  onError?: (message: unknown) => void;
+}) => EmbeddedPostgresInstance;
+
 
 export interface StartedServer {
   server: ReturnType<typeof createServer>;
@@ -299,14 +313,17 @@ export async function startServer(): Promise<StartedServer> {
     activeDatabaseConnectionString = config.databaseUrl;
     startupDbInfo = { mode: "external-postgres", connectionString: config.databaseUrl };
   } else {
-    const EmbeddedPostgres = await loadEmbeddedPostgresCtor({
-      logger: {
-        warn: (message: string) => logger.warn(message),
-        info: (message: string) => logger.info(message),
-      },
-      missingDependencyMessage:
+    const moduleName = "embedded-postgres";
+    let EmbeddedPostgres: EmbeddedPostgresCtor;
+    try {
+      const mod = await import(moduleName);
+      EmbeddedPostgres = mod.default as EmbeddedPostgresCtor;
+    } catch {
+      throw new Error(
         "Embedded PostgreSQL mode requires dependency `embedded-postgres`. Reinstall dependencies (without omitting required packages), or set DATABASE_URL for external Postgres.",
-    });
+      );
+    }
+    await prepareEmbeddedPostgresNativeRuntime();
   
     const dataDir = resolve(config.embeddedPostgresDataDir);
     const configuredPort = config.embeddedPostgresPort;
@@ -353,13 +370,12 @@ export async function startServer(): Promise<StartedServer> {
         `Cleaned up ${cleanedForkchildren.length} stale embedded PostgreSQL worker process(es) before startup.`,
       );
     }
-
+  
     const clusterVersionFile = resolve(dataDir, "PG_VERSION");
     if (resetIncompleteEmbeddedPostgresDataDir(dataDir)) {
       logger.warn(
         `Embedded PostgreSQL data dir ${dataDir} was left half-initialized; resetting it before retrying startup.`,
       );
-      mkdirSync(dataDir, { recursive: true });
     }
     const clusterAlreadyInitialized = existsSync(clusterVersionFile);
     const postmasterPidFile = resolve(dataDir, "postmaster.pid");
@@ -380,16 +396,6 @@ export async function startServer(): Promise<StartedServer> {
         if (!Number.isInteger(pid) || pid <= 0) return null;
         if (!isPidRunning(pid)) return null;
         return pid;
-      } catch {
-        return null;
-      }
-    };
-    const getRunningPort = (): number | null => {
-      if (!existsSync(postmasterPidFile)) return null;
-      try {
-        const portLine = readFileSync(postmasterPidFile, "utf8").split("\n")[3]?.trim();
-        const pidPort = Number(portLine);
-        return Number.isInteger(pidPort) && pidPort > 0 ? pidPort : null;
       } catch {
         return null;
       }
@@ -451,21 +457,9 @@ export async function startServer(): Promise<StartedServer> {
         try {
           await embeddedPostgres.start();
         } catch (err) {
+          logEmbeddedPostgresFailure("start", err);
           const recentLogs = logBuffer.getRecentLogs();
-          const adoptedPid = getRunningPid();
-          if (adoptedPid) {
-            const adoptedPort = getRunningPort() ?? port;
-            logger.warn(
-              { pid: adoptedPid, port: adoptedPort },
-              "Embedded PostgreSQL became reachable while starting; adopting running process",
-            );
-            await ensurePostgresDatabase(
-              `postgres://paperclip:paperclip@127.0.0.1:${adoptedPort}/postgres`,
-              "paperclip",
-            );
-            port = adoptedPort;
-            embeddedPostgres = null;
-          } else if (shouldRetryEmbeddedPostgresStart(recentLogs)) {
+          if (shouldRetryEmbeddedPostgresStart(recentLogs)) {
             logger.warn(
               "Embedded PostgreSQL hit stale shared-memory state; attempting to clean up matching postgres processes and retry",
             );
@@ -480,24 +474,15 @@ export async function startServer(): Promise<StartedServer> {
               onLog: appendEmbeddedPostgresLog,
               onError: appendEmbeddedPostgresLog,
             });
-            try {
-              await embeddedPostgres.start();
-            } catch (retryErr) {
-              logEmbeddedPostgresFailure("start", retryErr);
-              throw formatEmbeddedPostgresError(retryErr, {
-                fallbackMessage: `Failed to start embedded PostgreSQL on port ${port}`,
-                recentLogs: logBuffer.getRecentLogs(),
-              });
-            }
+            await embeddedPostgres.start();
           } else {
-            logEmbeddedPostgresFailure("start", err);
-            throw formatEmbeddedPostgresError(err, {
-              fallbackMessage: `Failed to start embedded PostgreSQL on port ${port}`,
-              recentLogs,
-            });
+          throw formatEmbeddedPostgresError(err, {
+            fallbackMessage: `Failed to start embedded PostgreSQL on port ${port}`,
+            recentLogs,
+          });
           }
         }
-        embeddedPostgresStartedByThisProcess = embeddedPostgres !== null;
+        embeddedPostgresStartedByThisProcess = true;
       }
     }
   
@@ -565,6 +550,10 @@ export async function startServer(): Promise<StartedServer> {
     | undefined;
   if (config.deploymentMode === "local_trusted") {
     await ensureLocalTrustedBoardPrincipal(db as any);
+  }
+  const accessBackfill = await backfillPrincipalAccessCompatibility(db as any);
+  if (accessBackfill.agentMembershipsInserted > 0 || accessBackfill.humanGrantsInserted > 0) {
+    logger.info(accessBackfill, "Backfilled principal access compatibility records");
   }
   if (config.deploymentMode === "authenticated") {
     const {
@@ -747,6 +736,19 @@ export async function startServer(): Promise<StartedServer> {
     })
     .catch((err) => {
       logger.error({ err }, "startup reconciliation of persisted runtime services failed");
+    });
+
+  void reconcileCloudUpstreamRunsOnStartup(db as any)
+    .then((result) => {
+      if (result.reconciled > 0) {
+        logger.warn(
+          { reconciled: result.reconciled },
+          "reconciled cloud upstream runs from a previous server process",
+        );
+      }
+    })
+    .catch((err) => {
+      logger.error({ err }, "startup reconciliation of cloud upstream runs failed");
     });
   
   if (config.heartbeatSchedulerEnabled) {
@@ -951,22 +953,7 @@ export async function startServer(): Promise<StartedServer> {
   });
   
   {
-    const stopFilePath = process.env.PAPERCLIP_DEV_STOP_FILE?.trim() ?? "";
-    let controlStopTimer: NodeJS.Timeout | null = null;
-    let shutdownPromise: Promise<void> | null = null;
-
     const shutdown = async (signal: "SIGINT" | "SIGTERM") => {
-      if (shutdownPromise) {
-        await shutdownPromise;
-        return;
-      }
-
-      shutdownPromise = (async () => {
-        if (controlStopTimer) {
-          clearInterval(controlStopTimer);
-          controlStopTimer = null;
-        }
-
       const telemetryClient = getTelemetryClient();
       if (telemetryClient) {
         telemetryClient.stop();
@@ -986,18 +973,7 @@ export async function startServer(): Promise<StartedServer> {
       }
 
       process.exit(0);
-      })();
-
-      await shutdownPromise;
     };
-
-    if (stopFilePath) {
-      controlStopTimer = setInterval(() => {
-        if (existsSync(stopFilePath)) {
-          void shutdown("SIGTERM");
-        }
-      }, 1_000);
-    }
 
     process.once("SIGINT", () => {
       void shutdown("SIGINT");

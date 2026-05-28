@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Db } from "@penclipai/db";
 import type { DeploymentExposure, DeploymentMode } from "@penclipai/shared";
 import type { StorageService } from "./storage/types.js";
-import { httpLogger, errorHandler, localeMiddleware, localeResponseHeadersMiddleware } from "./middleware/index.js";
+import { httpLogger, errorHandler } from "./middleware/index.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
@@ -28,6 +28,7 @@ import { dashboardRoutes } from "./routes/dashboard.js";
 import { userProfileRoutes } from "./routes/user-profiles.js";
 import { sidebarBadgeRoutes } from "./routes/sidebar-badges.js";
 import { sidebarPreferenceRoutes } from "./routes/sidebar-preferences.js";
+import { resourceMembershipRoutes } from "./routes/resource-memberships.js";
 import { inboxDismissalRoutes } from "./routes/inbox-dismissals.js";
 import { instanceSettingsRoutes } from "./routes/instance-settings.js";
 import {
@@ -97,6 +98,12 @@ export function resolveViteHmrPort(serverPort: number): number {
   return Math.max(1_024, serverPort - 10_000);
 }
 
+export function resolveViteHmrHost(bindHost: string): string | undefined {
+  const normalized = bindHost.trim().toLowerCase();
+  if (normalized === "0.0.0.0" || normalized === "::") return undefined;
+  return bindHost;
+}
+
 export function shouldServeViteDevHtml(req: ExpressRequest): boolean {
   const pathname = req.path;
   if (VITE_DEV_STATIC_PATHS.has(pathname)) return false;
@@ -154,8 +161,6 @@ export async function createApp(
     (req as unknown as { rawBody: Buffer }).rawBody = buf;
   };
 
-  app.use(localeMiddleware);
-  app.use("/api", localeResponseHeadersMiddleware);
   app.use(COMPANY_IMPORT_API_PATH, express.json({
     limit: PORTABLE_JSON_BODY_LIMIT,
     verify: captureRawBody,
@@ -229,6 +234,7 @@ export async function createApp(
   api.use(userProfileRoutes(db));
   api.use(sidebarBadgeRoutes(db));
   api.use(sidebarPreferenceRoutes(db));
+  api.use(resourceMembershipRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
   if (opts.databaseBackupService) {
@@ -314,8 +320,8 @@ export async function createApp(
     }),
   );
   app.use("/api", api);
-  app.use("/api", (req, res) => {
-    res.status(404).json({ error: req.t("errors.apiRouteNotFound") });
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "API route not found" });
   });
   app.use(pluginUiStaticRoutes(db, {
     localPluginDir: opts.localPluginDir ?? DEFAULT_LOCAL_PLUGIN_DIR,
@@ -345,8 +351,7 @@ export async function createApp(
           res.end();
           return;
         }
-        const html = applyUiLocaleToHtml(indexHtmlTemplate, initialLocale);
-        res.end(html);
+        res.end(applyUiLocaleToHtml(indexHtmlTemplate, initialLocale));
       };
       // Hashed asset files (Vite emits them under /assets/<name>.<hash>.<ext>)
       // never change once built, so they can be cached aggressively.
@@ -357,8 +362,21 @@ export async function createApp(
           immutable: true,
         }),
       );
-      // Keep the HTML shell on the locale-aware path so `/` and `/index.html`
-      // produce the same `lang`, `Content-Language`, and cache semantics.
+      // Non-hashed static files (favicon.ico, manifest, robots.txt, etc.):
+      // short cache so operators who swap them out see the new version
+      // reasonably fast. Override for `index.html` specifically — it is
+      // served by this middleware for `/` and `/index.html`, and it must
+      // never outlive the asset hashes it points at.
+      app.use(
+        express.static(uiDist, {
+          maxAge: "1h",
+          setHeaders(res, filePath) {
+            if (path.basename(filePath) === "index.html") {
+              res.set("Cache-Control", "no-cache");
+            }
+          },
+        }),
+      );
       app.use((req, res, next) => {
         if (!shouldServeStaticUiHtml(req)) {
           next();
@@ -366,21 +384,12 @@ export async function createApp(
         }
         serveStaticUiHtml(req, res);
       });
-      // Non-hashed static files (favicon.ico, manifest, robots.txt, etc.):
-      // short cache so operators who swap them out see the new version
-      // reasonably fast.
-      app.use(
-        express.static(uiDist, {
-          index: false,
-          maxAge: "1h",
-        }),
-      );
       // SPA fallback. Only for non-asset routes — if the browser asks for
       // /assets/something.js that doesn't exist, we must NOT serve the HTML
       // shell: the browser would try to load it as a JavaScript module, fail
       // with a MIME-type error, and cache that broken response. Return 404
-      // instead. The HTML shell responses themselves are no-cache so a
-      // subsequent deploy's updated asset hashes are picked up on next load.
+      // instead. The index.html response itself is no-cache so a subsequent
+      // deploy's updated asset hashes are picked up on next load.
       app.get(/.*/, (req, res) => {
         if (req.path.startsWith("/assets/")) {
           res.status(404).end();
@@ -397,6 +406,7 @@ export async function createApp(
     const uiRoot = path.resolve(__dirname, "../../ui");
     const publicUiRoot = path.resolve(uiRoot, "public");
     const hmrPort = resolveViteHmrPort(opts.serverPort);
+    const hmrHost = resolveViteHmrHost(opts.bindHost);
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       root: uiRoot,
@@ -404,7 +414,7 @@ export async function createApp(
       server: {
         middlewareMode: true,
         hmr: {
-          host: opts.bindHost,
+          ...(hmrHost ? { host: hmrHost } : {}),
           port: hmrPort,
           clientPort: hmrPort,
         },
@@ -428,10 +438,7 @@ export async function createApp(
       }
       try {
         const initialLocale = resolveInitialUiLocale(req.get("Accept-Language"), req.query?.lng);
-        const html = applyUiLocaleToHtml(
-          await renderViteHtml.render(req.originalUrl),
-          initialLocale,
-        );
+        const html = applyUiLocaleToHtml(await renderViteHtml.render(req.originalUrl), initialLocale);
         res
           .status(200)
           .set({

@@ -17,6 +17,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { toCompanyRelativePath } from "../lib/company-routes";
 import { translateEntityTypeLabel, translatePriorityLabel, translateStatusLabel } from "../lib/i18n-labels";
 import { useLocation } from "../lib/router";
+import { buildSameOriginWebSocketUrl } from "../lib/websocket-url";
 
 const TOAST_COOLDOWN_WINDOW_MS = 10_000;
 const TOAST_COOLDOWN_MAX = 3;
@@ -802,6 +803,14 @@ function invalidateActivityQueries(
   const action = readString(payload.action);
   const actorType = readString(payload.actorType);
   const actorId = readString(payload.actorId);
+  const details = readRecord(payload.details);
+
+  if (action?.startsWith("resource_membership.")) {
+    const targetUserId = readString(details?.userId);
+    if (!targetUserId || targetUserId === currentActor.userId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.resourceMemberships.mine(companyId) });
+    }
+  }
 
   if (entityType === "issue") {
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(companyId) });
@@ -809,7 +818,6 @@ function invalidateActivityQueries(
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.listTouchedByMe(companyId) });
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.listUnreadTouchedByMe(companyId) });
     if (entityId) {
-      const details = readRecord(payload.details);
       const selfCommentActivity =
         ((action === "issue.comment_added") ||
           (action === "issue.updated" && readString(details?.source) === "comment")) &&
@@ -1169,8 +1177,9 @@ export function LiveUpdatesProvider({ children }: { children: ReactNode }) {
 
     const connect = () => {
       if (closed) return;
-      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const url = `${protocol}://${window.location.host}/api/companies/${encodeURIComponent(liveCompanyId)}/events/ws`;
+      const url = buildSameOriginWebSocketUrl(
+        `/api/companies/${encodeURIComponent(liveCompanyId)}/events/ws`,
+      );
       const nextSocket = new WebSocket(url);
       socket = nextSocket;
 
