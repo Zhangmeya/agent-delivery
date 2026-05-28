@@ -134,7 +134,7 @@ async function flushReact() {
   });
 }
 
-const describeOnWindows = process.platform === "win32" ? describe.skip : describe;
+const describeOnWindows = process.platform === "win32" ? describe.skip : describe.sequential;
 
 describeOnWindows("Projects", () => {
   let container: HTMLDivElement;
@@ -143,7 +143,6 @@ describeOnWindows("Projects", () => {
 
   beforeEach(() => {
     container = document.createElement("div");
-    document.body.appendChild(container);
     root = null;
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -191,7 +190,6 @@ describeOnWindows("Projects", () => {
     }
     queryClient.clear();
     container.remove();
-    document.body.innerHTML = "";
     vi.clearAllMocks();
     renderError = null;
   });

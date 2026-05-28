@@ -152,7 +152,7 @@ function project(overrides: Partial<Project> = {}): Project {
   };
 }
 
-const describeOnWindows = process.platform === "win32" ? describe.skip : describe;
+const describeOnWindows = process.platform === "win32" ? describe.skip : describe.sequential;
 
 describeOnWindows("ProjectDetail", () => {
   let root: Root | null = null;
@@ -160,7 +160,6 @@ describeOnWindows("ProjectDetail", () => {
 
   beforeEach(() => {
     container = document.createElement("div");
-    document.body.appendChild(container);
     mockProjectsApi.get.mockResolvedValue(project());
     mockProjectsApi.list.mockResolvedValue([project()]);
     mockIssuesApi.list.mockResolvedValue([]);
