@@ -293,12 +293,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright
-        run: pnpm exec playwright install --with-deps --only-shell chromium
+      - name: Verify system Chrome
+        run: google-chrome --version
 
       - name: Run e2e tests
         env:
           PAPERCLIP_E2E_SKIP_LLM: "true"
+          PAPERCLIP_E2E_BROWSER_CHANNEL: "chrome"
         run: pnpm run test:e2e
 
       - name: Upload Playwright report
