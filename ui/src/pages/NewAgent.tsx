@@ -348,7 +348,7 @@ export function NewAgent() {
             )}
             <div className="flex items-center justify-between gap-2">
               <Button variant="outline" size="sm" onClick={() => navigate("/agents")}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <div className="flex items-center gap-2">
                 <Button
@@ -358,14 +358,14 @@ export function NewAgent() {
                   disabled={testAgentState.disabled}
                   onClick={() => testAgentAction?.()}
                 >
-                  {testAgentState.pending ? "Testing..." : "Test Agent"}
+                  {testAgentState.pending ? t("Testing...") : t("Test Agent")}
                 </Button>
                 <Button
                   size="sm"
                   disabled={!name.trim() || createAgent.isPending}
                   onClick={handleSubmit}
                 >
-                  {createAgent.isPending ? "Creating…" : "Create agent"}
+                  {createAgent.isPending ? t("Creating...") : t("Create agent")}
                 </Button>
               </div>
             </div>
