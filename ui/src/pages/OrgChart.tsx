@@ -13,7 +13,8 @@ import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { AgentIcon } from "../components/AgentIconPicker";
 import { Download, Maximize2, Minus, Network, Plus, Upload } from "lucide-react";
-import { AGENT_ROLE_LABELS, type Agent } from "@penclipai/shared";
+import type { Agent } from "@penclipai/shared";
+import { translateRoleLabel } from "../components/agent-config-primitives";
 
 // Layout constants
 const CARD_W = 200;
@@ -612,7 +613,7 @@ export function OrgChart() {
                       {node.name}
                     </span>
                     <span className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-                      {agent?.title ?? roleLabel(node.role)}
+                      {agent?.title ?? translateRoleLabel(t, node.role)}
                     </span>
                     {agent && (
                       <span className="text-[10px] text-muted-foreground/60 font-mono leading-tight mt-1">
@@ -633,10 +634,4 @@ export function OrgChart() {
       </div>
     </div>
   );
-}
-
-const roleLabels: Record<string, string> = AGENT_ROLE_LABELS;
-
-function roleLabel(role: string): string {
-  return roleLabels[role] ?? role;
 }

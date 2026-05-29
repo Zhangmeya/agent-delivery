@@ -19,6 +19,14 @@ function deriveInitials(name: string) {
   return name.slice(0, 2).toUpperCase();
 }
 
+function displayProfileName(t: ReturnType<typeof useTranslation>["t"], userId: string | null | undefined, name: string | null | undefined) {
+  const trimmed = name?.trim();
+  if (userId === "local-board" && (!trimmed || trimmed === "Board")) {
+    return t("Board", { defaultValue: "Board" });
+  }
+  return trimmed || t("Board", { defaultValue: "Board" });
+}
+
 export function ProfileSettings() {
   const { t } = useTranslation();
   const { setBreadcrumbs } = useBreadcrumbs();
@@ -69,7 +77,7 @@ export function ProfileSettings() {
   }
 
   function resolveProfileName() {
-    return name.trim() || sessionQuery.data?.user.name || t("Board", { defaultValue: "Board" });
+    return name.trim() || sessionQuery.data?.user.name || "Board";
   }
 
   const updateMutation = useMutation({
@@ -143,7 +151,7 @@ export function ProfileSettings() {
     );
   }
 
-  const currentName = name.trim() || sessionQuery.data.user.name || t("Board", { defaultValue: "Board" });
+  const currentName = displayProfileName(t, sessionQuery.data.user.id, name || sessionQuery.data.user.name);
   const currentImage = image.trim() || null;
   const initials = deriveInitials(currentName);
   const isSavingProfile = updateMutation.isPending || uploadAvatarMutation.isPending || removeAvatarMutation.isPending;

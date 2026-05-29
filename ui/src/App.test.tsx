@@ -32,6 +32,17 @@ vi.mock("./api/access", () => ({
   accessApi: mockAccessApi,
 }));
 
+vi.mock("react-i18next", async () => {
+  const actual = await vi.importActual<typeof import("react-i18next")>("react-i18next");
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string, options?: Record<string, unknown>) =>
+        String(options?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name] ?? "")),
+    }),
+  };
+});
+
 vi.mock("@/lib/router", () => ({
   Link: ({ to, children }: { to: string; children?: ReactNode }) => <a href={to}>{children}</a>,
   Navigate: ({ to }: { to: string }) => <div>Navigate:{to}</div>,

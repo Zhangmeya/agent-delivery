@@ -72,6 +72,14 @@ export const adapterLabels = new Proxy<Record<string, string>>({} as Record<stri
 
 export const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
+export function translateRoleLabel(
+  t: (key: string, options?: { defaultValue?: string }) => string,
+  role: string,
+) {
+  const label = roleLabels[role] ?? role;
+  return t(`agentRole.${role}`, { defaultValue: label });
+}
+
 /* ---- Primitive components ---- */
 
 export function HintIcon({ text }: { text: string }) {

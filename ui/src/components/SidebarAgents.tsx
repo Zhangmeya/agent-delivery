@@ -206,7 +206,11 @@ function SidebarAgentItem({
             disabled={leaving}
           >
             {leaving ? <Loader2 className="size-4 motion-safe:animate-spin" /> : <LogOut className="size-4" />}
-            <span>{leaving ? "Leaving..." : "Leave agent"}</span>
+            <span>
+              {leaving
+                ? t("Leaving...", { defaultValue: "Leaving..." })
+                : t("Leave agent", { defaultValue: "Leave agent" })}
+            </span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

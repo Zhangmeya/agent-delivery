@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { Shield } from "lucide-react";
 import { cn, agentUrl } from "../lib/utils";
-import { roleLabels } from "../components/agent-config-primitives";
+import { translateRoleLabel } from "../components/agent-config-primitives";
 import {
   AgentConfigForm,
   AdapterEnvironmentResult,
@@ -254,7 +254,7 @@ export function NewAgent() {
                 disabled={isFirstAgent}
               >
                 <Shield className="h-3 w-3 text-muted-foreground" />
-                {roleLabels[effectiveRole] ?? effectiveRole}
+                {translateRoleLabel(t, effectiveRole)}
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-36 p-1" align="start">
@@ -267,7 +267,7 @@ export function NewAgent() {
                   )}
                   onClick={() => { setRole(r); setRoleOpen(false); }}
                 >
-                  {roleLabels[r] ?? r}
+                  {translateRoleLabel(t, r)}
                 </button>
               ))}
             </PopoverContent>

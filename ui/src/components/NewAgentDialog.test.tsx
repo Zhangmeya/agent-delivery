@@ -39,6 +39,17 @@ vi.mock("../context/ToastContext", () => ({
   useToast: () => ({ pushToast: pushToastMock }),
 }));
 
+vi.mock("react-i18next", async () => {
+  const actual = await vi.importActual<typeof import("react-i18next")>("react-i18next");
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string, options?: Record<string, unknown>) =>
+        String(options?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name] ?? "")),
+    }),
+  };
+});
+
 vi.mock("../api/access", () => ({
   accessApi: {
     createCompanyInvite: (companyId: string, input: unknown) =>

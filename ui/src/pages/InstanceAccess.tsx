@@ -11,6 +11,17 @@ import { useCompany } from "@/context/CompanyContext";
 import { useToast } from "@/context/ToastContext";
 import { queryKeys } from "@/lib/queryKeys";
 
+type InstanceAccessUser = Awaited<ReturnType<typeof accessApi.searchAdminUsers>>[number];
+
+function displayUserName(t: ReturnType<typeof useTranslation>["t"], user: InstanceAccessUser | null | undefined, fallbackId?: string | null) {
+  if (!user) return fallbackId ?? "";
+  const name = user.name?.trim();
+  if (user.id === "local-board" && (!name || name === "Board")) {
+    return t("Board", { defaultValue: "Board" });
+  }
+  return name || user.email || user.id;
+}
+
 export function InstanceAccess() {
   const { t } = useTranslation();
   const { companies } = useCompany();
@@ -142,7 +153,7 @@ export function InstanceAccess() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="truncate font-medium">{user.name || user.email || user.id}</div>
+                    <div className="truncate font-medium">{displayUserName(t, user)}</div>
                     <div className="truncate text-sm text-muted-foreground">{user.email || user.id}</div>
                   </div>
                   {user.isInstanceAdmin ? (
@@ -182,7 +193,7 @@ export function InstanceAccess() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="text-lg font-semibold">
-                    {selectedUser?.name || selectedUser?.email || selectedUserId}
+                    {displayUserName(t, selectedUser, selectedUserId)}
                   </div>
                   <div className="text-sm text-muted-foreground">
                     {selectedUser?.email || selectedUserId}

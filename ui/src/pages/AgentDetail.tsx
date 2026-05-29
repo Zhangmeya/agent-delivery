@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, useNavigate, Link, Navigate, useBeforeUnload } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,7 +25,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { AgentConfigForm } from "../components/AgentConfigForm";
 import { PageTabBar } from "../components/PageTabBar";
-import { adapterLabels, roleLabels, help } from "../components/agent-config-primitives";
+import { adapterLabels, translateRoleLabel, help } from "../components/agent-config-primitives";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { useAdapterCapabilities } from "@/adapters/use-adapter-capabilities";
 import { redactCommandText as redactCommandSecretText } from "@penclipai/adapter-utils";
@@ -667,6 +668,7 @@ function WorkspaceOperationsSection({
 }
 
 export function AgentDetail() {
+  const { t } = useTranslation();
   const { companyPrefix, agentId, tab: urlTab, runId: urlRunId } = useParams<{
     companyPrefix?: string;
     agentId: string;
@@ -1078,7 +1080,7 @@ export function AgentDetail() {
           <div className="min-w-0">
             <h2 className="text-2xl font-bold truncate">{agent.name}</h2>
             <p className="text-sm text-muted-foreground truncate">
-              {roleLabels[agent.role] ?? agent.role}
+              {translateRoleLabel(t, agent.role)}
               {agent.title ? ` - ${agent.title}` : ""}
             </p>
           </div>

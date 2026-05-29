@@ -20,7 +20,7 @@ import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Bot, Plus, List, GitBranch, SlidersHorizontal } from "lucide-react";
-import { AGENT_ROLE_LABELS, type Agent } from "@penclipai/shared";
+import type { Agent } from "@penclipai/shared";
 import {
   resourceMembershipState,
   useResourceMembershipMutation,
@@ -28,8 +28,7 @@ import {
 } from "../hooks/useResourceMemberships";
 
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
-
-const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
+import { translateRoleLabel } from "../components/agent-config-primitives";
 
 type FilterTab = "all" | "active" | "paused" | "error";
 
@@ -239,7 +238,7 @@ export function Agents() {
               <EntityRow
                 key={agent.id}
                 title={agent.name}
-                subtitle={`${roleLabels[agent.role] ?? agent.role}${agent.title ? ` - ${agent.title}` : ""}`}
+                subtitle={`${translateRoleLabel(t, agent.role)}${agent.title ? ` - ${agent.title}` : ""}`}
                 to={agentUrl(agent)}
                 className={cn(
                   "group",
@@ -382,6 +381,7 @@ function OrgTreeNode({
   memberships: ReturnType<typeof useResourceMemberships>["data"];
   membershipMutation: ReturnType<typeof useResourceMembershipMutation>;
 }) {
+  const { t } = useTranslation();
   const agent = agentMap.get(node.id);
   const membershipState = resourceMembershipState(memberships, "agent", node.id);
   const pending = membershipMutation.isPending &&
@@ -406,7 +406,7 @@ function OrgTreeNode({
         <div className="flex-1 min-w-0">
           <span className="text-sm font-medium">{node.name}</span>
           <span className="text-xs text-muted-foreground ml-2">
-            {roleLabels[node.role] ?? node.role}
+            {translateRoleLabel(t, node.role)}
             {agent?.title ? ` - ${agent.title}` : ""}
           </span>
         </div>

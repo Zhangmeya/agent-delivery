@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { Loader2, LogIn, LogOut } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ResourceMembershipState } from "@penclipai/shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "../lib/utils";
@@ -23,11 +24,18 @@ export function MembershipAction({
   onJoin,
   onLeave,
 }: MembershipActionProps) {
+  const { t } = useTranslation(undefined, { useSuspense: false });
   const isLeft = state === "left";
   const label = pending
-    ? pendingState === "left" ? "Leaving..." : "Joining..."
-    : isLeft ? "Join" : "Leave";
-  const ariaLabel = `${isLeft ? "Join" : "Leave"} ${resourceName}`;
+    ? pendingState === "left"
+      ? t("Leaving...", { defaultValue: "Leaving..." })
+      : t("Joining...", { defaultValue: "Joining..." })
+    : isLeft
+      ? t("Join", { defaultValue: "Join" })
+      : t("Leave", { defaultValue: "Leave" });
+  const ariaLabel = isLeft
+    ? t("Join {{name}}", { defaultValue: "Join {{name}}", name: resourceName })
+    : t("Leave {{name}}", { defaultValue: "Leave {{name}}", name: resourceName });
   const Icon = pending ? Loader2 : isLeft ? LogIn : LogOut;
 
   function handleClick(event: MouseEvent<HTMLButtonElement>) {
