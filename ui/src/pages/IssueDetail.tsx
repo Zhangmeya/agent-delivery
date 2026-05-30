@@ -3733,7 +3733,7 @@ export function IssueDetail() {
         <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
           <Button variant="outline" size="sm" onClick={openNewSubIssue} className="shrink-0 shadow-none">
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            New Sub-issue
+            {t("issueDetail.newSubIssue", { defaultValue: "New Sub-issue" })}
           </Button>
         </div>
       )}
