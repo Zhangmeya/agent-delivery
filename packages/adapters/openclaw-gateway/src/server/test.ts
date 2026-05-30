@@ -7,6 +7,9 @@ import { asString, parseObject } from "@penclipai/adapter-utils/server-utils";
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 
+const MIN_PROTOCOL_VERSION = 3;
+const MAX_PROTOCOL_VERSION = 4;
+
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
   if (checks.some((check) => check.level === "warn")) return "warn";
@@ -90,6 +93,19 @@ function rawDataToString(data: unknown): string {
   return String(data ?? "");
 }
 
+type ProbeGatewayResult =
+  | { status: "ok"; protocol: number | null; detail?: string }
+  | { status: "challenge_only" | "failed"; protocol: number | null; detail?: string };
+
+function formatProbeError(event: Record<string, unknown>): string | undefined {
+  const error = asRecord(event.error);
+  if (!error) return undefined;
+  const message = nonEmpty(error.message) ?? nonEmpty(error.code) ?? "gateway rejected connect probe";
+  const details = asRecord(error.details);
+  if (!details || Object.keys(details).length === 0) return message;
+  return `${message}; details=${JSON.stringify(details)}`;
+}
+
 async function probeGateway(input: {
   url: string;
   headers: Record<string, string>;
@@ -97,7 +113,7 @@ async function probeGateway(input: {
   role: string;
   scopes: string[];
   timeoutMs: number;
-}): Promise<"ok" | "challenge_only" | "failed"> {
+}): Promise<ProbeGatewayResult> {
   return await new Promise((resolve) => {
     const ws = new WebSocket(input.url, { headers: input.headers, maxPayload: 2 * 1024 * 1024 });
     const timeout = setTimeout(() => {
@@ -106,12 +122,12 @@ async function probeGateway(input: {
       } catch {
         // ignore
       }
-      resolve("failed");
+      resolve({ status: "failed", protocol: null, detail: "gateway connect challenge timeout" });
     }, input.timeoutMs);
 
     let completed = false;
 
-    const finish = (status: "ok" | "challenge_only" | "failed") => {
+    const finish = (result: ProbeGatewayResult) => {
       if (completed) return;
       completed = true;
       clearTimeout(timeout);
@@ -120,7 +136,7 @@ async function probeGateway(input: {
       } catch {
         // ignore
       }
-      resolve(status);
+      resolve(result);
     };
 
     ws.on("message", (raw) => {
@@ -134,7 +150,7 @@ async function probeGateway(input: {
       if (event?.type === "event" && event.event === "connect.challenge") {
         const nonce = nonEmpty(asRecord(event.payload)?.nonce);
         if (!nonce) {
-          finish("failed");
+          finish({ status: "failed", protocol: null, detail: "connect.challenge did not include nonce" });
           return;
         }
 
@@ -145,14 +161,21 @@ async function probeGateway(input: {
             id: connectId,
             method: "connect",
             params: {
-              minProtocol: 3,
-              maxProtocol: 3,
+              minProtocol: MIN_PROTOCOL_VERSION,
+              maxProtocol: MAX_PROTOCOL_VERSION,
               client: {
                 id: "gateway-client",
                 version: "paperclip-probe",
                 platform: process.platform,
                 mode: "probe",
               },
+              caps: ["agent", "agent.wait"],
+              commands: ["agent", "agent.wait"],
+              permissions: {
+                scopes: true,
+              },
+              locale: "en-US",
+              userAgent: `Paperclip OpenClaw Gateway Adapter/paperclip-probe (${process.platform})`,
               role: input.role,
               scopes: input.scopes,
               ...(input.authToken
@@ -170,19 +193,23 @@ async function probeGateway(input: {
 
       if (event?.type === "res") {
         if (event.ok === true) {
-          finish("ok");
+          const payload = asRecord(event.payload);
+          finish({
+            status: "ok",
+            protocol: typeof payload?.protocol === "number" ? payload.protocol : null,
+          });
         } else {
-          finish("challenge_only");
+          finish({ status: "challenge_only", protocol: null, detail: formatProbeError(event) });
         }
       }
     });
 
     ws.on("error", () => {
-      finish("failed");
+      finish({ status: "failed", protocol: null, detail: "websocket connection failed" });
     });
 
     ws.on("close", () => {
-      if (!completed) finish("failed");
+      if (!completed) finish({ status: "failed", protocol: null, detail: "gateway closed before probe completed" });
     });
   });
 }
@@ -278,24 +305,26 @@ export async function testEnvironment(
         timeoutMs: 3_000,
       });
 
-      if (probeResult === "ok") {
+      if (probeResult.status === "ok") {
         checks.push({
           code: "openclaw_gateway_probe_ok",
           level: "info",
-          message: "Gateway connect probe succeeded.",
+          message: `Gateway connect probe succeeded${probeResult.protocol ? ` with protocol ${probeResult.protocol}` : ""}.`,
         });
-      } else if (probeResult === "challenge_only") {
+      } else if (probeResult.status === "challenge_only") {
         checks.push({
           code: "openclaw_gateway_probe_challenge_only",
           level: "warn",
           message: "Gateway challenge was received, but connect probe was rejected.",
-          hint: "Check gateway credentials, scopes, role, and device-auth requirements.",
+          detail: probeResult.detail,
+          hint: "Check gateway credentials, scopes, role, protocol compatibility, and device-auth requirements.",
         });
       } else {
         checks.push({
           code: "openclaw_gateway_probe_failed",
           level: "warn",
           message: "Gateway probe failed.",
+          detail: probeResult.detail,
           hint: "Verify network reachability and gateway URL from the Paperclip server host.",
         });
       }

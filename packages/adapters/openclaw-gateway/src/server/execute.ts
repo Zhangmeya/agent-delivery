@@ -52,6 +52,7 @@ type GatewayResponseFrame = {
   error?: {
     code?: unknown;
     message?: unknown;
+    details?: unknown;
   };
 };
 
@@ -86,12 +87,15 @@ type GatewayClientRequestOptions = {
   expectFinal?: boolean;
 };
 
-const PROTOCOL_VERSION = 3;
+const MIN_PROTOCOL_VERSION = 3;
+const MAX_PROTOCOL_VERSION = 4;
+const DEFAULT_PROTOCOL_VERSION = 3;
 const DEFAULT_SCOPES = ["operator.admin"];
 const DEFAULT_CLIENT_ID = "gateway-client";
 const DEFAULT_CLIENT_MODE = "backend";
 const DEFAULT_CLIENT_VERSION = "paperclip";
 const DEFAULT_ROLE = "operator";
+const DEFAULT_USER_AGENT = `Paperclip OpenClaw Gateway Adapter/${DEFAULT_CLIENT_VERSION}`;
 
 const SENSITIVE_LOG_KEY_PATTERN =
   /(^|[_-])(auth|authorization|token|secret|password|api[_-]?key|private[_-]?key)([_-]|$)|^x-openclaw-(auth|token)$/i;
@@ -208,6 +212,67 @@ function getGatewayErrorDetails(err: unknown): Record<string, unknown> | null {
   if (!err || typeof err !== "object") return null;
   const candidate = (err as GatewayResponseError).gatewayDetails;
   return asRecord(candidate);
+}
+
+function getGatewayErrorCode(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  return nonEmpty((err as GatewayResponseError).gatewayCode);
+}
+
+function formatGatewayDetails(details: Record<string, unknown> | null): string {
+  if (!details || Object.keys(details).length === 0) return "";
+  return ` details=${stringifyForLog(redactForLog(details), 2_000)}`;
+}
+
+function formatProtocolRange(): string {
+  return `${MIN_PROTOCOL_VERSION}-${MAX_PROTOCOL_VERSION}`;
+}
+
+function formatProtocolMismatchMessage(message: string, details: Record<string, unknown> | null): string {
+  const expected = nonEmpty(details?.expectedProtocol) ?? nonEmpty(details?.protocol);
+  const clientMin = nonEmpty(details?.clientMinProtocol);
+  const clientMax = nonEmpty(details?.clientMaxProtocol);
+  const minimumProbe = nonEmpty(details?.minimumProbeProtocol);
+  const parts = [
+    `OpenClaw gateway protocol mismatch: ${message}.`,
+    `Paperclip supports Gateway protocol ${formatProtocolRange()} and advertised minProtocol=${MIN_PROTOCOL_VERSION}, maxProtocol=${MAX_PROTOCOL_VERSION}.`,
+  ];
+  if (expected) parts.push(`Gateway expectedProtocol=${expected}.`);
+  if (clientMin || clientMax) {
+    parts.push(`Gateway saw clientMinProtocol=${clientMin ?? "unknown"}, clientMaxProtocol=${clientMax ?? "unknown"}.`);
+  }
+  if (minimumProbe) parts.push(`Gateway minimumProbeProtocol=${minimumProbe}.`);
+  parts.push("Upgrade Paperclip if the gateway requires a newer protocol, or run an OpenClaw Gateway that still supports protocol 3/4.");
+  const detailText = formatGatewayDetails(details);
+  if (detailText) parts.push(detailText.trim());
+  return parts.join(" ");
+}
+
+function formatGatewayFailureMessage(message: string, code: string | null, details: Record<string, unknown> | null): string {
+  const normalizedCode = code?.toUpperCase() ?? "";
+  const normalizedMessage = message.toLowerCase();
+  if (normalizedCode === "PROTOCOL_MISMATCH" || normalizedMessage.includes("protocol_mismatch")) {
+    return formatProtocolMismatchMessage(message, details);
+  }
+  if (normalizedCode === "INVALID_REQUEST" || normalizedMessage.includes("invalid request")) {
+    return `OpenClaw gateway rejected the request as invalid: ${message}. Check adapter connect params, gateway URL, role, scopes, and auth settings.${formatGatewayDetails(details)}`;
+  }
+  if (
+    normalizedMessage.includes("missing token") ||
+    normalizedMessage.includes("invalid token") ||
+    normalizedCode === "UNAUTHORIZED" ||
+    normalizedCode === "AUTH_REQUIRED" ||
+    normalizedCode === "INVALID_TOKEN"
+  ) {
+    return `OpenClaw gateway authentication failed: ${message}. Verify adapterConfig.authToken or headers.x-openclaw-token, and confirm it matches the gateway token.${formatGatewayDetails(details)}`;
+  }
+  if (normalizedMessage.includes("pairing required")) {
+    return `${message}. Approve the pending device in OpenClaw (for example: openclaw devices approve --latest --url <gateway-ws-url> --token <gateway-token>) and retry. Ensure this agent has a persisted adapterConfig.devicePrivateKeyPem so approvals are reused.${formatGatewayDetails(details)}`;
+  }
+  if (normalizedMessage.includes("connect challenge timeout")) {
+    return `OpenClaw gateway challenge timed out: ${message}. Confirm the URL points to the Gateway WebSocket endpoint and that the gateway sends connect.challenge.${formatGatewayDetails(details)}`;
+  }
+  return `${message}${formatGatewayDetails(details)}`;
 }
 
 function extractPairingRequestId(err: unknown): string | null {
@@ -582,7 +647,8 @@ function signDevicePayload(privateKeyPem: string, payload: string): string {
   return base64UrlEncode(sig);
 }
 
-function buildDeviceAuthPayloadV3(params: {
+function buildDeviceAuthPayload(params: {
+  protocol: 3 | 4;
   deviceId: string;
   clientId: string;
   clientMode: string;
@@ -599,7 +665,7 @@ function buildDeviceAuthPayloadV3(params: {
   const platform = params.platform?.trim() ?? "";
   const deviceFamily = params.deviceFamily?.trim() ?? "";
   return [
-    "v3",
+    `v${params.protocol}`,
     params.deviceId,
     params.clientId,
     params.clientMode,
@@ -611,6 +677,10 @@ function buildDeviceAuthPayloadV3(params: {
     platform,
     deviceFamily,
   ].join("|");
+}
+
+function buildDeviceAuthPayloadV3(params: Omit<Parameters<typeof buildDeviceAuthPayload>[0], "protocol">): string {
+  return buildDeviceAuthPayload({ protocol: 3, ...params });
 }
 
 function resolveDeviceIdentity(config: Record<string, unknown>): GatewayDeviceIdentity {
@@ -638,6 +708,112 @@ function resolveDeviceIdentity(config: Record<string, unknown>): GatewayDeviceId
     privateKeyPem,
     source: "ephemeral",
   };
+}
+
+function resolveLocale(): string {
+  const envLocale = nonEmpty(process.env.LC_ALL) ?? nonEmpty(process.env.LC_MESSAGES) ?? nonEmpty(process.env.LANG);
+  if (envLocale) return envLocale.replace(/[.@].*$/, "").replace("_", "-");
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale || "en-US";
+  } catch {
+    return "en-US";
+  }
+}
+
+function buildGatewayConnectParams(input: {
+  nonce: string;
+  clientId: string;
+  clientMode: string;
+  clientVersion: string;
+  role: string;
+  scopes: string[];
+  authToken: string | null;
+  password: string | null;
+  deviceToken: string | null;
+  deviceFamily: string | null;
+  deviceIdentity: GatewayDeviceIdentity | null;
+}): Record<string, unknown> {
+  const userAgent = `${DEFAULT_USER_AGENT} (${process.platform})`;
+  const connectParams: Record<string, unknown> = {
+    minProtocol: MIN_PROTOCOL_VERSION,
+    maxProtocol: MAX_PROTOCOL_VERSION,
+    client: {
+      id: input.clientId,
+      version: input.clientVersion,
+      platform: process.platform,
+      ...(input.deviceFamily ? { deviceFamily: input.deviceFamily } : {}),
+      mode: input.clientMode,
+    },
+    // v4 gateways may validate declared capabilities before accepting a
+    // session. Keep this intentionally small: these are the only commands and
+    // events the adapter actually uses.
+    caps: ["agent", "agent.wait"],
+    commands: ["agent", "agent.wait"],
+    permissions: {
+      scopes: true,
+    },
+    locale: resolveLocale(),
+    userAgent,
+    role: input.role,
+    scopes: input.scopes,
+    auth:
+      input.authToken || input.password || input.deviceToken
+        ? {
+            ...(input.authToken ? { token: input.authToken } : {}),
+            ...(input.deviceToken ? { deviceToken: input.deviceToken } : {}),
+            ...(input.password ? { password: input.password } : {}),
+          }
+        : undefined,
+  };
+
+  if (input.deviceIdentity) {
+    const signedAtMs = Date.now();
+    const basePayload = {
+      deviceId: input.deviceIdentity.deviceId,
+      clientId: input.clientId,
+      clientMode: input.clientMode,
+      role: input.role,
+      scopes: input.scopes,
+      signedAtMs,
+      token: input.authToken,
+      nonce: input.nonce,
+      platform: process.platform,
+      deviceFamily: input.deviceFamily,
+    };
+    connectParams.device = {
+      id: input.deviceIdentity.deviceId,
+      publicKey: input.deviceIdentity.publicKeyRawBase64Url,
+      signature: signDevicePayload(input.deviceIdentity.privateKeyPem, buildDeviceAuthPayloadV3(basePayload)),
+      signedAt: signedAtMs,
+      nonce: input.nonce,
+    };
+  }
+
+  return connectParams;
+}
+
+function resolveConnectedProtocol(hello: Record<string, unknown> | null): number {
+  const direct = asNumber(hello?.protocol, 0);
+  if (direct > 0) return direct;
+  const nestedHello = asRecord(hello?.hello);
+  const nested = asNumber(nestedHello?.protocol, 0);
+  if (nested > 0) return nested;
+  const server = asRecord(hello?.server);
+  const serverProtocol = asNumber(server?.protocol, 0);
+  if (serverProtocol > 0) return serverProtocol;
+  return DEFAULT_PROTOCOL_VERSION;
+}
+
+function buildAgentRequestParamsForProtocol(input: {
+  baseParams: Record<string, unknown>;
+  paperclipPayload: Record<string, unknown>;
+  protocol: number;
+}): Record<string, unknown> {
+  const params = { ...input.baseParams };
+  if (input.protocol < 4) {
+    params.paperclip = input.paperclipPayload;
+  }
+  return params;
 }
 
 function isResponseFrame(value: unknown): value is GatewayResponseFrame {
@@ -825,13 +1001,13 @@ class GatewayWsClient {
     }
 
     const errorRecord = asRecord(parsed.error);
-    const message =
-      nonEmpty(errorRecord?.message) ??
-      nonEmpty(errorRecord?.code) ??
-      "gateway request failed";
-    const err = new Error(message) as GatewayResponseError;
     const code = nonEmpty(errorRecord?.code);
     const details = asRecord(errorRecord?.details);
+    const message =
+      nonEmpty(errorRecord?.message) ??
+      code ??
+      "gateway request failed";
+    const err = new Error(formatGatewayFailureMessage(message, code, details)) as GatewayResponseError;
     if (code) err.gatewayCode = code;
     if (details) err.gatewayDetails = details;
     pending.reject(err);
@@ -873,14 +1049,21 @@ async function autoApproveDevicePairing(params: {
 
     await client.connect(
       () => ({
-        minProtocol: PROTOCOL_VERSION,
-        maxProtocol: PROTOCOL_VERSION,
+        minProtocol: MIN_PROTOCOL_VERSION,
+        maxProtocol: MAX_PROTOCOL_VERSION,
         client: {
           id: params.clientId,
           version: params.clientVersion,
           platform: process.platform,
           mode: params.clientMode,
         },
+        caps: ["device.pair.list", "device.pair.approve"],
+        commands: ["device.pair.list", "device.pair.approve"],
+        permissions: {
+          scopes: true,
+        },
+        locale: resolveLocale(),
+        userAgent: `${DEFAULT_USER_AGENT} (${process.platform})`,
         role: params.role,
         scopes: approvalScopes,
         auth: {
@@ -1050,6 +1233,31 @@ function extractResultText(value: unknown): string | null {
   return nonEmpty(record.text) ?? nonEmpty(record.summary) ?? null;
 }
 
+function normalizeGatewayRunStatus(payload: Record<string, unknown> | null): string {
+  if (!payload) return "";
+  const status = nonEmpty(payload.status)?.toLowerCase();
+  if (status) return status;
+  if (payload.ok === true || payload.done === true || payload.completed === true) return "ok";
+  if (payload.accepted === true || payload.queued === true) return "accepted";
+  if (payload.timeout === true || payload.timedOut === true) return "timeout";
+  if (payload.ok === false || payload.error) return "error";
+  return "";
+}
+
+function extractGatewayRunId(payload: Record<string, unknown> | null, fallback: string): string {
+  if (!payload) return fallback;
+  const nestedRun = asRecord(payload.run);
+  const nestedResult = asRecord(payload.result);
+  return (
+    nonEmpty(payload.runId) ??
+    nonEmpty(payload.id) ??
+    nonEmpty(nestedRun?.runId) ??
+    nonEmpty(nestedRun?.id) ??
+    nonEmpty(nestedResult?.runId) ??
+    fallback
+  );
+}
+
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
   const urlValue = asString(ctx.config.url, "").trim();
   if (!urlValue) {
@@ -1136,22 +1344,21 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const message = templateMessage ? appendWakeText(templateMessage, wakeText) : wakeText;
   const paperclipPayload = buildStandardPaperclipPayload(ctx, wakePayload, paperclipEnv, payloadTemplate);
 
-  const agentParams: Record<string, unknown> = {
+  const baseAgentParams: Record<string, unknown> = {
     ...payloadTemplate,
     message,
     sessionKey,
     idempotencyKey: ctx.runId,
   };
-  delete agentParams.text;
-  agentParams.paperclip = paperclipPayload;
+  delete baseAgentParams.text;
 
   const configuredAgentId = nonEmpty(ctx.config.agentId);
-  if (configuredAgentId && !nonEmpty(agentParams.agentId)) {
-    agentParams.agentId = configuredAgentId;
+  if (configuredAgentId && !nonEmpty(baseAgentParams.agentId)) {
+    baseAgentParams.agentId = configuredAgentId;
   }
 
-  if (typeof agentParams.timeout !== "number") {
-    agentParams.timeout = waitTimeoutMs;
+  if (typeof baseAgentParams.timeout !== "number") {
+    baseAgentParams.timeout = waitTimeoutMs;
   }
 
   if (ctx.onMeta) {
@@ -1170,7 +1377,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   );
   await ctx.onLog(
     "stdout",
-    `[openclaw-gateway] outbound payload (redacted): ${stringifyForLog(redactForLog(agentParams), 12_000)}\n`,
+    `[openclaw-gateway] outbound payload base (redacted): ${stringifyForLog(redactForLog(baseAgentParams), 12_000)}\n`,
   );
   await ctx.onLog("stdout", `[openclaw-gateway] outbound header keys: ${outboundHeaderKeys.join(", ")}\n`);
   if (transportHint) {
@@ -1264,57 +1471,39 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
       await ctx.onLog("stdout", `[openclaw-gateway] connecting to ${parsedUrl.toString()}\n`);
 
-      const hello = await client.connect((nonce) => {
-        const signedAtMs = Date.now();
-        const connectParams: Record<string, unknown> = {
-          minProtocol: PROTOCOL_VERSION,
-          maxProtocol: PROTOCOL_VERSION,
-          client: {
-            id: clientId,
-            version: clientVersion,
-            platform: process.platform,
-            ...(deviceFamily ? { deviceFamily } : {}),
-            mode: clientMode,
-          },
-          role,
-          scopes,
-          auth:
-            authToken || password || deviceToken
-              ? {
-                  ...(authToken ? { token: authToken } : {}),
-                  ...(deviceToken ? { deviceToken } : {}),
-                  ...(password ? { password } : {}),
-                }
-              : undefined,
-        };
-
-        if (deviceIdentity) {
-          const payload = buildDeviceAuthPayloadV3({
-            deviceId: deviceIdentity.deviceId,
+      const hello = await client.connect(
+        (nonce) =>
+          buildGatewayConnectParams({
+            nonce,
             clientId,
             clientMode,
+            clientVersion,
             role,
             scopes,
-            signedAtMs,
-            token: authToken,
-            nonce,
-            platform: process.platform,
+            authToken,
+            password,
+            deviceToken,
             deviceFamily,
-          });
-          connectParams.device = {
-            id: deviceIdentity.deviceId,
-            publicKey: deviceIdentity.publicKeyRawBase64Url,
-            signature: signDevicePayload(deviceIdentity.privateKeyPem, payload),
-            signedAt: signedAtMs,
-            nonce,
-          };
-        }
-        return connectParams;
-      }, connectTimeoutMs);
+            deviceIdentity,
+          }),
+        connectTimeoutMs,
+      );
+
+      const connectedProtocol = resolveConnectedProtocol(asRecord(hello));
+      await ctx.onLog(
+        "stdout",
+        `[openclaw-gateway] connected protocol=${connectedProtocol}\n`,
+      );
+
+      const agentParams = buildAgentRequestParamsForProtocol({
+        baseParams: baseAgentParams,
+        paperclipPayload,
+        protocol: connectedProtocol,
+      });
 
       await ctx.onLog(
         "stdout",
-        `[openclaw-gateway] connected protocol=${asNumber(asRecord(hello)?.protocol, PROTOCOL_VERSION)}\n`,
+        `[openclaw-gateway] outbound agent params protocol=${connectedProtocol} (redacted): ${stringifyForLog(redactForLog(agentParams), 12_000)}\n`,
       );
 
       const acceptedPayload = await client.request<Record<string, unknown>>("agent", agentParams, {
@@ -1323,8 +1512,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
       latestResultPayload = acceptedPayload;
 
-      const acceptedStatus = nonEmpty(acceptedPayload?.status)?.toLowerCase() ?? "";
-      const acceptedRunId = nonEmpty(acceptedPayload?.runId) ?? ctx.runId;
+      const acceptedStatus = normalizeGatewayRunStatus(acceptedPayload);
+      const acceptedRunId = extractGatewayRunId(acceptedPayload, ctx.runId);
       trackedRunIds.add(acceptedRunId);
 
       await ctx.onLog(
@@ -1354,7 +1543,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
         latestResultPayload = waitPayload;
 
-        const waitStatus = nonEmpty(waitPayload?.status)?.toLowerCase() ?? "";
+        const waitStatus = normalizeGatewayRunStatus(waitPayload);
         if (waitStatus === "timeout") {
           return {
             exitCode: 1,
@@ -1438,9 +1627,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      const gatewayCode = getGatewayErrorCode(err);
+      const gatewayDetails = getGatewayErrorDetails(err);
       const lower = message.toLowerCase();
       const timedOut = lower.includes("timeout");
       const pairingRequired = lower.includes("pairing required");
+      const protocolMismatch =
+        gatewayCode?.toUpperCase() === "PROTOCOL_MISMATCH" || lower.includes("protocol mismatch");
+      const invalidRequest =
+        gatewayCode?.toUpperCase() === "INVALID_REQUEST" || lower.includes("invalid request");
+      const authFailed =
+        ["UNAUTHORIZED", "AUTH_REQUIRED", "INVALID_TOKEN"].includes(gatewayCode?.toUpperCase() ?? "") ||
+        lower.includes("missing token") ||
+        lower.includes("invalid token");
 
       if (
         pairingRequired &&
@@ -1478,9 +1677,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         );
       }
 
-      const detailedMessage = pairingRequired
-        ? `${message}. Approve the pending device in OpenClaw (for example: openclaw devices approve --latest --url <gateway-ws-url> --token <gateway-token>) and retry. Ensure this agent has a persisted adapterConfig.devicePrivateKeyPem so approvals are reused.`
-        : message;
+      const detailedMessage = gatewayCode ? message : formatGatewayFailureMessage(message, gatewayCode, gatewayDetails);
 
       await ctx.onLog("stderr", `[openclaw-gateway] request failed: ${detailedMessage}\n`);
 
@@ -1491,6 +1688,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         errorMessage: detailedMessage,
         errorCode: timedOut
           ? "openclaw_gateway_timeout"
+          : protocolMismatch
+            ? "openclaw_gateway_protocol_mismatch"
+            : invalidRequest
+              ? "openclaw_gateway_invalid_request"
+              : authFailed
+                ? "openclaw_gateway_auth_failed"
           : pairingRequired
             ? "openclaw_gateway_pairing_required"
             : "openclaw_gateway_request_failed",

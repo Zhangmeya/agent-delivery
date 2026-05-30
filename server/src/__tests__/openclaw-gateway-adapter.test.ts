@@ -40,12 +40,21 @@ function buildContext(
 }
 
 async function createMockGatewayServer(options?: {
+  protocol?: 3 | 4;
+  connectError?: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+  };
+  agentPayload?: Record<string, unknown>;
   waitPayload?: Record<string, unknown>;
+  strictAgentParams?: boolean;
 }) {
   const server = createServer();
   const wss = new WebSocketServer({ server });
 
   let agentPayload: Record<string, unknown> | null = null;
+  let connectPayload: Record<string, unknown> | null = null;
 
   wss.on("connection", (socket) => {
     socket.send(
@@ -68,6 +77,19 @@ async function createMockGatewayServer(options?: {
       if (frame.type !== "req") return;
 
       if (frame.method === "connect") {
+        connectPayload = frame.params ?? null;
+        if (options?.connectError) {
+          socket.send(
+            JSON.stringify({
+              type: "res",
+              id: frame.id,
+              ok: false,
+              error: options.connectError,
+            }),
+          );
+          return;
+        }
+
         socket.send(
           JSON.stringify({
             type: "res",
@@ -75,7 +97,7 @@ async function createMockGatewayServer(options?: {
             ok: true,
             payload: {
               type: "hello-ok",
-              protocol: 3,
+              protocol: options?.protocol ?? 3,
               server: { version: "test", connId: "conn-1" },
               features: { methods: ["connect", "agent", "agent.wait"], events: ["agent"] },
               snapshot: { version: 1, ts: Date.now() },
@@ -88,6 +110,20 @@ async function createMockGatewayServer(options?: {
 
       if (frame.method === "agent") {
         agentPayload = frame.params ?? null;
+        if (options?.strictAgentParams && frame.params && "paperclip" in frame.params) {
+          socket.send(
+            JSON.stringify({
+              type: "res",
+              id: frame.id,
+              ok: false,
+              error: {
+                code: "INVALID_REQUEST",
+                message: "invalid agent params: at root: unexpected property 'paperclip'",
+              },
+            }),
+          );
+          return;
+        }
         const runId =
           typeof frame.params?.idempotencyKey === "string"
             ? frame.params.idempotencyKey
@@ -102,6 +138,7 @@ async function createMockGatewayServer(options?: {
               runId,
               status: "accepted",
               acceptedAt: Date.now(),
+              ...(options?.agentPayload ?? {}),
             },
           }),
         );
@@ -165,6 +202,7 @@ async function createMockGatewayServer(options?: {
   return {
     url: `ws://127.0.0.1:${address.port}`,
     getAgentPayload: () => agentPayload,
+    getConnectPayload: () => connectPayload,
     close: async () => {
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -520,6 +558,211 @@ describe("openclaw gateway adapter execute", () => {
     }
   });
 
+  it("negotiates a v3 gateway with protocol range 3-4", async () => {
+    const gateway = await createMockGatewayServer({ protocol: 3 });
+    const logs: string[] = [];
+
+    try {
+      const result = await execute(
+        buildContext(
+          {
+            url: gateway.url,
+            headers: {
+              "x-openclaw-token": "gateway-token",
+            },
+            waitTimeoutMs: 2000,
+          },
+          {
+            onLog: async (_stream, chunk) => {
+              logs.push(chunk);
+            },
+          },
+        ),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(gateway.getConnectPayload()).toMatchObject({
+        minProtocol: 3,
+        maxProtocol: 4,
+        role: "operator",
+        scopes: ["operator.admin"],
+      });
+      expect(logs.some((entry) => entry.includes("[openclaw-gateway] connected protocol=3"))).toBe(true);
+    } finally {
+      await gateway.close();
+    }
+  });
+
+  it("negotiates a v4 gateway and executes agent.wait", async () => {
+    const gateway = await createMockGatewayServer({
+      protocol: 4,
+      strictAgentParams: true,
+      agentPayload: {
+        accepted: true,
+        status: undefined,
+      },
+      waitPayload: {
+        id: "run-123",
+        ok: true,
+        result: {
+          text: "done via v4",
+          meta: {
+            provider: "openclaw",
+            model: "gateway-v4",
+          },
+        },
+      },
+    });
+    const logs: string[] = [];
+
+    try {
+      const result = await execute(
+        buildContext(
+          {
+            url: gateway.url,
+            headers: {
+              "x-openclaw-token": "gateway-token",
+            },
+            waitTimeoutMs: 2000,
+          },
+          {
+            onLog: async (_stream, chunk) => {
+              logs.push(chunk);
+            },
+          },
+        ),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.summary).toContain("chachacha");
+      expect(result.model).toBe("gateway-v4");
+
+      const connect = gateway.getConnectPayload();
+      expect(connect).toMatchObject({
+        minProtocol: 3,
+        maxProtocol: 4,
+        caps: ["agent", "agent.wait"],
+        commands: ["agent", "agent.wait"],
+        permissions: {
+          scopes: true,
+        },
+      });
+      expect(typeof connect?.locale).toBe("string");
+      expect(String(connect?.userAgent ?? "")).toContain("Paperclip OpenClaw Gateway Adapter");
+      const payload = gateway.getAgentPayload();
+      expect(payload).toBeTruthy();
+      expect(payload?.paperclip).toBeUndefined();
+      expect(String(payload?.message ?? "")).toContain("PAPERCLIP_RUN_ID=run-123");
+      expect(logs.some((entry) => entry.includes("[openclaw-gateway] connected protocol=4"))).toBe(true);
+    } finally {
+      await gateway.close();
+    }
+  });
+
+  it("formats protocol mismatch details from a v4-only gateway", async () => {
+    const gateway = await createMockGatewayServer({
+      connectError: {
+        code: "PROTOCOL_MISMATCH",
+        message: "protocol mismatch",
+        details: {
+          expectedProtocol: 4,
+          clientMinProtocol: 3,
+          clientMaxProtocol: 3,
+          minimumProbeProtocol: 4,
+        },
+      },
+    });
+
+    try {
+      const result = await execute(
+        buildContext({
+          url: gateway.url,
+          headers: {
+            "x-openclaw-token": "gateway-token",
+          },
+          waitTimeoutMs: 2000,
+        }),
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.errorCode).toBe("openclaw_gateway_protocol_mismatch");
+      expect(result.errorMessage).toContain("Paperclip supports Gateway protocol 3-4");
+      expect(result.errorMessage).toContain("expectedProtocol");
+      expect(result.errorMessage).toContain("clientMinProtocol");
+      expect(result.errorMessage).toContain("minimumProbeProtocol");
+    } finally {
+      await gateway.close();
+    }
+  });
+
+  it("keeps invalid connect params errors readable", async () => {
+    const gateway = await createMockGatewayServer({
+      connectError: {
+        code: "INVALID_REQUEST",
+        message: "invalid connect params",
+        details: {
+          field: "client.caps",
+          reason: "required",
+        },
+      },
+    });
+
+    try {
+      const result = await execute(
+        buildContext({
+          url: gateway.url,
+          headers: {
+            "x-openclaw-token": "gateway-token",
+          },
+          waitTimeoutMs: 2000,
+        }),
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.errorCode).toBe("openclaw_gateway_invalid_request");
+      expect(result.errorMessage).toContain("OpenClaw gateway rejected the request as invalid");
+      expect(result.errorMessage).toContain("client.caps");
+    } finally {
+      await gateway.close();
+    }
+  });
+
+  it("sends nonce-bound device auth fields to v4 gateways", async () => {
+    const gateway = await createMockGatewayServer({ protocol: 4 });
+
+    try {
+      const result = await execute(
+        buildContext({
+          url: gateway.url,
+          headers: {
+            "x-openclaw-token": "gateway-token",
+          },
+          devicePrivateKeyPem: [
+            "-----BEGIN PRIVATE KEY-----",
+            "MC4CAQAwBQYDK2VwBCIEII3PsTWN32SDjW+Zz5d3MnrmmoCVF7Eg/HI1YEfWwrO+",
+            "-----END PRIVATE KEY-----",
+          ].join("\n"),
+          waitTimeoutMs: 2000,
+        }),
+      );
+
+      expect(result.exitCode).toBe(0);
+      const device = gateway.getConnectPayload()?.device as Record<string, unknown> | undefined;
+      expect(device).toEqual(
+        expect.objectContaining({
+          id: expect.any(String),
+          publicKey: expect.any(String),
+          signature: expect.any(String),
+          nonce: "nonce-123",
+          signedAt: expect.any(Number),
+        }),
+      );
+      expect(device?.signatures).toBeUndefined();
+    } finally {
+      await gateway.close();
+    }
+  });
+
   it("fails fast when url is missing", async () => {
     const result = await execute(buildContext({}));
     expect(result.exitCode).toBe(1);
@@ -678,5 +921,38 @@ describe("openclaw gateway testEnvironment", () => {
 
     expect(result.status).toBe("fail");
     expect(result.checks.some((check) => check.code === "openclaw_gateway_url_missing")).toBe(true);
+  });
+
+  it("probes a v4 gateway with the supported protocol range", async () => {
+    const gateway = await createMockGatewayServer({ protocol: 4 });
+
+    try {
+      const result = await testEnvironment({
+        companyId: "company-123",
+        adapterType: "openclaw_gateway",
+        config: {
+          url: gateway.url,
+          headers: {
+            "x-openclaw-token": "gateway-token",
+          },
+        },
+      });
+
+      expect(result.status).toBe("pass");
+      expect(result.checks).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "openclaw_gateway_probe_ok",
+            message: expect.stringContaining("protocol 4"),
+          }),
+        ]),
+      );
+      expect(gateway.getConnectPayload()).toMatchObject({
+        minProtocol: 3,
+        maxProtocol: 4,
+      });
+    } finally {
+      await gateway.close();
+    }
   });
 });
