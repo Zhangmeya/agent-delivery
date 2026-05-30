@@ -29,6 +29,7 @@ import {
   type ReactNode,
   type ComponentType,
 } from "react";
+import { useTranslation } from "react-i18next";
 import * as ReactModule from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
@@ -717,6 +718,7 @@ export function usePluginSlots(filters: SlotFilters): UsePluginSlotsResult {
 type PluginSlotErrorBoundaryProps = {
   slot: ResolvedPluginSlot;
   className?: string;
+  renderErrorLabel: string;
   children: ReactNode;
 };
 
@@ -745,7 +747,7 @@ class PluginSlotErrorBoundary extends Component<PluginSlotErrorBoundaryProps, Pl
     if (this.state.hasError) {
       return (
         <div className={cn("rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive", this.props.className)}>
-          {this.props.slot.pluginDisplayName}: failed to render
+          {this.props.slot.pluginDisplayName}: {this.props.renderErrorLabel}
         </div>
       );
     }
@@ -845,6 +847,7 @@ export function PluginSlotMount({
   className,
   missingBehavior = "hidden",
 }: PluginSlotMountProps) {
+  const { t } = useTranslation();
   usePluginRegistrySubscription();
   const [, forceRerender] = useState(0);
   const component = resolveRegisteredComponent(slot);
@@ -878,7 +881,13 @@ export function PluginSlotMount({
   if (component.kind === "react") {
     const node = createElement(component.component, { slot, context });
     return (
-      <PluginSlotErrorBoundary slot={slot} className={className}>
+      <PluginSlotErrorBoundary
+        slot={slot}
+        className={className}
+        renderErrorLabel={t("pluginUi.slotFailedToRender", {
+          defaultValue: "failed to render",
+        })}
+      >
         <PluginBridgeScope pluginId={slot.pluginId} context={context}>
           {className ? <div className={className}>{node}</div> : node}
         </PluginBridgeScope>
@@ -887,7 +896,13 @@ export function PluginSlotMount({
   }
 
   return (
-    <PluginSlotErrorBoundary slot={slot} className={className}>
+    <PluginSlotErrorBoundary
+      slot={slot}
+      className={className}
+      renderErrorLabel={t("pluginUi.slotFailedToRender", {
+        defaultValue: "failed to render",
+      })}
+    >
       <PluginWebComponentMount
         tagName={component.tagName}
         slot={slot}
@@ -917,6 +932,7 @@ export function PluginSlotOutlet({
   errorClassName,
   missingBehavior = "hidden",
 }: PluginSlotOutletProps) {
+  const { t } = useTranslation();
   const { slots, errorMessage } = usePluginSlots({
     slotTypes,
     entityType,
@@ -926,7 +942,10 @@ export function PluginSlotOutlet({
   if (errorMessage) {
     return (
       <div className={cn("rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive", errorClassName)}>
-        Plugin extensions unavailable: {errorMessage}
+        {t("pluginUi.extensionsUnavailable", {
+          message: errorMessage,
+          defaultValue: "Plugin extensions unavailable: {{message}}",
+        })}
       </div>
     );
   }

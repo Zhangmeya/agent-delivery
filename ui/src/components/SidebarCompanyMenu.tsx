@@ -37,6 +37,7 @@ import { useCompany } from "@/context/CompanyContext";
 import { useDialogActions } from "@/context/DialogContext";
 import { useCompanyOrder } from "@/hooks/useCompanyOrder";
 import { queryKeys } from "@/lib/queryKeys";
+import { buildDndAccessibility } from "@/lib/dnd-accessibility";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "../context/SidebarContext";
 import { CompanyPatternIcon } from "./CompanyPatternIcon";
@@ -153,6 +154,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
       activationConstraint: { delay: 180, tolerance: 6 },
     }),
   );
+  const dndAccessibility = useMemo(() => buildDndAccessibility(t), [t]);
   const sidebarCompanies = useMemo(
     () => companies.filter((company) => company.status !== "archived"),
     [companies],
@@ -270,6 +272,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            accessibility={dndAccessibility}
             onDragEnd={handleDragEnd}
           >
             <SortableContext

@@ -21,6 +21,8 @@ const zhTranslations: Record<string, string> = {
   "systemGenerated.value.noneRecorded": "未记录",
   "systemGenerated.runEvent.queuedRetryAfterOrphanedProcess": "已确认孤立子进程结束，已排队自动重试",
   "systemGenerated.runEvent.cancelledDependenciesBlocked": "已取消：任务依赖仍被阻塞；阻塞解除后 Paperclip 会唤醒负责人",
+  "systemGenerated.runEvent.cancelledTerminalStatusBeforeStart": "已取消：任务已在排队运行开始前进入终态（{{status}}）",
+  "status.done": "已完成",
 };
 
 function makeT(translations: Record<string, string>): TFunction {
@@ -91,5 +93,12 @@ describe("system-generated message i18n", () => {
         "Cancelled because issue dependencies are still blocked; Paperclip will wake the assignee when blockers resolve",
       ),
     ).toBe("已取消：任务依赖仍被阻塞；阻塞解除后 Paperclip 会唤醒负责人");
+
+    expect(
+      translateSystemGeneratedText(
+        t,
+        "Cancelled because issue reached terminal status (done) before the queued run could start",
+      ),
+    ).toBe("已取消：任务已在排队运行开始前进入终态（已完成）");
   });
 });

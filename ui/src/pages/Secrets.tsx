@@ -829,8 +829,11 @@ export function Secrets() {
     mutationFn: (id: string) => secretsApi.removeProviderConfig(id),
     onSuccess: (removed) => {
       pushToast({
-        title: "Provider vault removed",
-        body: `${removed.displayName} was removed from Paperclip only.`,
+        title: t("secrets.providerVaultRemoved", { defaultValue: "Provider vault removed" }),
+        body: t("secrets.providerVaultRemovedBody", {
+          name: removed.displayName,
+          defaultValue: "{{name}} was removed from Paperclip only.",
+        }),
         tone: "info",
       });
       setRemoveVaultConfirm(null);
@@ -838,8 +841,8 @@ export function Secrets() {
     },
     onError: (error) => {
       pushToast({
-        title: "Remove failed",
-        body: error instanceof Error ? error.message : "Try again",
+        title: t("secrets.removeFailed", { defaultValue: "Remove failed" }),
+        body: error instanceof Error ? error.message : t("common.tryAgain", { defaultValue: "Try again" }),
         tone: "error",
       });
     },
@@ -1785,24 +1788,30 @@ export function Secrets() {
       <Dialog open={Boolean(removeVaultConfirm)} onOpenChange={(open) => !open && setRemoveVaultConfirm(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Remove provider vault</DialogTitle>
+            <DialogTitle>{t("secrets.removeProviderVault", { defaultValue: "Remove provider vault" })}</DialogTitle>
             <DialogDescription>
-              Removes <strong>{removeVaultConfirm?.displayName}</strong> from Paperclip only.{" "}
+              {t("secrets.removeProviderVaultPrefix", { defaultValue: "Removes " })}
+              <strong>{removeVaultConfirm?.displayName}</strong>
+              {t("secrets.removeProviderVaultMiddle", { defaultValue: " from Paperclip only. " })}
               {removeVaultConfirm?.provider === "aws_secrets_manager"
-                ? "This does not delete the remote AWS Secrets Manager vault, secrets, or any AWS data."
-                : "This does not delete any remote provider data."}{" "}
-              Secrets using this vault will lose the vault association until you assign another one.
+                ? t("secrets.removeProviderVaultAwsBody", {
+                    defaultValue: "This does not delete the remote AWS Secrets Manager vault, secrets, or any AWS data.",
+                  })
+                : t("secrets.removeProviderVaultRemoteBody", { defaultValue: "This does not delete any remote provider data." })}{" "}
+              {t("secrets.removeProviderVaultAssociationBody", {
+                defaultValue: "Secrets using this vault will lose the vault association until you assign another one.",
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRemoveVaultConfirm(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRemoveVaultConfirm(null)}>{t("common.cancel", { defaultValue: "Cancel" })}</Button>
             <Button
               variant="destructive"
               onClick={() => removeVaultConfirm && removeVaultMutation.mutate(removeVaultConfirm.id)}
               disabled={removeVaultMutation.isPending}
             >
               {removeVaultMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-              Remove from Paperclip
+              {t("secrets.removeFromPaperclip", { defaultValue: "Remove from Paperclip" })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2356,6 +2365,7 @@ function AwsProviderVaultDiscoveryPanel({
   onDiscover: () => void;
   onApply: (candidate: SecretProviderConfigDiscoveryCandidate) => void;
 }) {
+  const { t } = useTranslation();
   const canDiscover = Boolean(form.region.trim());
   const warnings = preview?.warnings ?? [];
 
@@ -2363,9 +2373,11 @@ function AwsProviderVaultDiscoveryPanel({
     <div className="space-y-3 border-t border-border pt-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">AWS discovery</p>
+          <p className="text-sm font-medium">{t("secrets.awsDiscovery", { defaultValue: "AWS discovery" })}</p>
           <p className="text-xs text-muted-foreground">
-            Uses the current draft routing fields to inspect AWS Secrets Manager metadata. Values are not read.
+            {t("secrets.awsDiscoveryDescription", {
+              defaultValue: "Uses the current draft routing fields to inspect AWS Secrets Manager metadata. Values are not read.",
+            })}
           </p>
         </div>
         <Button
@@ -2381,18 +2393,18 @@ function AwsProviderVaultDiscoveryPanel({
           ) : (
             <Search className="h-3.5 w-3.5 mr-1" />
           )}
-          Find existing AWS values
+          {t("secrets.findExistingAwsValues", { defaultValue: "Find existing AWS values" })}
         </Button>
       </div>
 
       {!canDiscover ? (
-        <p className="text-xs text-muted-foreground">Enter an AWS region before discovery.</p>
+        <p className="text-xs text-muted-foreground">{t("secrets.enterAwsRegionBeforeDiscovery", { defaultValue: "Enter an AWS region before discovery." })}</p>
       ) : null}
 
       {loading ? (
         <div className="flex items-center gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Searching AWS Secrets Manager metadata
+          {t("secrets.searchingAwsMetadata", { defaultValue: "Searching AWS Secrets Manager metadata" })}
         </div>
       ) : null}
 
@@ -2419,7 +2431,7 @@ function AwsProviderVaultDiscoveryPanel({
 
       {preview && preview.candidates.length === 0 && !loading ? (
         <div className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-          No AWS vault metadata candidates found. Manual entry is still available.
+          {t("secrets.noAwsCandidates", { defaultValue: "No AWS vault metadata candidates found. Manual entry is still available." })}
         </div>
       ) : null}
 
@@ -2428,8 +2440,11 @@ function AwsProviderVaultDiscoveryPanel({
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Database className="h-3.5 w-3.5" />
             <span>
-              {preview.candidates.length} candidate{preview.candidates.length === 1 ? "" : "s"} from{" "}
-              {preview.sampledSecretCount} sampled secret{preview.sampledSecretCount === 1 ? "" : "s"}
+              {t("secrets.awsCandidateSummary", {
+                candidateCount: preview.candidates.length,
+                sampledSecretCount: preview.sampledSecretCount,
+                defaultValue: "{{candidateCount}} candidates from {{sampledSecretCount}} sampled secrets",
+              })}
             </span>
           </div>
           <div className="space-y-2" data-testid="aws-vault-discovery-candidates">
@@ -2454,6 +2469,7 @@ function AwsProviderVaultDiscoveryCandidateRow({
   candidate: SecretProviderConfigDiscoveryCandidate;
   onApply: () => void;
 }) {
+  const { t } = useTranslation();
   const fieldSummary = [
     providerConfigValue(candidate.config, "region"),
     providerConfigValue(candidate.config, "namespace"),
@@ -2471,7 +2487,7 @@ function AwsProviderVaultDiscoveryCandidateRow({
             </span>
           </div>
           <p className="mt-1 truncate text-xs text-muted-foreground">
-            {fieldSummary.length > 0 ? fieldSummary.join(" / ") : "No stable namespace or prefix detected"}
+            {fieldSummary.length > 0 ? fieldSummary.join(" / ") : t("secrets.noStableNamespace", { defaultValue: "No stable namespace or prefix detected" })}
           </p>
           {candidate.samples[0] ? (
             <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
@@ -2480,7 +2496,7 @@ function AwsProviderVaultDiscoveryCandidateRow({
           ) : null}
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onApply}>
-          Use values
+          {t("secrets.useValues", { defaultValue: "Use values" })}
         </Button>
       </div>
       {candidate.warnings.length > 0 ? (

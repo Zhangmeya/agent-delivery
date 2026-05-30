@@ -993,6 +993,7 @@ function RevisionPicker({
   revisions: RoutineRevision[];
   tone: "red" | "green";
 }) {
+  const { t } = useTranslation();
   const toneClass = tone === "red"
     ? "border-red-500/30 bg-red-500/10 text-red-300"
     : "border-green-500/30 bg-green-500/10 text-green-300";
@@ -1010,7 +1011,11 @@ function RevisionPicker({
       >
         {revisions.map((revision) => (
           <option key={revision.id} value={revision.id}>
-            rev {revision.revisionNumber} — {relativeTime(revision.createdAt)}
+            {t("routineHistory.revisionOption", {
+              defaultValue: "rev {{revision}} - {{time}}",
+              revision: revision.revisionNumber,
+              time: relativeTime(revision.createdAt),
+            })}
             {revision.changeSummary ? ` • ${revision.changeSummary}` : ""}
           </option>
         ))}
@@ -1112,7 +1117,7 @@ function formatVariableDefault(variable: RoutineVariable): string {
 }
 
 function formatDirtyFieldList(labels: string[], t?: TFunction): string {
-  if (labels.length === 0) return "the routine";
+  if (labels.length === 0) return t ? t("routineHistory.theRoutine", { defaultValue: "the routine" }) : "the routine";
   if (labels.length === 1) return labels[0];
   if (labels.length === 2) {
     return t

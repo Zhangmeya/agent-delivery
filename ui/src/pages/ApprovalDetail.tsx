@@ -285,7 +285,8 @@ export function ApprovalDetail() {
           )}
           {isBudgetApproval && approval.status === "pending" && (
             <p className="text-sm text-muted-foreground">
-              {t("Resolve this budget stop from the budget controls on")} <Link to="/costs" className="underline underline-offset-2">/costs</Link>{t(".")}
+              {t("approvalDetail.resolveBudgetStopPrefix", { defaultValue: "Resolve this budget stop from the budget controls on " })}
+              <Link to="/costs" className="underline underline-offset-2">/costs</Link>.
             </p>
           )}
           {approval.status === "pending" && (

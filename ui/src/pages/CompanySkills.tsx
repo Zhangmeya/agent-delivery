@@ -1073,8 +1073,8 @@ export function CompanySkills() {
     onError: (error) => {
       pushToast({
         tone: "error",
-        title: "Skill creation failed",
-        body: error instanceof Error ? error.message : "Failed to create skill.",
+        title: t("companySkills.skillCreationFailed", { defaultValue: "Skill creation failed" }),
+        body: error instanceof Error ? error.message : t("companySkills.createSkillFailedBody", { defaultValue: "Failed to create skill." }),
       });
     },
   });
@@ -1203,15 +1203,18 @@ export function CompanySkills() {
       navigate("/skills", { replace: true });
       pushToast({
         tone: "success",
-        title: "Skill removed",
-        body: `${skill.name} was removed from the company skill library.`,
+        title: t("companySkills.skillRemoved", { defaultValue: "Skill removed" }),
+        body: t("companySkills.skillRemovedBody", {
+          name: skill.name,
+          defaultValue: "{{name}} was removed from the company skill library.",
+        }),
       });
     },
     onError: (error) => {
       pushToast({
         tone: "error",
-        title: "Remove failed",
-        body: error instanceof Error ? error.message : "Failed to remove skill.",
+        title: t("companySkills.removeFailed", { defaultValue: "Remove failed" }),
+        body: error instanceof Error ? error.message : t("companySkills.removeSkillFailedBody", { defaultValue: "Failed to remove skill." }),
       });
     },
   });

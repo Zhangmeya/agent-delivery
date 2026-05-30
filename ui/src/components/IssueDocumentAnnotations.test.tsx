@@ -29,6 +29,14 @@ const mockPendingAnchor = vi.hoisted(() => ({
   selectedText: "should keep the editor",
 }));
 
+vi.mock("react-i18next", () => ({
+  initReactI18next: { type: "3rdParty", init: () => {} },
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, unknown>) =>
+      String(options?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name] ?? "")),
+  }),
+}));
+
 vi.mock("@/api/document-annotations", () => ({
   documentAnnotationsApi: mockAnnotationsApi,
 }));

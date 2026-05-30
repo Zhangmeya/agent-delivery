@@ -6,6 +6,20 @@ import { DocumentAnnotationLayer } from "./DocumentAnnotationLayer";
 
 const mockRangesForNormalizedSpan = vi.hoisted(() => vi.fn());
 
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>();
+  const translate = (key: string, options?: Record<string, unknown>) =>
+    String(options?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+      options?.[name] == null ? `{{${name}}}` : String(options[name]),
+    );
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: translate,
+    }),
+  };
+});
+
 vi.mock("@/lib/document-annotation-selection", () => ({
   buildAnchorFromContainerSelection: vi.fn(),
   getContainerTextOffset: vi.fn(),

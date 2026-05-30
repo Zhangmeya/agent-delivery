@@ -10,6 +10,7 @@ import { useCompany } from "../context/CompanyContext";
 import { useDialogActions } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
+import { translateInstant } from "../i18n";
 import { GoalProperties } from "../components/GoalProperties";
 import { GoalTree } from "../components/GoalTree";
 import { StatusBadge } from "../components/StatusBadge";
@@ -40,7 +41,7 @@ export function GoalPropertiesToggleButton({
         panelVisible ? "opacity-0 pointer-events-none w-0 overflow-hidden" : "opacity-100",
       )}
       onClick={onShowProperties}
-      title="Show properties"
+      title={translateInstant("goalDetail.showProperties", { defaultValue: "Show properties" })}
     >
       <SlidersHorizontal className="h-4 w-4" />
     </Button>
@@ -101,7 +102,7 @@ export function GoalDetail() {
 
   const uploadImage = useMutation({
     mutationFn: async (file: File) => {
-      if (!resolvedCompanyId) throw new Error(t("No company selected"));
+      if (!resolvedCompanyId) throw new Error(t("common.noCompanySelected", { defaultValue: "No company selected" }));
       return assetsApi.uploadImage(
         resolvedCompanyId,
         file,
@@ -181,10 +182,10 @@ export function GoalDetail() {
       <Tabs defaultValue="children">
         <TabsList>
           <TabsTrigger value="children">
-            {t("Sub-Goals ({{count}})", { count: childGoals.length })}
+            {t("goalDetail.subGoalsTab", { count: childGoals.length, defaultValue: "Sub-goals ({{count}})" })}
           </TabsTrigger>
           <TabsTrigger value="projects">
-            {t("Projects ({{count}})", { count: linkedProjects.length })}
+            {t("goalDetail.projectsTab", { count: linkedProjects.length, defaultValue: "Projects ({{count}})" })}
           </TabsTrigger>
         </TabsList>
 
@@ -196,11 +197,11 @@ export function GoalDetail() {
               onClick={() => openNewGoal({ parentId: goalId })}
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
-              {t("Sub Goal")}
+              {t("goalDetail.newSubGoal", { defaultValue: "Sub-goal" })}
             </Button>
           </div>
           {childGoals.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("No sub-goals.")}</p>
+            <p className="text-sm text-muted-foreground">{t("goalDetail.noSubGoals", { defaultValue: "No sub-goals." })}</p>
           ) : (
             <GoalTree goals={childGoals} goalLink={(g) => `/goals/${g.id}`} />
           )}

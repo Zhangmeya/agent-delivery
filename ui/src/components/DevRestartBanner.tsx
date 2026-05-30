@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, RotateCcw, TimerReset } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { healthApi, type DevServerHealthStatus } from "../api/health";
 
 const RESTART_PENDING_RESET_MS = 30_000;
@@ -19,17 +20,18 @@ function formatRelativeTimestamp(value: string | null): string | null {
   return `${deltaDays}d ago`;
 }
 
-function describeReason(devServer: DevServerHealthStatus): string {
+function describeReason(devServer: DevServerHealthStatus, t: (key: string, options?: Record<string, unknown>) => string): string {
   if (devServer.reason === "backend_changes_and_pending_migrations") {
-    return "backend files changed and migrations are pending";
+    return t("devRestart.reason.backendAndMigrations", { defaultValue: "backend files changed and migrations are pending" });
   }
   if (devServer.reason === "pending_migrations") {
-    return "pending migrations need a fresh boot";
+    return t("devRestart.reason.pendingMigrations", { defaultValue: "pending migrations need a fresh boot" });
   }
-  return "backend files changed since this server booted";
+  return t("devRestart.reason.backendChanged", { defaultValue: "backend files changed since this server booted" });
 }
 
 export function DevRestartBanner({ devServer }: { devServer?: DevServerHealthStatus }) {
+  const { t } = useTranslation();
   const [restartPending, setRestartPending] = useState(false);
   useEffect(() => {
     if (!restartPending) return;
@@ -51,8 +53,8 @@ export function DevRestartBanner({ devServer }: { devServer?: DevServerHealthSta
   async function requestRestartNow() {
     const warning =
       currentDevServer.activeRunCount > 0
-        ? `Restart Paperclip now? This may interrupt ${activeRunLabel}.`
-        : "Restart Paperclip now?";
+        ? t("devRestart.confirmWithRuns", { activeRunLabel, defaultValue: "Restart Paperclip now? This may interrupt {{activeRunLabel}}." })
+        : t("devRestart.confirm", { defaultValue: "Restart Paperclip now?" });
     if (!window.confirm(warning)) return;
 
     setRestartPending(true);
@@ -60,7 +62,7 @@ export function DevRestartBanner({ devServer }: { devServer?: DevServerHealthSta
       await healthApi.requestDevServerRestart();
     } catch (error) {
       setRestartPending(false);
-      window.alert(error instanceof Error ? error.message : "Failed to request restart");
+      window.alert(error instanceof Error ? error.message : t("devRestart.requestFailed", { defaultValue: "Failed to request restart" }));
     }
   }
 
@@ -70,28 +72,28 @@ export function DevRestartBanner({ devServer }: { devServer?: DevServerHealthSta
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em]">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            <span>Restart Required</span>
+            <span>{t("devRestart.required", { defaultValue: "Restart Required" })}</span>
             {devServer.autoRestartEnabled ? (
               <span className="rounded-full bg-amber-900/10 px-2 py-0.5 text-[10px] tracking-[0.14em] dark:bg-amber-100/10">
-                Auto-Restart On
+                {t("devRestart.autoRestartOn", { defaultValue: "Auto-Restart On" })}
               </span>
             ) : null}
           </div>
           <p className="mt-1 text-sm">
-            {describeReason(devServer)}
+            {describeReason(devServer, t)}
             {changedAt ? ` · updated ${changedAt}` : ""}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-amber-900/80 dark:text-amber-100/75">
             {sample.length > 0 ? (
               <span>
-                Changed: {sample.join(", ")}
-                {devServer.changedPathCount > sample.length ? ` +${devServer.changedPathCount - sample.length} more` : ""}
+                {t("devRestart.changed", { defaultValue: "Changed" })}: {sample.join(", ")}
+                {devServer.changedPathCount > sample.length ? t(" +{{count}} more", { count: devServer.changedPathCount - sample.length }) : ""}
               </span>
             ) : null}
             {devServer.pendingMigrations.length > 0 ? (
               <span>
-                Pending migrations: {devServer.pendingMigrations.slice(0, 2).join(", ")}
-                {devServer.pendingMigrations.length > 2 ? ` +${devServer.pendingMigrations.length - 2} more` : ""}
+                {t("devRestart.pendingMigrations", { defaultValue: "Pending migrations" })}: {devServer.pendingMigrations.slice(0, 2).join(", ")}
+                {devServer.pendingMigrations.length > 2 ? t(" +{{count}} more", { count: devServer.pendingMigrations.length - 2 }) : ""}
               </span>
             ) : null}
           </div>
@@ -101,17 +103,17 @@ export function DevRestartBanner({ devServer }: { devServer?: DevServerHealthSta
           {devServer.waitingForIdle ? (
             <div className="inline-flex items-center gap-2 rounded-full bg-amber-900/10 px-3 py-1.5 dark:bg-amber-100/10">
               <TimerReset className="h-3.5 w-3.5" />
-              <span>Waiting for {activeRunLabel} to finish</span>
+              <span>{t("devRestart.waitingForRuns", { activeRunLabel, defaultValue: "Waiting for {{activeRunLabel}} to finish" })}</span>
             </div>
           ) : devServer.autoRestartEnabled ? (
             <div className="inline-flex items-center gap-2 rounded-full bg-amber-900/10 px-3 py-1.5 dark:bg-amber-100/10">
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>Auto-restart will trigger when the instance is idle</span>
+              <span>{t("devRestart.autoWhenIdle", { defaultValue: "Auto-restart will trigger when the instance is idle" })}</span>
             </div>
           ) : (
             <div className="inline-flex items-center gap-2 rounded-full bg-amber-900/10 px-3 py-1.5 dark:bg-amber-100/10">
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>Restart <code>pnpm dev:once</code> after the active work is safe to interrupt</span>
+              <span>{t("devRestart.restartCommandPrefix", { defaultValue: "Restart" })} <code>pnpm dev:once</code> {t("devRestart.restartCommandSuffix", { defaultValue: "after the active work is safe to interrupt" })}</span>
             </div>
           )}
           <button
@@ -123,7 +125,7 @@ export function DevRestartBanner({ devServer }: { devServer?: DevServerHealthSta
             disabled={restartPending}
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            <span>{restartPending ? "Restart requested" : "Restart now"}</span>
+            <span>{restartPending ? t("devRestart.requested", { defaultValue: "Restart requested" }) : t("devRestart.now", { defaultValue: "Restart now" })}</span>
           </button>
         </div>
       </div>

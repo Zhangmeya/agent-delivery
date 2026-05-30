@@ -95,7 +95,7 @@ export function Sidebar() {
           />
         </div>
 
-        <SidebarSection label="Work">
+        <SidebarSection label={t("Work", { defaultValue: "Work" })}>
           <SidebarNavItem to="/issues" label={t("Issues", { defaultValue: "Issues" })} icon={CircleDot} />
           <SidebarNavItem to="/routines" label={t("Routines", { defaultValue: "Routines" })} icon={Repeat} />
           <SidebarNavItem to="/goals" label={t("Goals", { defaultValue: "Goals" })} icon={Target} />
@@ -121,7 +121,7 @@ export function Sidebar() {
 
         <SidebarAgents />
 
-        <SidebarSection label="Company">
+        <SidebarSection label={t("Company", { defaultValue: "Company" })}>
           <SidebarNavItem to="/org" label={t("Org", { defaultValue: "Org" })} icon={Network} />
           <SidebarNavItem to="/skills" label={t("Skills", { defaultValue: "Skills" })} icon={Boxes} />
           <SidebarNavItem to="/costs" label={t("Costs", { defaultValue: "Costs" })} icon={DollarSign} />

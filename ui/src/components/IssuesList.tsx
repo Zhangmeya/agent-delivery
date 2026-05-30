@@ -1423,7 +1423,9 @@ export function IssuesList({
                 size="icon"
                 className={cn("h-8 w-8 shrink-0", boardCompactCards && "bg-accent")}
                 onClick={() => updateView({ boardCardDensity: boardCompactCards ? "comfortable" : "compact" })}
-                title={boardCompactCards ? "Use comfortable cards" : "Use compact cards"}
+                title={boardCompactCards
+                  ? t("issuesList.useComfortableCards", { defaultValue: "Use comfortable cards" })
+                  : t("issuesList.useCompactCards", { defaultValue: "Use compact cards" })}
               >
                 <ChevronsDownUp className="h-3.5 w-3.5" />
               </Button>
@@ -1433,7 +1435,9 @@ export function IssuesList({
                 size="icon"
                 className={cn("h-8 w-8 shrink-0", boardCollapsedStatuses.length > 0 && "bg-accent")}
                 onClick={() => updateView({ boardColdLaneMode: boardCollapsedStatuses.length > 0 ? "expanded" : "collapsed" })}
-                title={boardCollapsedStatuses.length > 0 ? "Expand cold lanes" : "Collapse cold lanes"}
+                title={boardCollapsedStatuses.length > 0
+                  ? t("issuesList.expandColdLanes", { defaultValue: "Expand cold lanes" })
+                  : t("issuesList.collapseColdLanes", { defaultValue: "Collapse cold lanes" })}
               >
                 <PanelTopClose className="h-3.5 w-3.5" />
               </Button>
@@ -1447,7 +1451,7 @@ export function IssuesList({
                       "h-8 shrink-0 gap-1.5 px-2",
                       viewState.boardColumnPageSize !== KANBAN_COLUMN_DEFAULT_PAGE_SIZE && "bg-accent",
                     )}
-                    title="Cards per column"
+                    title={t("issuesList.cardsPerColumn", { defaultValue: "Cards per column" })}
                   >
                     <ListCollapse className="h-3.5 w-3.5" />
                     <span className="min-w-4 text-xs tabular-nums">{viewState.boardColumnPageSize}</span>
@@ -1467,7 +1471,12 @@ export function IssuesList({
                         )}
                         onClick={() => updateView({ boardColumnPageSize: pageSize })}
                       >
-                        <span>{pageSize} per column</span>
+                        <span>
+                          {t("issuesList.cardsPerColumnOption", {
+                            defaultValue: "{{count}} per column",
+                            count: pageSize,
+                          })}
+                        </span>
                         {viewState.boardColumnPageSize === pageSize && <Check className="h-3.5 w-3.5" />}
                       </button>
                     ))}
@@ -1485,7 +1494,7 @@ export function IssuesList({
                   boardColumnPageSize: KANBAN_COLUMN_DEFAULT_PAGE_SIZE,
                 })}
                 disabled={!boardDensityCustomized}
-                title="Reset board density"
+                title={t("issuesList.resetBoardDensity", { defaultValue: "Reset board density" })}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </Button>
@@ -1617,7 +1626,7 @@ export function IssuesList({
       {!isLoading && filtered.length === 0 && viewState.viewMode === "list" && (
         <EmptyState
           icon={CircleDot}
-          message="No issues match the current filters or search."
+          message={t("issuesList.noIssuesMatch", { defaultValue: "No issues match the current filters or search." })}
           action={createActionLabel}
           onAction={() => openCreateIssueDialog()}
         />
@@ -1731,14 +1740,29 @@ export function IssuesList({
                       if (!blockerIssue) return null;
                       const label = blockerIssue.identifier ?? blockerIssue.id.slice(0, 8);
                       const blockerStep = checklistMeta?.stepNumberByIssueId.get(blockerId);
-                      const blockerStepSuffix = blockerStep ? ` \u00b7 step ${blockerStep}` : "";
-                      return { blockerId, chipLabel: `blocked by ${label}${blockerStepSuffix}` };
+                      const blockerStepSuffix = blockerStep
+                        ? t("issuesList.blockerStepSuffix", {
+                          defaultValue: " · step {{step}}",
+                          step: blockerStep,
+                        })
+                        : "";
+                      return {
+                        blockerId,
+                        chipLabel: t("issuesList.blockedByChip", {
+                          defaultValue: "blocked by {{label}}{{suffix}}",
+                          label,
+                          suffix: blockerStepSuffix,
+                        }),
+                      };
                     })
                     .filter((chip): chip is { blockerId: string; chipLabel: string } => chip !== null);
                   const firstVisibleBlockerChip = visibleBlockerChips[0] ?? null;
                   const additionalVisibleBlockerCount = Math.max(visibleBlockerChips.length - 1, 0);
                   const additionalVisibleBlockerLabel = additionalVisibleBlockerCount > 0
-                    ? ` ... and ${additionalVisibleBlockerCount} more`
+                    ? t("issuesList.andMoreBlockers", {
+                      defaultValue: " ... and {{count}} more",
+                      count: additionalVisibleBlockerCount,
+                    })
                     : "";
                   const firstVisibleBlockerDisplayLabel = firstVisibleBlockerChip
                     ? `${firstVisibleBlockerChip.chipLabel}${additionalVisibleBlockerLabel}`
@@ -1913,7 +1937,7 @@ export function IssuesList({
                                         <Identity name={agentName(issue.assigneeAgentId)!} size="sm" className="min-w-0" />
                                       ) : issue.assigneeUserId ? (
                                         <Identity
-                                          name={assigneeUserLabel ?? "User"}
+                                          name={assigneeUserLabel ?? t("User", { defaultValue: "User" })}
                                           avatarUrl={assigneeUserProfile?.image ?? null}
                                           size="sm"
                                           className="min-w-0"
@@ -1923,7 +1947,7 @@ export function IssuesList({
                                           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-muted-foreground/35 bg-muted/30">
                                             <User className="h-3.5 w-3.5" />
                                           </span>
-                                          Assignee
+                                          {t("Assignee", { defaultValue: "Assignee" })}
                                         </span>
                                       )}
                                     </button>
@@ -1936,7 +1960,7 @@ export function IssuesList({
                                   >
                                     <input
                                       className="mb-1 w-full border-b border-border bg-transparent px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground/50"
-                                      placeholder="Search assignees..."
+                                      placeholder={t("Search assignees...", { defaultValue: "Search assignees..." })}
                                       value={assigneeSearch}
                                       onChange={(e) => setAssigneeSearch(e.target.value)}
                                       autoFocus
@@ -1953,7 +1977,7 @@ export function IssuesList({
                                           assignIssue(issue.id, null, null);
                                         }}
                                       >
-                                        No assignee
+                                        {t("No assignee", { defaultValue: "No assignee" })}
                                       </button>
                                       {currentUserId && (
                                         <button
@@ -1968,7 +1992,7 @@ export function IssuesList({
                                           }}
                                         >
                                           <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                          <span>Me</span>
+                                          <span>{t("Me", { defaultValue: "Me" })}</span>
                                         </button>
                                       )}
                                       {(agents ?? [])
@@ -2015,10 +2039,14 @@ export function IssuesList({
             <div className="py-2" data-testid="issues-load-more-sentinel">
               <p className="text-xs text-muted-foreground">
                 {isLoadingMoreIssues
-                  ? "Loading more issues..."
+                  ? t("issuesList.loadingMoreIssues", { defaultValue: "Loading more issues..." })
                   : remainingIssueRowCount > 0
-                    ? `Rendering ${Math.min(renderedIssueRowLimit, filtered.length)} of ${filtered.length} issues`
-                    : "Scroll to load more issues"}
+                    ? t("issuesList.renderingIssues", {
+                      defaultValue: "Rendering {{shown}} of {{total}} issues",
+                      shown: Math.min(renderedIssueRowLimit, filtered.length),
+                      total: filtered.length,
+                    })
+                    : t("issuesList.scrollToLoadMoreIssues", { defaultValue: "Scroll to load more issues" })}
               </p>
             </div>
           )}

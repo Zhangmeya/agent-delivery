@@ -8,6 +8,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "../context/ThemeContext";
 import { MarkdownBody } from "./MarkdownBody";
 
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>();
+  const translate = (key: string, options?: Record<string, unknown>) =>
+    String(options?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+      options?.[name] == null ? `{{${name}}}` : String(options[name]),
+    );
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: translate,
+    }),
+  };
+});
+
 vi.mock("@/lib/router", () => ({
   Link: ({
     children,

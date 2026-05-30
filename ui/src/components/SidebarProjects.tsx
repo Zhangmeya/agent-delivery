@@ -21,6 +21,7 @@ import { projectsApi } from "../api/projects";
 import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
 import { queryKeys } from "../lib/queryKeys";
 import { cn, projectRouteRef } from "../lib/utils";
+import { buildDndAccessibility } from "../lib/dnd-accessibility";
 import { useProjectOrder } from "../hooks/useProjectOrder";
 import { resourceMembershipState, useResourceMembershipMutation, useResourceMemberships } from "../hooks/useResourceMemberships";
 import { BudgetSidebarMarker } from "./BudgetSidebarMarker";
@@ -303,6 +304,7 @@ export function SidebarProjects() {
       activationConstraint: { distance: 8 },
     }),
   );
+  const dndAccessibility = useMemo(() => buildDndAccessibility(t), [t]);
 
   useEffect(() => {
     if (!sortModeStorageKey) {
@@ -418,6 +420,7 @@ export function SidebarProjects() {
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
+          accessibility={dndAccessibility}
           onDragEnd={handleDragEnd}
         >
           <SortableContext

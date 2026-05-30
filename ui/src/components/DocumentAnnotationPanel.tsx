@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   DocumentAnnotationComment,
@@ -31,12 +33,14 @@ import type { CompanyUserProfile } from "@/lib/company-members";
 
 type AnnotationFilter = "open" | "resolved" | "stale" | "orphan";
 
-const FILTERS: { id: AnnotationFilter; label: string }[] = [
-  { id: "open", label: "Open" },
-  { id: "resolved", label: "Resolved" },
-  { id: "stale", label: "Stale" },
-  { id: "orphan", label: "Orphaned" },
-];
+const FILTER_LABEL_KEYS: Record<AnnotationFilter, string> = {
+  open: "documentAnnotations.filter.open",
+  resolved: "documentAnnotations.filter.resolved",
+  stale: "documentAnnotations.filter.stale",
+  orphan: "documentAnnotations.filter.orphaned",
+};
+
+const FILTERS: AnnotationFilter[] = ["open", "resolved", "stale", "orphan"];
 
 export interface AnnotationPanelProps {
   open: boolean;
@@ -69,6 +73,7 @@ export interface AnnotationPanelProps {
 }
 
 export function DocumentAnnotationPanel(props: AnnotationPanelProps) {
+  const { t } = useTranslation();
   if (props.isMobile) {
     return (
       <Sheet open={props.open} onOpenChange={props.onOpenChange}>
@@ -78,7 +83,11 @@ export function DocumentAnnotationPanel(props: AnnotationPanelProps) {
           className="paperclip-doc-annotation-sheet flex max-h-[88vh] flex-col rounded-none border-t border-border bg-background p-0"
         >
           <SheetTitle className="sr-only">
-            Comments on {props.documentKey} revision {props.documentRevisionNumber}
+            {t("documentAnnotations.commentsOnRevision", {
+              defaultValue: "Comments on {{documentKey}} revision {{revision}}",
+              documentKey: props.documentKey,
+              revision: props.documentRevisionNumber,
+            })}
           </SheetTitle>
           <div className="mx-auto mt-2 h-1.5 w-12 shrink-0 rounded-full bg-muted-foreground/30" aria-hidden="true" />
           <AnnotationPanelBody {...props} />
@@ -92,7 +101,11 @@ export function DocumentAnnotationPanel(props: AnnotationPanelProps) {
   return (
     <aside
       role="complementary"
-      aria-label={`Annotations for ${props.documentKey.toUpperCase()}, revision ${props.documentRevisionNumber}`}
+      aria-label={t("documentAnnotations.panelAriaLabel", {
+        defaultValue: "Annotations for {{documentKey}}, revision {{revision}}",
+        documentKey: props.documentKey.toUpperCase(),
+        revision: props.documentRevisionNumber,
+      })}
       data-testid="document-annotation-panel"
       className={cn(
         "flex h-full max-h-[80vh] w-[360px] shrink-0 flex-col overflow-hidden rounded-none border border-border bg-card shadow-md",
@@ -106,6 +119,7 @@ export function DocumentAnnotationPanel(props: AnnotationPanelProps) {
 }
 
 function AnnotationPanelBody(props: AnnotationPanelProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<AnnotationFilter>("open");
   const [composerValue, setComposerValue] = useState("");
@@ -147,8 +161,12 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
 
   const createThread = useMutation({
     mutationFn: async (body: string) => {
-      if (!props.pendingAnchor) throw new Error("No selection to anchor to.");
-      if (!props.baseRevisionId) throw new Error("Document has no revision yet.");
+      if (!props.pendingAnchor) {
+        throw new Error(t("documentAnnotations.noSelectionToAnchor", { defaultValue: "No selection to anchor to." }));
+      }
+      if (!props.baseRevisionId) {
+        throw new Error(t("documentAnnotations.noRevisionYet", { defaultValue: "Document has no revision yet." }));
+      }
       return documentAnnotationsApi.create(props.issueId, props.documentKey, {
         baseRevisionId: props.baseRevisionId,
         baseRevisionNumber: props.baseRevisionNumber,
@@ -208,7 +226,7 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
         className="flex items-start justify-between gap-2 border-b border-border px-3 py-2.5"
       >
         <div className="min-w-0 leading-tight">
-          <p className="text-sm font-medium">Comments</p>
+          <p className="text-sm font-medium">{t("Comments", { defaultValue: "Comments" })}</p>
           <p className="text-[11px] text-muted-foreground">
             rev {props.documentRevisionNumber}
           </p>
@@ -222,20 +240,20 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
             props.onFocusThread(null);
             props.onOpenChange(false);
           }}
-          aria-label="Close annotation panel"
+          aria-label={t("documentAnnotations.closePanel", { defaultValue: "Close annotation panel" })}
         >
           <X className="h-4 w-4" />
         </Button>
       </header>
       <div className="flex flex-wrap gap-1 border-b border-border px-3 py-2">
         {FILTERS.map((entry) => {
-          const count = counts[entry.id];
-          const isActive = filter === entry.id;
+          const count = counts[entry];
+          const isActive = filter === entry;
           return (
             <button
-              key={entry.id}
+              key={entry}
               type="button"
-              onClick={() => setFilter(entry.id)}
+              onClick={() => setFilter(entry)}
               data-active={isActive || undefined}
               className={cn(
                 "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors",
@@ -244,7 +262,7 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
                   : "border-transparent bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
             >
-              <span>{entry.label}</span>
+              <span>{t(FILTER_LABEL_KEYS[entry], { defaultValue: entry === "orphan" ? "Orphaned" : entry[0].toUpperCase() + entry.slice(1) })}</span>
               <span className={cn("tabular-nums", isActive ? "text-muted-foreground" : "text-muted-foreground/70")}>
                 {count}
               </span>
@@ -263,7 +281,12 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
         {filteredThreads.length === 0 ? (
           <p className="py-8 text-center text-xs text-muted-foreground">
-            {filter === "open" ? "No open comments yet. Select text to add one." : `No ${filter} comments.`}
+            {filter === "open"
+              ? t("documentAnnotations.emptyOpen", { defaultValue: "No open comments yet. Select text to add one." })
+              : t("documentAnnotations.emptyFiltered", {
+                defaultValue: "No {{filter}} comments.",
+                filter: t(FILTER_LABEL_KEYS[filter], { defaultValue: filter === "orphan" ? "orphaned" : filter }).toLowerCase(),
+              })}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -312,13 +335,13 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
             rows={3}
             value={composerValue}
             onChange={(event) => setComposerValue(event.target.value)}
-            placeholder="Write a comment…"
+            placeholder={t("documentAnnotations.writeCommentPlaceholder", { defaultValue: "Write a comment..." })}
             disabled={props.newCommentDisabled}
             className="resize-y rounded-none text-sm"
           />
           {createThread.isError ? (
             <p className="mt-1 text-xs text-destructive">
-              {(createThread.error as Error).message || "Failed to create comment"}
+              {(createThread.error as Error).message || t("documentAnnotations.createCommentFailed", { defaultValue: "Failed to create comment" })}
             </p>
           ) : null}
           <div className="mt-2 flex items-center justify-end gap-2">
@@ -331,7 +354,7 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
                 setComposerValue("");
               }}
             >
-              Cancel
+              {t("Cancel", { defaultValue: "Cancel" })}
             </Button>
             <Button
               type="button"
@@ -344,7 +367,9 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
               }
               onClick={() => createThread.mutate(composerValue.trim())}
             >
-              {createThread.isPending ? "Posting…" : "Comment"}
+              {createThread.isPending
+                ? t("Posting...", { defaultValue: "Posting..." })
+                : t("Comment", { defaultValue: "Comment" })}
             </Button>
           </div>
         </div>
@@ -368,15 +393,16 @@ function ThreadCard(props: {
   agentMap?: ReadonlyMap<string, Pick<Agent, "id" | "name">>;
   userProfileMap?: ReadonlyMap<string, CompanyUserProfile>;
 }) {
+  const { t } = useTranslation();
   const { thread } = props;
   const statusVariant: { variant: "default" | "outline" | "secondary"; label: string } =
     thread.status === "resolved"
-      ? { variant: "outline", label: "Resolved" }
+      ? { variant: "outline", label: t("documentAnnotations.status.resolved", { defaultValue: "Resolved" }) }
       : thread.anchorState === "orphaned"
-        ? { variant: "outline", label: "Orphaned" }
+        ? { variant: "outline", label: t("documentAnnotations.status.orphaned", { defaultValue: "Orphaned" }) }
         : thread.anchorState === "stale"
-          ? { variant: "outline", label: "Stale" }
-          : { variant: "default", label: "Open" };
+          ? { variant: "outline", label: t("documentAnnotations.status.stale", { defaultValue: "Stale" }) }
+          : { variant: "default", label: t("documentAnnotations.status.open", { defaultValue: "Open" }) };
   const latestComment = thread.comments[thread.comments.length - 1];
 
   return (
@@ -427,7 +453,7 @@ function ThreadCard(props: {
               rows={2}
               value={props.replyDraft}
               onChange={(event) => props.onReplyChange(event.target.value)}
-              placeholder="Reply…"
+              placeholder={t("documentAnnotations.replyPlaceholder", { defaultValue: "Reply..." })}
               className="resize-y rounded-none text-sm"
               disabled={props.pendingReply}
             />
@@ -442,11 +468,11 @@ function ThreadCard(props: {
               >
                 {thread.status === "resolved" ? (
                   <>
-                    <RotateCcw className="h-3 w-3" /> Reopen
+                    <RotateCcw className="h-3 w-3" /> {t("documentAnnotations.reopen", { defaultValue: "Reopen" })}
                   </>
                 ) : (
                   <>
-                    <Check className="h-3 w-3" /> Resolve
+                    <Check className="h-3 w-3" /> {t("documentAnnotations.resolve", { defaultValue: "Resolve" })}
                   </>
                 )}
               </Button>
@@ -456,7 +482,9 @@ function ThreadCard(props: {
                 disabled={!props.replyDraft.trim() || props.pendingReply}
                 onClick={props.onSubmitReply}
               >
-                {props.pendingReply ? "Sending…" : "Reply"}
+                {props.pendingReply
+                  ? t("Sending...", { defaultValue: "Sending..." })
+                  : t("documentAnnotations.reply", { defaultValue: "Reply" })}
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -465,8 +493,8 @@ function ThreadCard(props: {
                     variant="ghost"
                     size="icon-xs"
                     className="text-muted-foreground"
-                    title="More actions"
-                    aria-label="More thread actions"
+                    title={t("More actions", { defaultValue: "More actions" })}
+                    aria-label={t("documentAnnotations.moreThreadActions", { defaultValue: "More thread actions" })}
                   >
                     <MoreHorizontal className="h-3.5 w-3.5" />
                   </Button>
@@ -479,7 +507,7 @@ function ThreadCard(props: {
                     }}
                   >
                     <Copy className="h-3.5 w-3.5" />
-                    Copy link
+                    {t("Copy link", { defaultValue: "Copy link" })}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -488,7 +516,10 @@ function ThreadCard(props: {
         ) : (
           <p className="px-3 py-2 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">
-              {thread.comments.length} comment{thread.comments.length === 1 ? "" : "s"}
+              {t(thread.comments.length === 1 ? "documentAnnotations.commentCountOne" : "documentAnnotations.commentCount", {
+                defaultValue: thread.comments.length === 1 ? "{{count}} comment" : "{{count}} comments",
+                count: thread.comments.length,
+              })}
             </span>
             {latestComment ? <span className="ml-1">· {truncate(latestComment.body, 120)}</span> : null}
           </p>
@@ -509,7 +540,8 @@ function CommentRow({
   agentMap?: ReadonlyMap<string, Pick<Agent, "id" | "name">>;
   userProfileMap?: ReadonlyMap<string, CompanyUserProfile>;
 }) {
-  const author = resolveAuthor(comment, { agentMap, userProfileMap });
+  const { t } = useTranslation();
+  const author = resolveAuthor(comment, { agentMap, userProfileMap }, t);
   return (
     <div
       id={`comment-${comment.id}`}
@@ -523,7 +555,9 @@ function CommentRow({
         <span className="min-w-0 truncate">
           <span className="font-medium text-foreground">{author.name}</span>
           {author.role === "agent" ? (
-            <span className="ml-1 text-muted-foreground">· agent</span>
+            <span className="ml-1 text-muted-foreground">
+              {t("documentAnnotations.agentRoleSuffix", { defaultValue: "· agent" })}
+            </span>
           ) : null}
         </span>
         <span className="text-muted-foreground">{relativeTime(comment.createdAt)}</span>
@@ -539,6 +573,7 @@ function resolveAuthor(
     agentMap?: ReadonlyMap<string, Pick<Agent, "id" | "name">>;
     userProfileMap?: ReadonlyMap<string, CompanyUserProfile>;
   },
+  t?: TFunction,
 ): { name: string; role: "board" | "agent" } {
   if (comment.authorAgentId) {
     const agent = maps.agentMap?.get(comment.authorAgentId);
@@ -554,7 +589,12 @@ function resolveAuthor(
       role: "board",
     };
   }
-  return { name: comment.authorType === "agent" ? "Agent" : "Board", role: comment.authorType === "agent" ? "agent" : "board" };
+  return {
+    name: comment.authorType === "agent"
+      ? t?.("Agent", { defaultValue: "Agent" }) ?? "Agent"
+      : t?.("Board", { defaultValue: "Board" }) ?? "Board",
+    role: comment.authorType === "agent" ? "agent" : "board",
+  };
 }
 
 function truncate(value: string, limit: number) {

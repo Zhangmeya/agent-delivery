@@ -2082,7 +2082,16 @@ export function NewIssueDialog() {
           >
             <Flag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
             <span className="leading-snug">
-              Assigning implies executable intent — leave status as <span className="font-medium">Backlog</span> only to deliberately park this. The assignee will not be woken until status moves to <span className="font-medium">Todo</span> or <span className="font-medium">In Progress</span>.
+              {t("newIssue.assignedBacklogNote.beforeBacklog", {
+                defaultValue: "Assigning implies executable intent - leave status as",
+              })}{" "}
+              <span className="font-medium">{t("status.backlog", { defaultValue: "Backlog" })}</span>{" "}
+              {t("newIssue.assignedBacklogNote.afterBacklog", {
+                defaultValue: "only to deliberately park this. The assignee will not be woken until status moves to",
+              })}{" "}
+              <span className="font-medium">{t("status.todo", { defaultValue: "Todo" })}</span>{" "}
+              {t("newIssue.assignedBacklogNote.or", { defaultValue: "or" })}{" "}
+              <span className="font-medium">{t("status.inProgress", { defaultValue: "In Progress" })}</span>.
             </span>
           </div>
         ) : null}

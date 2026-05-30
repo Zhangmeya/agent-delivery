@@ -15,6 +15,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { PLUGIN_LAUNCHER_BOUNDS } from "@penclipai/shared";
 import type {
@@ -390,6 +391,7 @@ function PluginLauncherBridgeScope({
 
 type LauncherErrorBoundaryProps = {
   launcher: ResolvedPluginLauncher;
+  renderErrorLabel: string;
   children: ReactNode;
 };
 
@@ -417,7 +419,7 @@ class LauncherErrorBoundary extends Component<LauncherErrorBoundaryProps, Launch
     if (this.state.hasError) {
       return (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {this.props.launcher.pluginDisplayName}: failed to render
+          {this.props.launcher.pluginDisplayName}: {this.props.renderErrorLabel}
         </div>
       );
     }
@@ -432,6 +434,7 @@ function LauncherRenderContent({
   instance: LauncherInstance;
   renderEnvironment: PluginRenderEnvironmentContext;
 }) {
+  const { t } = useTranslation();
   const component = instance.component;
   const { data: session } = useQuery({
     queryKey: queryKeys.auth.session,
@@ -456,7 +459,11 @@ function LauncherRenderContent({
 
     return (
       <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-        {instance.launcher.pluginDisplayName}: could not resolve launcher target "{instance.launcher.action.target}".
+        {t("pluginUi.launcherTargetUnavailable", {
+          pluginName: instance.launcher.pluginDisplayName,
+          target: instance.launcher.action.target,
+          defaultValue: '{{pluginName}}: could not resolve launcher target "{{target}}".',
+        })}
       </div>
     );
   }
@@ -475,7 +482,12 @@ function LauncherRenderContent({
   } as never);
 
   return (
-    <LauncherErrorBoundary launcher={instance.launcher}>
+    <LauncherErrorBoundary
+      launcher={instance.launcher}
+      renderErrorLabel={t("pluginUi.launcherFailedToRender", {
+        defaultValue: "failed to render",
+      })}
+    >
       <PluginLauncherBridgeScope pluginId={instance.launcher.pluginId} hostContext={hostContext}>
         {node}
       </PluginLauncherBridgeScope>
@@ -496,6 +508,7 @@ function LauncherModalShell({
   requestBounds: (key: string, request: PluginModalBoundsRequest) => Promise<void>;
   closeLauncher: (key: string, event: PluginRenderCloseEvent) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const contentRef = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
 
@@ -596,7 +609,7 @@ function LauncherModalShell({
             className="ml-auto"
             onClick={() => void closeLauncher(instance.key, { reason: "programmatic" })}
           >
-            Close
+            {t("common.close", { defaultValue: "Close" })}
           </Button>
         </div>
         <div
@@ -791,6 +804,7 @@ export function PluginLauncherOutlet({
   itemClassName,
   errorClassName,
 }: PluginLauncherOutletProps) {
+  const { t } = useTranslation();
   const { activateLauncher } = usePluginLauncherRuntime();
   const { launchers, contributionsByPluginId, errorMessage } = usePluginLaunchers({
     placementZones,
@@ -802,7 +816,10 @@ export function PluginLauncherOutlet({
   if (errorMessage) {
     return (
       <div className={cn("rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive", errorClassName)}>
-        Plugin launchers unavailable: {errorMessage}
+        {t("pluginUi.launchersUnavailable", {
+          message: errorMessage,
+          defaultValue: "Plugin launchers unavailable: {{message}}",
+        })}
       </div>
     );
   }
