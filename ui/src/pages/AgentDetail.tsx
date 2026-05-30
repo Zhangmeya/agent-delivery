@@ -2818,6 +2818,14 @@ export function AgentSkillsTab({
         })),
     [companySkillKeys, skillSnapshot],
   );
+  const installedSkillRows = useMemo(
+    () => optionalSkillRows.filter((skill) => skillDraft.includes(skill.key)),
+    [optionalSkillRows, skillDraft],
+  );
+  const otherSkillRows = useMemo(
+    () => optionalSkillRows.filter((skill) => !skillDraft.includes(skill.key)),
+    [optionalSkillRows, skillDraft],
+  );
   const desiredOnlyMissingSkills = useMemo(
     () => skillDraft.filter((key) => !companySkillByKey.has(key)),
     [companySkillByKey, skillDraft],
@@ -2982,6 +2990,30 @@ export function AgentSkillsTab({
               );
             };
 
+            const renderSkillSection = (
+              title: string,
+              rows: SkillRow[],
+              emptyMessage?: string,
+            ) => {
+              if (rows.length === 0 && !emptyMessage) return null;
+              return (
+                <section className="border-y border-border">
+                  <div className="border-b border-border bg-muted/40 px-3 py-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {title}
+                    </span>
+                  </div>
+                  {rows.length > 0 ? (
+                    rows.map(renderSkillRow)
+                  ) : (
+                    <div className="px-3 py-3 text-sm text-muted-foreground">
+                      {emptyMessage}
+                    </div>
+                  )}
+                </section>
+              );
+            };
+
             if (optionalSkillRows.length === 0 && requiredSkillRows.length === 0 && unmanagedSkillRows.length === 0) {
               return (
                 <section className="border-y border-border">
@@ -2994,22 +3026,19 @@ export function AgentSkillsTab({
 
             return (
               <>
-                {optionalSkillRows.length > 0 && (
-                  <section className="border-y border-border">
-                    {optionalSkillRows.map(renderSkillRow)}
-                  </section>
-                )}
+                {optionalSkillRows.length > 0
+                  ? renderSkillSection(
+                      t("agentSkills.installedSkills", { defaultValue: "Installed skills" }),
+                      installedSkillRows,
+                      t("agentSkills.noCompanyLibrarySkills", {
+                        defaultValue: "No company-library skills installed on this agent.",
+                      }),
+                    )
+                  : null}
 
-                {requiredSkillRows.length > 0 && (
-                  <section className="border-y border-border">
-                    <div className="border-b border-border bg-muted/40 px-3 py-2">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {t("agentSkills.requiredByPaperclip")}
-                      </span>
-                    </div>
-                    {requiredSkillRows.map(renderSkillRow)}
-                  </section>
-                )}
+                {renderSkillSection(t("agentSkills.otherSkills", { defaultValue: "Other skills" }), otherSkillRows)}
+
+                {renderSkillSection(t("agentSkills.requiredByPaperclip"), requiredSkillRows)}
 
                 {unmanagedSkillRows.length > 0 && (
                   <section className="border-y border-border">

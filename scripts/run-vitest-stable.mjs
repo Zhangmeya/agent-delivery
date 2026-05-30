@@ -9,12 +9,14 @@ const serverRoot = path.join(repoRoot, "server");
 const serverTestsDir = path.join(repoRoot, "server", "src", "__tests__");
 const nonServerProjects = [
   "@penclipai/shared",
+  "@penclipai/skills-catalog",
   "@penclipai/db",
   "@penclipai/adapter-utils",
   "@penclipai/adapter-acpx-local",
   "@penclipai/adapter-codex-local",
   "@penclipai/adapter-opencode-local",
   "@penclipai/plugin-sdk",
+  "@penclipai/create-paperclip-plugin",
   "@penclipai/ui",
   "penclip",
 ];

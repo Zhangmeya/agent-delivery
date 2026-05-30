@@ -34,7 +34,7 @@ jobs:
 
       - name: Run e2e tests
         env:
-          PAPERCLIP_E2E_BROWSER_CHANNEL: "chrome"
+          PAPERCLIP_PLAYWRIGHT_CHANNEL: "chrome"
         run: pnpm run test:e2e
 
       - uses: actions/upload-artifact@v6

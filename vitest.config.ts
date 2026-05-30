@@ -8,6 +8,7 @@ export default defineConfig({
     maxWorkers: process.platform === "win32" ? 4 : undefined,
     projects: [
       "packages/shared",
+      "packages/skills-catalog",
       "packages/db",
       "packages/adapter-utils",
       "packages/adapters/acpx-local",
@@ -20,6 +21,7 @@ export default defineConfig({
       "packages/adapters/opencode-local",
       "packages/adapters/pi-local",
       "packages/plugins/sdk",
+      "packages/plugins/create-paperclip-plugin",
       "server",
       "ui",
       "cli",

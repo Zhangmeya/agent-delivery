@@ -749,7 +749,7 @@ export function CompanyEnvironments() {
             ) : null}
 
             {environmentForm.driver === "sandbox" ? (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-3">
                 <Field label={t("companySettings.provider")} hint={t("companySettings.sandboxProviderHint")}>
                   <select
                     className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
@@ -776,26 +776,24 @@ export function CompanyEnvironments() {
                     ))}
                   </select>
                 </Field>
-                <div className="md:col-span-2 space-y-3">
-                  {selectedSandboxProvider?.description ? (
-                    <div className="text-xs text-muted-foreground">
-                      {t(selectedSandboxProvider.description, { defaultValue: selectedSandboxProvider.description })}
-                    </div>
-                  ) : null}
-                  {selectedSandboxSchema ? (
-                    <JsonSchemaForm
-                      schema={selectedSandboxSchema as any}
-                      values={environmentForm.sandboxConfig}
-                      onChange={(values) =>
-                        setEnvironmentForm((current) => ({ ...current, sandboxConfig: values }))}
-                      errors={sandboxConfigErrors}
-                    />
-                  ) : (
-                    <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                      {t("companySettings.sandboxNoExtraFields")}
-                    </div>
-                  )}
-                </div>
+                {selectedSandboxProvider?.description ? (
+                  <div className="text-xs text-muted-foreground">
+                    {t(selectedSandboxProvider.description, { defaultValue: selectedSandboxProvider.description })}
+                  </div>
+                ) : null}
+                {selectedSandboxSchema ? (
+                  <JsonSchemaForm
+                    schema={selectedSandboxSchema as any}
+                    values={environmentForm.sandboxConfig}
+                    onChange={(values) =>
+                      setEnvironmentForm((current) => ({ ...current, sandboxConfig: values }))}
+                    errors={sandboxConfigErrors}
+                  />
+                ) : (
+                  <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    {t("companySettings.sandboxNoExtraFields")}
+                  </div>
+                )}
               </div>
             ) : null}
 

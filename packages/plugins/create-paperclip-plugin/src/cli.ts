@@ -1,4 +1,4 @@
 #!/usr/bin/env node
-import { runCreatePaperclipPluginCli } from "./index.js";
+import { runCli } from "./bin.js";
 
-runCreatePaperclipPluginCli();
+runCli();
