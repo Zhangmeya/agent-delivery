@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { User } from "lucide-react";
 import { cn } from "../lib/utils";
-import { roleLabels } from "./agent-config-primitives";
+import { translateRoleLabel } from "./agent-config-primitives";
 import { AgentIcon } from "./AgentIconPicker";
 import { displaySeededName } from "../lib/seeded-display";
 
@@ -151,7 +151,7 @@ export function ReportsToPicker({
           >
             <AgentIcon icon={a.icon} className="shrink-0 h-3 w-3 text-muted-foreground" />
             <span className="min-w-0 truncate">{displaySeededName(a.name)}</span>
-            <span className="text-muted-foreground ml-auto shrink-0">{roleLabels[a.role] ?? a.role}</span>
+            <span className="text-muted-foreground ml-auto shrink-0">{translateRoleLabel(t, a.role)}</span>
           </button>
         ))}
       </PopoverContent>

@@ -81,7 +81,7 @@ export function KeyboardShortcutsCheatsheetContent() {
                       <span key={key} className="flex items-center gap-1">
                         {i > 0 && (
                           <span className="text-xs text-muted-foreground">
-                            {t("then", { defaultValue: "then" })}
+                            {t("keyboardShortcuts.then", { defaultValue: "then" })}
                           </span>
                         )}
                         <KeyCap>{key}</KeyCap>
@@ -96,9 +96,9 @@ export function KeyboardShortcutsCheatsheetContent() {
       </div>
       <div className="border-t border-border px-5 py-3">
         <p className="text-xs text-muted-foreground">
-          {t("Press", { defaultValue: "Press" })} <KeyCap>Esc</KeyCap> {t("to close", { defaultValue: "to close" })}
+          {t("keyboardShortcuts.press", { defaultValue: "Press" })} <KeyCap>Esc</KeyCap> {t("keyboardShortcuts.toClose", { defaultValue: "to close" })}
           {" · "}
-          {t("Shortcuts are disabled in text fields", { defaultValue: "Shortcuts are disabled in text fields" })}
+          {t("keyboardShortcuts.disabledInTextFields", { defaultValue: "Shortcuts are disabled in text fields" })}
         </p>
       </div>
     </>

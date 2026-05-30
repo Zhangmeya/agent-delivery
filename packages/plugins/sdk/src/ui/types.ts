@@ -1,7 +1,7 @@
 /**
  * Paperclip plugin UI SDK — types for plugin frontend components.
  *
- * Plugin UI bundles import from `@paperclipai/plugin-sdk/ui`. This subpath
+ * Plugin UI bundles import from `@penclipai/plugin-sdk/ui`. This subpath
  * provides the bridge hooks, component prop interfaces, and error types that
  * plugin React components use to communicate with the host.
  *
@@ -54,6 +54,7 @@ export type {
  * Error codes:
  * - `WORKER_UNAVAILABLE` — plugin worker is not running
  * - `CAPABILITY_DENIED` — plugin lacks the required capability
+ * - `INVOCATION_SCOPE_DENIED` — plugin call escaped the invocation company scope
  * - `WORKER_ERROR` — worker returned an error from its handler
  * - `TIMEOUT` — worker did not respond within the configured timeout
  * - `UNKNOWN` — unexpected bridge-level failure
@@ -226,6 +227,18 @@ export interface HostNavigation {
  */
 export interface PluginPageProps {
   /** The current host context. */
+  context: PluginHostContext;
+}
+
+/**
+ * Props passed to a plugin company settings page component.
+ *
+ * A company settings page is mounted at
+ * `/:companyPrefix/company/settings/:routePath` and always receives the active
+ * company id and prefix when available.
+ */
+export interface PluginCompanySettingsPageProps {
+  /** The current host context, including company id and prefix. */
   context: PluginHostContext;
 }
 

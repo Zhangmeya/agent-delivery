@@ -334,10 +334,14 @@ export async function terminateLocalService(
   opts?: { signal?: NodeJS.Signals; forceAfterMs?: number },
 ) {
   if (!Number.isInteger(record.pid) || record.pid <= 0) return;
+  if (process.platform === "win32") {
+    await forceKillWindowsProcessTree(record.pid);
+    return;
+  }
 
   const signal = opts?.signal ?? "SIGTERM";
   const forceAfterMs = opts?.forceAfterMs ?? 2_000;
-  const targetProcessGroup = process.platform !== "win32" && record.processGroupId && record.processGroupId > 0;
+  const targetProcessGroup = record.processGroupId && record.processGroupId > 0;
   try {
     if (targetProcessGroup) {
       process.kill(-record.processGroupId!, signal);

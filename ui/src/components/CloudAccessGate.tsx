@@ -1,69 +1,24 @@
 import { Navigate, Outlet, useLocation } from "@/lib/router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { accessApi } from "@/api/access";
+import { ApiError } from "@/api/client";
 import { authApi } from "@/api/auth";
 import { healthApi } from "@/api/health";
 import { queryKeys } from "@/lib/queryKeys";
+import { BootstrapPendingPage } from "@/components/BootstrapPendingPage";
 
-function BootstrapPendingPage({
-  hasActiveInvite = false,
-  t,
-}: {
-  hasActiveInvite?: boolean;
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
+function NoBoardAccessPage() {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto max-w-xl py-10">
       <div className="rounded-lg border border-border bg-card p-6">
-        <h1 className="text-xl font-semibold">
-          {t("Instance setup required", { defaultValue: "Instance setup required" })}
-        </h1>
+        <h1 className="text-xl font-semibold">{t("No company access")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {hasActiveInvite
-            ? t(
-              "No instance admin exists yet. A bootstrap invite is already active. Check your Paperclip startup logs for the first admin invite URL, or run this command to rotate it:",
-              {
-                defaultValue:
-                  "No instance admin exists yet. A bootstrap invite is already active. Check your Paperclip startup logs for the first admin invite URL, or run this command to rotate it:",
-              },
-            )
-            : t(
-              "No instance admin exists yet. Run this command in your Paperclip environment to generate the first admin invite URL:",
-              {
-                defaultValue:
-                  "No instance admin exists yet. Run this command in your Paperclip environment to generate the first admin invite URL:",
-              },
-            )}
-        </p>
-        <pre className="mt-4 overflow-x-auto rounded-md border border-border bg-muted/30 p-3 text-xs">
-{`pnpm penclip auth bootstrap-ceo`}
-        </pre>
-      </div>
-    </div>
-  );
-}
-
-function NoBoardAccessPage({ t }: { t: (key: string, options?: Record<string, unknown>) => string }) {
-  return (
-    <div className="mx-auto max-w-xl py-10">
-      <div className="rounded-lg border border-border bg-card p-6">
-        <h1 className="text-xl font-semibold">
-          {t("No company access", { defaultValue: "No company access" })}
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {t(
-            "This account is signed in, but it does not have an active company membership or instance-admin access on this Paperclip instance.",
-            {
-              defaultValue:
-                "This account is signed in, but it does not have an active company membership or instance-admin access on this Paperclip instance.",
-            },
-          )}
+          {t("This account is signed in, but it does not have an active company membership or instance-admin access on this Paperclip instance.")}
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          {t("Use a company invite or sign in with an account that already belongs to this org.", {
-            defaultValue: "Use a company invite or sign in with an account that already belongs to this org.",
-          })}
+          {t("Use a company invite or sign in with an account that already belongs to this org.")}
         </p>
       </div>
     </div>
@@ -73,6 +28,7 @@ function NoBoardAccessPage({ t }: { t: (key: string, options?: Record<string, un
 export function CloudAccessGate() {
   const { t } = useTranslation();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const healthQuery = useQuery({
     queryKey: queryKeys.health,
     queryFn: () => healthApi.get(),
@@ -89,6 +45,7 @@ export function CloudAccessGate() {
   });
 
   const isAuthenticatedMode = healthQuery.data?.deploymentMode === "authenticated";
+  const isBootstrapPending = isAuthenticatedMode && healthQuery.data?.bootstrapStatus === "bootstrap_pending";
   const sessionQuery = useQuery({
     queryKey: queryKeys.auth.session,
     queryFn: () => authApi.getSession(),
@@ -99,20 +56,26 @@ export function CloudAccessGate() {
   const boardAccessQuery = useQuery({
     queryKey: queryKeys.access.currentBoardAccess,
     queryFn: () => accessApi.getCurrentBoardAccess(),
-    enabled: isAuthenticatedMode && !!sessionQuery.data,
+    enabled: isAuthenticatedMode && !isBootstrapPending && !!sessionQuery.data,
     retry: false,
+  });
+  const claimMutation = useMutation({
+    mutationFn: () => accessApi.claimBootstrapAdmin(),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.auth.session });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.health });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companies.stats });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.access.currentBoardAccess });
+    },
   });
 
   if (
     healthQuery.isLoading ||
     (isAuthenticatedMode && sessionQuery.isLoading) ||
-    (isAuthenticatedMode && !!sessionQuery.data && boardAccessQuery.isLoading)
+    (isAuthenticatedMode && !isBootstrapPending && !!sessionQuery.data && boardAccessQuery.isLoading)
   ) {
-    return (
-      <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">
-        {t("Loading...", { defaultValue: "Loading..." })}
-      </div>
-    );
+    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">{t("Loading...")}</div>;
   }
 
   if (healthQuery.error || boardAccessQuery.error) {
@@ -122,13 +85,31 @@ export function CloudAccessGate() {
           ? healthQuery.error.message
           : boardAccessQuery.error instanceof Error
             ? boardAccessQuery.error.message
-            : t("Failed to load app state", { defaultValue: "Failed to load app state" })}
+            : t("Failed to load app state")}
       </div>
     );
   }
 
-  if (isAuthenticatedMode && healthQuery.data?.bootstrapStatus === "bootstrap_pending") {
-    return <BootstrapPendingPage hasActiveInvite={healthQuery.data.bootstrapInviteActive} t={t} />;
+  if (isBootstrapPending) {
+    const health = healthQuery.data;
+    if (!health) {
+      return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">{t("Loading...")}</div>;
+    }
+    const claimError = claimMutation.error instanceof ApiError
+      ? { status: claimMutation.error.status, message: claimMutation.error.message }
+      : claimMutation.error instanceof Error
+        ? { message: claimMutation.error.message }
+        : null;
+    return (
+      <BootstrapPendingPage
+        claimAvailable={health.deploymentExposure === "private"}
+        hasActiveInvite={health.bootstrapInviteActive}
+        session={sessionQuery.data}
+        claimState={claimMutation.isSuccess ? "success" : claimMutation.isPending ? "claiming" : "idle"}
+        claimError={claimError}
+        onClaim={() => claimMutation.mutate()}
+      />
+    );
   }
 
   if (isAuthenticatedMode && !sessionQuery.data) {
@@ -142,7 +123,7 @@ export function CloudAccessGate() {
     !boardAccessQuery.data?.isInstanceAdmin &&
     (boardAccessQuery.data?.companyIds.length ?? 0) === 0
   ) {
-    return <NoBoardAccessPage t={t} />;
+    return <NoBoardAccessPage />;
   }
 
   return <Outlet />;

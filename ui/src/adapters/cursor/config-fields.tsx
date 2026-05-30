@@ -1,4 +1,5 @@
 import type { AdapterConfigFieldsProps } from "../types";
+import { useTranslation } from "react-i18next";
 import {
   Field,
   DraftInput,
@@ -19,9 +20,17 @@ export function CursorLocalConfigFields({
   mark,
   hideInstructionsFile,
 }: AdapterConfigFieldsProps) {
+  const { t } = useTranslation();
   if (hideInstructionsFile) return null;
   return (
-    <Field label="Agent instructions file" hint={instructionsFileHint}>
+    <Field
+      label={t("agentConfig.instructionsFileLabel", {
+        defaultValue: "Agent instructions file",
+      })}
+      hint={t("agentConfig.cursorInstructionsFileHint", {
+        defaultValue: instructionsFileHint,
+      })}
+    >
       <div className="flex items-center gap-2">
         <DraftInput
           value={
@@ -40,7 +49,9 @@ export function CursorLocalConfigFields({
           }
           immediate
           className={inputClass}
-          placeholder="/absolute/path/to/AGENTS.md"
+          placeholder={t("agentConfig.instructionsFilePlaceholder", {
+            defaultValue: "/absolute/path/to/AGENTS.md",
+          })}
         />
         <ChoosePathButton />
       </div>

@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe("terminateLocalService", () => {
-  it("falls back to taskkill /T /F on Windows after a graceful SIGTERM attempt", async () => {
+  it("uses taskkill /T /F on Windows so child processes are cleaned up", async () => {
     Object.defineProperty(process, "platform", {
       configurable: true,
       value: "win32",
@@ -57,7 +57,7 @@ describe("terminateLocalService", () => {
       { signal: "SIGTERM", forceAfterMs: 0 },
     );
 
-    expect(killSpy).toHaveBeenCalledWith(4321, "SIGTERM");
+    expect(killSpy).toHaveBeenCalledWith(4321, 0);
     expect(execFileMock).toHaveBeenCalledWith(
       process.env.comspec ?? "cmd.exe",
       ["/d", "/s", "/c", "taskkill", "/PID", "4321", "/T", "/F"],

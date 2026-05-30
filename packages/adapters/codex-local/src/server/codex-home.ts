@@ -58,11 +58,37 @@ async function linkOrCopySharedAuthFile(source: string, target: string): Promise
   await fs.symlink(source, target);
 }
 
+async function targetLinksToSource(target: string, source: string): Promise<boolean> {
+  const existing = await fs.lstat(target).catch(() => null);
+  if (!existing) return false;
+
+  if (process.platform === "win32") {
+    if (!existing.isFile()) return false;
+    const [targetContents, sourceContents] = await Promise.all([
+      fs.readFile(target).catch(() => null),
+      fs.readFile(source).catch(() => null),
+    ]);
+    return Boolean(targetContents && sourceContents && targetContents.equals(sourceContents));
+  }
+
+  if (!existing.isSymbolicLink()) return false;
+  const linkedPath = await fs.readlink(target).catch(() => null);
+  if (!linkedPath) return false;
+  return path.resolve(path.dirname(target), linkedPath) === path.resolve(source);
+}
+
 async function ensureSymlink(target: string, source: string): Promise<void> {
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {
     await ensureParentDir(target);
-    await linkOrCopySharedAuthFile(source, target);
+    try {
+      await linkOrCopySharedAuthFile(source, target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST" && await targetLinksToSource(target, source)) {
+        return;
+      }
+      throw error;
+    }
     return;
   }
 

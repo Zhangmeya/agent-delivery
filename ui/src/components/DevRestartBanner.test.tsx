@@ -9,6 +9,14 @@ const mockHealthApi = vi.hoisted(() => ({
   requestDevServerRestart: vi.fn(),
 }));
 
+vi.mock("react-i18next", () => ({
+  initReactI18next: { type: "3rdParty", init: () => {} },
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, unknown>) =>
+      String(options?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name] ?? "")),
+  }),
+}));
+
 vi.mock("../api/health", () => ({
   healthApi: mockHealthApi,
 }));

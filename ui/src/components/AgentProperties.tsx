@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@/lib/router";
-import { AGENT_ROLE_LABELS, type Agent, type AgentRuntimeState } from "@penclipai/shared";
+import type { Agent, AgentRuntimeState } from "@penclipai/shared";
 import { useTranslation } from "react-i18next";
 import { agentsApi } from "../api/agents";
 import { useCompany } from "../context/CompanyContext";
@@ -12,13 +12,12 @@ import { StatusBadge } from "./StatusBadge";
 import { Identity } from "./Identity";
 import { formatDate, agentUrl } from "../lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { translateRoleLabel } from "./agent-config-primitives";
 
 interface AgentPropertiesProps {
   agent: Agent;
   runtimeState?: AgentRuntimeState;
 }
-
-const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
 function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -48,7 +47,7 @@ export function AgentProperties({ agent, runtimeState }: AgentPropertiesProps) {
           <StatusBadge status={agent.status} />
         </PropertyRow>
         <PropertyRow label={t("Role", { defaultValue: "Role" })}>
-          <span className="text-sm">{roleLabels[agent.role] ?? agent.role}</span>
+          <span className="text-sm">{translateRoleLabel(t, agent.role)}</span>
         </PropertyRow>
         {agent.title && (
           <PropertyRow label={t("Title", { defaultValue: "Title" })}>

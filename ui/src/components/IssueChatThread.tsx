@@ -40,6 +40,7 @@ import type {
   IssueBlockerAttention,
   IssueRecoveryAction,
   IssueRelationIssueSummary,
+  IssueScheduledRetry,
   SuccessfulRunHandoffState,
   IssueWorkMode,
 } from "@penclipai/shared";
@@ -300,9 +301,11 @@ interface IssueChatThreadProps {
   timelineEvents?: IssueTimelineEvent[];
   liveRuns?: LiveRunForIssue[];
   activeRun?: ActiveRunForIssue | null;
+  issueId?: string | null;
   blockedBy?: IssueRelationIssueSummary[];
   blockerAttention?: IssueBlockerAttention | null;
   successfulRunHandoff?: SuccessfulRunHandoffState | null;
+  scheduledRetry?: IssueScheduledRetry | null;
   recoveryAction?: IssueRecoveryAction | null;
   onResolveRecoveryAction?: (outcome: RecoveryResolveOutcome) => void;
   canFalsePositiveRecoveryAction?: boolean;
@@ -1068,6 +1071,7 @@ function IssueChatRollingToolPart({ toolParts }: { toolParts: ToolCallMessagePar
 
 function CopyablePreBlock({ children, className }: { children: string; className?: string }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useTranslation(undefined, { useSuspense: false });
   return (
     <div className="group/pre relative">
       <pre className={className}>{children}</pre>
@@ -1077,8 +1081,8 @@ function CopyablePreBlock({ children, className }: { children: string; className
           "absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-md bg-background/80 text-muted-foreground opacity-0 backdrop-blur-sm transition-opacity hover:text-foreground group-hover/pre:opacity-100",
           copied && "opacity-100",
         )}
-        title="Copy"
-        aria-label="Copy"
+        title={t("Copy", { defaultValue: "Copy" })}
+        aria-label={t("Copy", { defaultValue: "Copy" })}
         onClick={() => {
           void navigator.clipboard.writeText(children).then(() => {
             setCopied(true);
@@ -4019,9 +4023,11 @@ export function IssueChatThread({
   timelineEvents = [],
   liveRuns = [],
   activeRun = null,
+  issueId = null,
   blockedBy = [],
   blockerAttention = null,
   successfulRunHandoff = null,
+  scheduledRetry = null,
   recoveryAction = null,
   onResolveRecoveryAction,
   canFalsePositiveRecoveryAction = false,
@@ -4704,10 +4710,12 @@ export function IssueChatThread({
                     />
                   ) : null}
                   <IssueBlockedNotice
+                    issueId={issueId}
                     issueStatus={issueStatus}
                     blockers={unresolvedBlockers}
                     blockerAttention={blockerAttention}
                     successfulRunHandoff={recoveryAction ? null : successfulRunHandoff}
+                    scheduledRetry={scheduledRetry}
                     agentName={
                       successfulRunHandoff?.assigneeAgentId
                         ? agentMap?.get(successfulRunHandoff.assigneeAgentId)?.name ?? null

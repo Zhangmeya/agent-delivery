@@ -22,6 +22,7 @@ import { StatusIcon } from "./StatusIcon";
 import { PriorityIcon } from "./PriorityIcon";
 import { Identity } from "./Identity";
 import type { Issue, IssueStatus } from "@penclipai/shared";
+import { buildDndAccessibility } from "../lib/dnd-accessibility";
 import { translateStatusLabel } from "../lib/i18n-labels";
 import { AlertTriangle } from "lucide-react";
 import { isSuccessfulRunHandoffRequired } from "../lib/successful-run-handoff";
@@ -287,6 +288,7 @@ export function KanbanBoard({
   revealIncrement = KANBAN_COLUMN_REVEAL_INCREMENT,
   onUpdateIssue,
 }: KanbanBoardProps) {
+  const { t } = useTranslation(undefined, { useSuspense: false });
   const [activeId, setActiveId] = useState<string | null>(null);
   const [visibleCountByStatus, setVisibleCountByStatus] = useState<Record<string, number>>({});
   const collapsedStatusSet = useMemo(() => new Set(collapsedStatuses), [collapsedStatuses]);
@@ -298,6 +300,7 @@ export function KanbanBoard({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
+  const dndAccessibility = useMemo(() => buildDndAccessibility(t), [t]);
 
   const columnIssues = useMemo(() => {
     const grouped: Record<IssueStatus, Issue[]> = {} as Record<IssueStatus, Issue[]>;
@@ -346,6 +349,7 @@ export function KanbanBoard({
   return (
     <DndContext
       sensors={sensors}
+      accessibility={dndAccessibility}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}

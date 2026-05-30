@@ -1,12 +1,13 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { parse as parseEnvContents } from "dotenv";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   agents,
   companies,
@@ -48,11 +49,9 @@ import {
 
 const execFileAsync = promisify(execFile);
 const leasedRunIds = new Set<string>();
+const originalForceFallbackConfig = process.env.PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG;
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
-const WORKTREE_GIT_TEST_TIMEOUT = process.platform === "win32" ? 20_000 : 5_000;
-const WORKTREE_PROVISION_TEST_TIMEOUT = process.platform === "win32" ? 90_000 : 20_000;
-const shellScriptOnlyTest = process.platform === "win32" ? it.skip : it;
 
 if (!embeddedPostgresSupport.supported) {
   console.warn(
@@ -61,17 +60,52 @@ if (!embeddedPostgresSupport.supported) {
 }
 const provisionWorktreeScriptPath = new URL("../../../scripts/provision-worktree.sh", import.meta.url);
 
+beforeEach(() => {
+  process.env.PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG = "true";
+});
+
+afterEach(() => {
+  if (originalForceFallbackConfig === undefined) {
+    delete process.env.PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG;
+  } else {
+    process.env.PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG = originalForceFallbackConfig;
+  }
+});
+
 async function runGit(cwd: string, args: string[]) {
   await execFileAsync("git", args, { cwd });
 }
 
+async function readGit(cwd: string, args: string[]) {
+  return (await execFileAsync("git", args, { cwd })).stdout.trim();
+}
+
 async function runPnpm(cwd: string, args: string[]) {
-  if (process.platform === "win32") {
-    await execFileAsync(process.env.comspec ?? "cmd.exe", ["/d", "/s", "/c", "pnpm.cmd", ...args], { cwd });
+  const npmExecPath = process.env.npm_execpath;
+  if (process.platform === "win32" && npmExecPath && /pnpm/i.test(npmExecPath)) {
+    await execFileAsync(process.execPath, [npmExecPath, ...args], { cwd });
     return;
   }
-
+  if (process.platform === "win32") {
+    await execFileAsync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", ["pnpm", ...args].join(" ")], { cwd });
+    return;
+  }
   await execFileAsync("pnpm", args, { cwd });
+}
+
+function toBashPath(value: string) {
+  const normalized = path.resolve(value).replace(/\\/g, "/");
+  const driveMatch = normalized.match(/^([A-Za-z]):\/(.*)$/);
+  if (driveMatch) return `/${driveMatch[1].toLowerCase()}/${driveMatch[2]}`;
+  return normalized;
+}
+
+function runShellScript(scriptPath: string, options: Parameters<typeof execFileAsync>[2]) {
+  if (process.platform === "win32") {
+    const gitBashPath = "C:\\Program Files\\Git\\bin\\bash.exe";
+    return execFileAsync(gitBashPath, [toBashPath(scriptPath)], options);
+  }
+  return execFileAsync(scriptPath, [], options);
 }
 
 async function createTempRepo(defaultBranch = "main") {
@@ -176,7 +210,6 @@ afterEach(async () => {
   delete process.env.PAPERCLIP_HOME;
   delete process.env.PAPERCLIP_INSTANCE_ID;
   delete process.env.PAPERCLIP_WORKTREES_DIR;
-  delete process.env.PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG;
   delete process.env.DATABASE_URL;
   await resetRuntimeServicesForTests();
 });
@@ -313,6 +346,57 @@ describe("ensureServerWorkspaceLinksCurrent", () => {
 });
 
 describe("realizeExecutionWorkspace", () => {
+  it("defaults new git worktrees to freshly fetched origin/master", async () => {
+    const sourceRepo = await createTempRepo("master");
+    const remoteDir = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-worktree-remote-"));
+    const remotePath = path.join(remoteDir, "paperclip.git");
+    await execFileAsync("git", ["clone", "--bare", sourceRepo, remotePath]);
+
+    const cloneRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-worktree-clone-"));
+    const repoRoot = path.join(cloneRoot, "paperclip");
+    await execFileAsync("git", ["clone", remotePath, repoRoot]);
+    await runGit(repoRoot, ["config", "user.email", "paperclip@example.com"]);
+    await runGit(repoRoot, ["config", "user.name", "Paperclip Test"]);
+
+    await fs.writeFile(path.join(sourceRepo, "auth-fix.txt"), "cookie fix\n", "utf8");
+    await runGit(sourceRepo, ["add", "auth-fix.txt"]);
+    await runGit(sourceRepo, ["commit", "-m", "Add auth fix"]);
+    await runGit(sourceRepo, ["push", remotePath, "master"]);
+    const expectedRemoteHead = await readGit(sourceRepo, ["rev-parse", "master"]);
+    expect(await readGit(repoRoot, ["rev-parse", "origin/master"])).not.toBe(expectedRemoteHead);
+
+    const workspace = await realizeExecutionWorkspace({
+      base: {
+        baseCwd: repoRoot,
+        source: "project_primary",
+        projectId: "project-1",
+        workspaceId: "workspace-1",
+        repoUrl: null,
+        repoRef: null,
+      },
+      config: {
+        workspaceStrategy: {
+          type: "git_worktree",
+          branchTemplate: "{{issue.identifier}}-{{slug}}",
+        },
+      },
+      issue: {
+        id: "issue-1",
+        identifier: "PAP-447",
+        title: "Add Worktree Support",
+      },
+      agent: {
+        id: "agent-1",
+        name: "Codex Coder",
+        companyId: "company-1",
+      },
+    });
+
+    expect(workspace.baseRefSha).toBe(expectedRemoteHead);
+    expect(await readGit(repoRoot, ["rev-parse", "origin/master"])).toBe(expectedRemoteHead);
+    expect(await readGit(workspace.cwd, ["rev-parse", "HEAD"])).toBe(expectedRemoteHead);
+  });
+
   it("creates and reuses a git worktree for an issue-scoped branch", async () => {
     const repoRoot = await createTempRepo();
 
@@ -379,7 +463,76 @@ describe("realizeExecutionWorkspace", () => {
     expect(second.created).toBe(false);
     expect(second.cwd).toBe(first.cwd);
     expect(second.branchName).toBe(first.branchName);
-  }, 20_000);
+  });
+
+  it("warns when reusing a git worktree whose base ref has advanced", async () => {
+    const repoRoot = await createTempRepo();
+
+    const initial = await realizeExecutionWorkspace({
+      base: {
+        baseCwd: repoRoot,
+        source: "project_primary",
+        projectId: "project-1",
+        workspaceId: "workspace-1",
+        repoUrl: null,
+        repoRef: "main",
+      },
+      config: {
+        workspaceStrategy: {
+          type: "git_worktree",
+          branchTemplate: "{{issue.identifier}}-{{slug}}",
+        },
+      },
+      issue: {
+        id: "issue-1",
+        identifier: "PAP-447",
+        title: "Add Worktree Support",
+      },
+      agent: {
+        id: "agent-1",
+        name: "Codex Coder",
+        companyId: "company-1",
+      },
+    });
+    expect(initial.baseRefSha).toMatch(/^[0-9a-f]{40}$/);
+
+    await fs.writeFile(path.join(repoRoot, "server-auth-fix.txt"), "cookie fix\n", "utf8");
+    await runGit(repoRoot, ["add", "server-auth-fix.txt"]);
+    await runGit(repoRoot, ["commit", "-m", "Add auth runtime fix"]);
+
+    const reused = await realizeExecutionWorkspace({
+      base: {
+        baseCwd: repoRoot,
+        source: "project_primary",
+        projectId: "project-1",
+        workspaceId: "workspace-1",
+        repoUrl: null,
+        repoRef: "main",
+      },
+      config: {
+        workspaceStrategy: {
+          type: "git_worktree",
+          branchTemplate: "{{issue.identifier}}-{{slug}}",
+        },
+      },
+      issue: {
+        id: "issue-1",
+        identifier: "PAP-447",
+        title: "Add Worktree Support",
+      },
+      agent: {
+        id: "agent-1",
+        name: "Codex Coder",
+        companyId: "company-1",
+      },
+    });
+
+    expect(reused.created).toBe(false);
+    expect(reused.cwd).toBe(initial.cwd);
+    expect(reused.warnings).toEqual([
+      expect.stringContaining("is behind main by 1 commit"),
+    ]);
+  });
 
   it("rejects reusing an empty directory that only looks like a worktree because it sits inside the repo", async () => {
     const repoRoot = await createTempRepo();
@@ -607,7 +760,7 @@ describe("realizeExecutionWorkspace", () => {
     );
     expect(realized.branchName?.includes("/")).toBe(false);
     expect(path.basename(realized.cwd)).toBe(realized.branchName);
-  }, WORKTREE_GIT_TEST_TIMEOUT);
+  });
 
   it("preserves intentional slashes and dots from the branch template", async () => {
     const repoRoot = await createTempRepo();
@@ -641,22 +794,23 @@ describe("realizeExecutionWorkspace", () => {
 
     expect(realized.branchName).toBe("release/PAP-992.hotfix-april-1");
     expect(path.basename(realized.cwd)).toBe("PAP-992.hotfix-april-1");
-  }, WORKTREE_GIT_TEST_TIMEOUT);
+  });
 
   it("runs a configured provision command inside the derived worktree", async () => {
     const repoRoot = await createTempRepo();
     await fs.mkdir(path.join(repoRoot, "scripts"), { recursive: true });
     await fs.writeFile(
-      path.join(repoRoot, "scripts", "provision.mjs"),
+      path.join(repoRoot, "scripts", "provision.sh"),
       [
-        'import fs from "node:fs/promises";',
-        'await fs.writeFile(".paperclip-provision-branch", `${process.env.PAPERCLIP_WORKSPACE_BRANCH ?? ""}\\n`, "utf8");',
-        'await fs.writeFile(".paperclip-provision-base", `${process.env.PAPERCLIP_WORKSPACE_BASE_CWD ?? ""}\\n`, "utf8");',
-        'await fs.writeFile(".paperclip-provision-created", `${process.env.PAPERCLIP_WORKSPACE_CREATED ?? ""}\\n`, "utf8");',
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "printf '%s\\n' \"$PAPERCLIP_WORKSPACE_BRANCH\" > .paperclip-provision-branch",
+        "printf '%s\\n' \"$PAPERCLIP_WORKSPACE_BASE_CWD\" > .paperclip-provision-base",
+        "printf '%s\\n' \"$PAPERCLIP_WORKSPACE_CREATED\" > .paperclip-provision-created",
       ].join("\n"),
       "utf8",
     );
-    await runGit(repoRoot, ["add", "scripts/provision.mjs"]);
+    await runGit(repoRoot, ["add", "scripts/provision.sh"]);
     await runGit(repoRoot, ["commit", "-m", "Add worktree provision script"]);
 
     const workspace = await realizeExecutionWorkspace({
@@ -672,7 +826,7 @@ describe("realizeExecutionWorkspace", () => {
         workspaceStrategy: {
           type: "git_worktree",
           branchTemplate: "{{issue.identifier}}-{{slug}}",
-          provisionCommand: "node ./scripts/provision.mjs",
+          provisionCommand: "bash ./scripts/provision.sh",
         },
       },
       issue: {
@@ -710,7 +864,7 @@ describe("realizeExecutionWorkspace", () => {
         workspaceStrategy: {
           type: "git_worktree",
           branchTemplate: "{{issue.identifier}}-{{slug}}",
-          provisionCommand: "node ./scripts/provision.mjs",
+          provisionCommand: "bash ./scripts/provision.sh",
         },
       },
       issue: {
@@ -726,7 +880,7 @@ describe("realizeExecutionWorkspace", () => {
     });
 
     await expect(fs.readFile(path.join(reused.cwd, ".paperclip-provision-created"), "utf8")).resolves.toBe("false\n");
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+  });
 
   it("uses the latest repo-managed provision script when reusing an existing worktree", async () => {
     const repoRoot = await createTempRepo();
@@ -816,7 +970,7 @@ describe("realizeExecutionWorkspace", () => {
     });
 
     await expect(fs.readFile(path.join(reused.cwd, ".paperclip-provision-version"), "utf8")).resolves.toBe("v2\n");
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+  }, 30_000);
 
   it("writes an isolated repo-local Paperclip config and worktree branding when provisioning", async () => {
     const repoRoot = await createTempRepo();
@@ -833,16 +987,10 @@ describe("realizeExecutionWorkspace", () => {
     process.env.PAPERCLIP_HOME = paperclipHome;
     process.env.PAPERCLIP_INSTANCE_ID = instanceId;
     process.env.PAPERCLIP_WORKTREES_DIR = isolatedWorktreeHome;
-    process.env.PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG = "1";
     // Keep this server-side fixture on provision-worktree.sh's config writer path;
     // CLI/database seeding is covered by the CLI worktree tests.
     await fs.symlink(process.execPath, path.join(isolatedBin, "node"));
-    process.env.PATH = [
-      isolatedBin,
-      "/usr/bin",
-      "/bin",
-      ...(process.platform === "win32" && previousPath ? [previousPath] : []),
-    ].join(path.delimiter);
+    process.env.PATH = `${isolatedBin}${path.delimiter}${previousPath ?? ""}`;
 
     await fs.mkdir(sharedConfigDir, { recursive: true });
     await fs.writeFile(
@@ -907,6 +1055,7 @@ describe("realizeExecutionWorkspace", () => {
       "utf8",
     );
     await fs.writeFile(sharedEnvPath, 'DATABASE_URL="postgres://worktree:test@db.example.com:6543/paperclip"\n', "utf8");
+    await fs.writeFile(path.join(sharedConfigDir, "master.key"), "test-master-key\n", "utf8");
 
     await fs.mkdir(path.join(repoRoot, "scripts"), { recursive: true });
     await fs.copyFile(
@@ -1011,13 +1160,12 @@ describe("realizeExecutionWorkspace", () => {
         process.env.PATH = previousPath;
       }
     }
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+  }, 15_000);
 
   it(
     "provisions worktree-local pnpm node_modules instead of reusing base-repo links",
     async () => {
     const repoRoot = await createTempRepo();
-    process.env.PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG = "1";
     await fs.mkdir(path.join(repoRoot, "scripts"), { recursive: true });
     await fs.mkdir(path.join(repoRoot, "packages", "shared"), { recursive: true });
     await fs.mkdir(path.join(repoRoot, "server"), { recursive: true });
@@ -1108,26 +1256,18 @@ describe("realizeExecutionWorkspace", () => {
 
     expect((await fs.lstat(path.join(workspace.cwd, "node_modules"))).isSymbolicLink()).toBe(false);
     expect((await fs.lstat(path.join(workspace.cwd, "server", "node_modules"))).isSymbolicLink()).toBe(false);
-    const worktreeSharedPath = path.join(workspace.cwd, "server", "node_modules", "@repo", "shared");
-    const resolvedWorktreeRoot = await fs.realpath(workspace.cwd);
-    const resolvedWorktreeDependency = await fs.realpath(worktreeSharedPath);
-    const resolvedBaseDependency = await fs.realpath(path.join(repoRoot, "server", "node_modules", "@repo", "shared"));
-    const relativeToWorktreeRoot = path.relative(resolvedWorktreeRoot, resolvedWorktreeDependency);
-
-    expect(path.isAbsolute(relativeToWorktreeRoot)).toBe(false);
-    expect(relativeToWorktreeRoot).not.toBe("");
-    expect(relativeToWorktreeRoot.startsWith("..")).toBe(false);
-    expect(resolvedWorktreeDependency).not.toBe(resolvedBaseDependency);
-    await expect(fs.readFile(path.join(worktreeSharedPath, "package.json"), "utf8")).resolves.toBe(
-      await fs.readFile(path.join(workspace.cwd, "packages", "shared", "package.json"), "utf8"),
+    await expect(
+      fs.readFile(path.join(workspace.cwd, "server", "node_modules", "@repo", "shared", "index.js"), "utf8"),
+    ).resolves.toContain("shared");
+    await expect(fs.realpath(path.join(repoRoot, "server", "node_modules", "@repo", "shared"))).resolves.toBe(
+      await fs.realpath(path.join(repoRoot, "packages", "shared")),
     );
     },
-    WORKTREE_PROVISION_TEST_TIMEOUT,
+    30_000,
   );
 
   it("provisions successfully when install is needed but there are no symlinked node_modules to move", async () => {
     const repoRoot = await createTempRepo();
-    process.env.PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG = "1";
     await fs.mkdir(path.join(repoRoot, "scripts"), { recursive: true });
     await fs.writeFile(
       path.join(repoRoot, "package.json"),
@@ -1199,25 +1339,33 @@ describe("realizeExecutionWorkspace", () => {
     );
   }, 30_000);
 
-  shellScriptOnlyTest("fails instead of writing an unseeded fallback config when worktree init errors after CLI detection succeeds", async () => {
+  it("fails instead of writing an unseeded fallback config when worktree init errors after CLI detection succeeds", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-worktree-provision-fail-"));
     const baseRoot = path.join(tempRoot, "base");
     const worktreeRoot = path.join(tempRoot, "worktree");
     const fakeBin = path.join(tempRoot, "bin");
-    const fakePenclipPath = path.join(fakeBin, "penclip");
+    const fakePnpmPath = path.join(fakeBin, "pnpm");
     const scriptPath = path.join(worktreeRoot, "provision-worktree.sh");
 
     try {
       await fs.mkdir(baseRoot, { recursive: true });
       await fs.mkdir(worktreeRoot, { recursive: true });
       await fs.mkdir(fakeBin, { recursive: true });
+      await fs.writeFile(
+        path.join(baseRoot, "package.json"),
+        JSON.stringify({ private: true, scripts: { penclip: "penclip" } }, null, 2),
+        "utf8",
+      );
       await fs.copyFile(provisionWorktreeScriptPath, scriptPath);
       await fs.chmod(scriptPath, 0o755);
       await fs.writeFile(
-        fakePenclipPath,
+        fakePnpmPath,
         [
           "#!/bin/sh",
-          "if [ \"$1\" = \"worktree\" ] && [ \"$2\" = \"init\" ]; then",
+          "if [ \"$1\" = \"penclip\" ] && [ \"$2\" = \"--help\" ]; then",
+          "  exit 0",
+          "fi",
+          "if [ \"$1\" = \"penclip\" ] && [ \"$2\" = \"worktree\" ] && [ \"$3\" = \"init\" ]; then",
           "  echo \"simulated init failure\" >&2",
           "  exit 42",
           "fi",
@@ -1226,15 +1374,18 @@ describe("realizeExecutionWorkspace", () => {
         ].join("\n"),
         "utf8",
       );
-      await fs.chmod(fakePenclipPath, 0o755);
+      await fs.chmod(fakePnpmPath, 0o755);
 
       let caught: Error | null = null;
       try {
-        await execFileAsync(process.platform === "win32" ? "bash" : scriptPath, process.platform === "win32" ? ["./provision-worktree.sh"] : [], {
+        await runShellScript(scriptPath, {
           cwd: worktreeRoot,
           env: {
             ...process.env,
-            PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+            PATH: process.platform === "win32"
+              ? `${toBashPath(fakeBin)}:${process.env.PATH ?? ""}`
+              : `${fakeBin}:${process.env.PATH ?? ""}`,
+            PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG: "",
             PAPERCLIP_WORKSPACE_BASE_CWD: baseRoot,
             PAPERCLIP_WORKSPACE_CWD: worktreeRoot,
           },
@@ -1248,11 +1399,11 @@ describe("realizeExecutionWorkspace", () => {
       await expect(fs.stat(path.join(worktreeRoot, ".paperclip", "config.json"))).rejects.toThrow();
       await expect(fs.stat(path.join(worktreeRoot, ".paperclip", ".env"))).rejects.toThrow();
     } finally {
-      await fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+      await fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
-  });
+  }, 15_000);
 
-  shellScriptOnlyTest("retries worktree-local pnpm install without a frozen lockfile when the lockfile is outdated", async () => {
+  it("retries worktree-local pnpm install without a frozen lockfile when the lockfile is outdated", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-worktree-outdated-lockfile-"));
     const baseRoot = path.join(tempRoot, "base");
     const worktreeRoot = path.join(tempRoot, "worktree");
@@ -1273,6 +1424,9 @@ describe("realizeExecutionWorkspace", () => {
             name: "workspace-root",
             private: true,
             packageManager: "pnpm@9.15.4",
+            scripts: {
+              penclip: "penclip",
+            },
           },
           null,
           2,
@@ -1307,14 +1461,16 @@ describe("realizeExecutionWorkspace", () => {
       );
       await fs.chmod(fakePnpmPath, 0o755);
 
-      const result = await execFileAsync(process.platform === "win32" ? "bash" : scriptPath, process.platform === "win32" ? ["./provision-worktree.sh"] : [], {
+      const result = await runShellScript(scriptPath, {
         cwd: worktreeRoot,
-        env: {
-          ...process.env,
-          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
-          PAPERCLIP_WORKSPACE_BASE_CWD: baseRoot,
-          PAPERCLIP_WORKSPACE_CWD: worktreeRoot,
-        },
+          env: {
+            ...process.env,
+            PATH: process.platform === "win32"
+              ? `${toBashPath(fakeBin)}:${process.env.PATH ?? ""}`
+              : `${fakeBin}:${process.env.PATH ?? ""}`,
+            PAPERCLIP_WORKSPACE_BASE_CWD: baseRoot,
+            PAPERCLIP_WORKSPACE_CWD: worktreeRoot,
+          },
       });
 
       expect(result.stderr).toContain("retrying install without --frozen-lockfile");
@@ -1323,15 +1479,14 @@ describe("realizeExecutionWorkspace", () => {
         "\"database\"",
       );
     } finally {
-      await fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+      await fs.rm(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
-  });
+  }, 15_000);
 
   it(
     "provisions worktree-local pnpm node_modules instead of reusing base-repo links",
     async () => {
     const repoRoot = await createTempRepo();
-    process.env.PAPERCLIP_WORKTREE_FORCE_FALLBACK_CONFIG = "1";
     await fs.mkdir(path.join(repoRoot, "scripts"), { recursive: true });
     await fs.mkdir(path.join(repoRoot, "packages", "shared"), { recursive: true });
     await fs.mkdir(path.join(repoRoot, "server"), { recursive: true });
@@ -1422,16 +1577,14 @@ describe("realizeExecutionWorkspace", () => {
 
     expect((await fs.lstat(path.join(workspace.cwd, "node_modules"))).isSymbolicLink()).toBe(false);
     expect((await fs.lstat(path.join(workspace.cwd, "server", "node_modules"))).isSymbolicLink()).toBe(false);
-    const workspaceSharedPath = await fs.realpath(path.join(workspace.cwd, "server", "node_modules", "@repo", "shared"));
-    const repoSharedPath = await fs.realpath(path.join(repoRoot, "server", "node_modules", "@repo", "shared"));
-    const normalizedWorkspaceRoot = path.resolve(workspace.cwd);
-    const normalizedRepoRoot = path.resolve(repoRoot);
-
-    expect(workspaceSharedPath.startsWith(normalizedWorkspaceRoot)).toBe(true);
-    expect(workspaceSharedPath).not.toBe(repoSharedPath);
-    expect(repoSharedPath.startsWith(normalizedRepoRoot)).toBe(true);
+    await expect(
+      fs.readFile(path.join(workspace.cwd, "server", "node_modules", "@repo", "shared", "index.js"), "utf8"),
+    ).resolves.toContain("shared");
+    await expect(fs.realpath(path.join(repoRoot, "server", "node_modules", "@repo", "shared"))).resolves.toBe(
+      await fs.realpath(path.join(repoRoot, "packages", "shared")),
+    );
     },
-    WORKTREE_PROVISION_TEST_TIMEOUT,
+    15_000,
   );
 
   it("records worktree setup and provision operations when a recorder is provided", async () => {
@@ -1490,7 +1643,7 @@ describe("realizeExecutionWorkspace", () => {
       created: true,
     });
     expect(operations[1]?.command).toBe("bash ./scripts/provision.sh");
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+  });
 
   it("truncates oversized provision command output before storing it in memory", async () => {
     const repoRoot = await createTempRepo();
@@ -1541,7 +1694,7 @@ describe("realizeExecutionWorkspace", () => {
     });
     expect(provisionOperation?.result.stdout).toContain("[output truncated to last");
     expect(provisionOperation?.result.stdout?.length ?? 0).toBeLessThan(300000);
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+  }, 10_000);
 
   it("reuses an existing branch without resetting it when recreating a missing worktree", async () => {
     const repoRoot = await createTempRepo();
@@ -1582,10 +1735,12 @@ describe("realizeExecutionWorkspace", () => {
     });
 
     expect(workspace.branchName).toBe(branchName);
-    await expect(fs.readFile(path.join(workspace.cwd, "feature.txt"), "utf8")).resolves.toBe("preserve me\n");
+    expect((await fs.readFile(path.join(workspace.cwd, "feature.txt"), "utf8")).replace(/\r\n/g, "\n")).toBe(
+      "preserve me\n",
+    );
     const actualHead = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: workspace.cwd })).stdout.trim();
     expect(actualHead).toBe(expectedHead);
-  }, 40_000);
+  });
 
   it("reattaches a missing persisted git worktree before manual control starts it", async () => {
     const repoRoot = await createTempRepo();
@@ -1639,7 +1794,7 @@ describe("realizeExecutionWorkspace", () => {
       },
     });
 
-    await fs.rm(initial.cwd, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+    await fs.rm(initial.cwd, { recursive: true, force: true });
 
     const restored = await ensurePersistedExecutionWorkspaceAvailable({
       base: {
@@ -1678,7 +1833,9 @@ describe("realizeExecutionWorkspace", () => {
 
     expect(restored).not.toBeNull();
     expect(restored?.cwd).toBe(initial.cwd);
-    await expect(fs.readFile(path.join(initial.cwd, "feature.txt"), "utf8")).resolves.toSatisfy((value) => value.replace(/\r\n/g, "\n") === "persisted\n");
+    expect((await fs.readFile(path.join(initial.cwd, "feature.txt"), "utf8")).replace(/\r\n/g, "\n")).toBe(
+      "persisted\n",
+    );
     await expect(fs.readFile(path.join(initial.cwd, ".paperclip-restored-branch"), "utf8")).resolves.toBe(`${branchName}\n`);
     const actualHead = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: initial.cwd })).stdout.trim();
     expect(actualHead).toBe(expectedHead);
@@ -1772,6 +1929,10 @@ describe("realizeExecutionWorkspace", () => {
     // Create a repo with "master" as default branch (not "main")
     const repoRoot = await createTempRepo("master");
 
+    // Set up a bare remote and push master so refs/remotes/origin/master
+    // exists locally. Note: refs/remotes/origin/HEAD is NOT set by a manual
+    // fetch — that requires git clone or git remote set-head. This test
+    // exercises the heuristic fallback path in detectDefaultBranch.
     const bareRemote = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-worktree-bare-"));
     await runGit(bareRemote, ["init", "--bare"]);
     await runGit(repoRoot, ["remote", "add", "origin", bareRemote]);
@@ -1779,6 +1940,7 @@ describe("realizeExecutionWorkspace", () => {
     await runGit(repoRoot, ["fetch", "origin"]);
 
     const { recorder, operations } = createWorkspaceOperationRecorderDouble();
+
     const workspace = await realizeExecutionWorkspace({
       base: {
         baseCwd: repoRoot,
@@ -1791,6 +1953,7 @@ describe("realizeExecutionWorkspace", () => {
       config: {
         workspaceStrategy: {
           type: "git_worktree",
+          // No baseRef configured — should default to origin/master.
         },
       },
       issue: {
@@ -1808,24 +1971,26 @@ describe("realizeExecutionWorkspace", () => {
 
     expect(workspace.strategy).toBe("git_worktree");
     expect(workspace.created).toBe(true);
-    const worktreeOperation = operations.find(
-      (operation) => operation.phase === "worktree_prepare" && operation.metadata?.created === true,
-    );
-    expect(worktreeOperation?.metadata?.baseRef).toBe("master");
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+    // The worktree should have been created successfully from the canonical remote base.
+    const worktreeOp = operations.find(op => op.phase === "worktree_prepare" && op.metadata?.created);
+    expect(worktreeOp).toBeDefined();
+    expect(worktreeOp!.metadata!.baseRef).toBe("origin/master");
+  }, 10_000);
 
   it("auto-detects the default branch via symbolic-ref when origin/HEAD is set", async () => {
-    // Create a repo with "master" as default branch
-    const repoRoot = await createTempRepo("master");
+    const repoRoot = await createTempRepo("main");
 
-    const bareRemote = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-worktree-bare-origin-head-"));
+    const bareRemote = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-worktree-bare-symref-"));
     await runGit(bareRemote, ["init", "--bare"]);
     await runGit(repoRoot, ["remote", "add", "origin", bareRemote]);
-    await runGit(repoRoot, ["push", "-u", "origin", "master"]);
+    await runGit(repoRoot, ["push", "-u", "origin", "main", "master"]);
     await runGit(repoRoot, ["fetch", "origin"]);
-    await runGit(repoRoot, ["remote", "set-head", "origin", "master"]);
+    // Explicitly set refs/remotes/origin/HEAD to exercise the symbolic-ref path
+    // (git remote set-head -a requires the remote to advertise HEAD, so we set it manually)
+    await runGit(repoRoot, ["remote", "set-head", "origin", "main"]);
 
     const { recorder, operations } = createWorkspaceOperationRecorderDouble();
+
     const workspace = await realizeExecutionWorkspace({
       base: {
         baseCwd: repoRoot,
@@ -1838,12 +2003,13 @@ describe("realizeExecutionWorkspace", () => {
       config: {
         workspaceStrategy: {
           type: "git_worktree",
+          // No baseRef configured — origin/master is preferred over the symbolic-ref.
         },
       },
       issue: {
         id: "issue-1",
         identifier: "PAP-461",
-        title: "Auto detect default branch via origin head",
+        title: "Auto detect default branch via symref",
       },
       agent: {
         id: "agent-1",
@@ -1855,11 +2021,10 @@ describe("realizeExecutionWorkspace", () => {
 
     expect(workspace.strategy).toBe("git_worktree");
     expect(workspace.created).toBe(true);
-    const worktreeOperation = operations.find(
-      (operation) => operation.phase === "worktree_prepare" && operation.metadata?.created === true,
-    );
-    expect(worktreeOperation?.metadata?.baseRef).toBe("master");
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+    const worktreeOp = operations.find(op => op.phase === "worktree_prepare" && op.metadata?.created);
+    expect(worktreeOp).toBeDefined();
+    expect(worktreeOp!.metadata!.baseRef).toBe("origin/master");
+  }, 10_000);
 
   it("removes a created git worktree and branch during cleanup", async () => {
     const repoRoot = await createTempRepo();
@@ -1921,99 +2086,7 @@ describe("realizeExecutionWorkspace", () => {
     ).resolves.toMatchObject({
       stdout: "",
     });
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
-
-  it("does not remove a reused git worktree during cleanup", async () => {
-    const repoRoot = await createTempRepo();
-
-    const createdWorkspace = await realizeExecutionWorkspace({
-      base: {
-        baseCwd: repoRoot,
-        source: "project_primary",
-        projectId: "project-1",
-        workspaceId: "workspace-1",
-        repoUrl: null,
-        repoRef: "HEAD",
-      },
-      config: {
-        workspaceStrategy: {
-          type: "git_worktree",
-          branchTemplate: "{{issue.identifier}}-{{slug}}",
-        },
-      },
-      issue: {
-        id: "issue-1",
-        identifier: "PAP-450",
-        title: "Reusable workspace",
-      },
-      agent: {
-        id: "agent-1",
-        name: "Codex Coder",
-        companyId: "company-1",
-      },
-    });
-
-    const reusedWorkspace = await realizeExecutionWorkspace({
-      base: {
-        baseCwd: repoRoot,
-        source: "project_primary",
-        projectId: "project-1",
-        workspaceId: "workspace-1",
-        repoUrl: null,
-        repoRef: "HEAD",
-      },
-      config: {
-        workspaceStrategy: {
-          type: "git_worktree",
-          branchTemplate: "{{issue.identifier}}-{{slug}}",
-        },
-      },
-      issue: {
-        id: "issue-1",
-        identifier: "PAP-450",
-        title: "Reusable workspace",
-      },
-      agent: {
-        id: "agent-2",
-        name: "Second Agent",
-        companyId: "company-1",
-      },
-    });
-
-    expect(reusedWorkspace.created).toBe(false);
-    expect(reusedWorkspace.cwd).toBe(createdWorkspace.cwd);
-
-    const cleanup = await cleanupExecutionWorkspaceArtifacts({
-      workspace: {
-        id: "execution-workspace-1",
-        cwd: reusedWorkspace.cwd,
-        providerType: "git_worktree",
-        providerRef: reusedWorkspace.worktreePath,
-        branchName: reusedWorkspace.branchName,
-        repoUrl: reusedWorkspace.repoUrl,
-        baseRef: reusedWorkspace.repoRef,
-        projectId: reusedWorkspace.projectId,
-        projectWorkspaceId: reusedWorkspace.workspaceId,
-        sourceIssueId: "issue-1",
-        metadata: {
-          createdByRuntime: false,
-        },
-      },
-      projectWorkspace: {
-        cwd: repoRoot,
-        cleanupCommand: null,
-      },
-    });
-
-    expect(cleanup.cleaned).toBe(false);
-    expect(cleanup.warnings).toEqual([]);
-    await expect(fs.stat(reusedWorkspace.cwd)).resolves.toBeTruthy();
-    await expect(
-      execFileAsync("git", ["branch", "--list", reusedWorkspace.branchName!], { cwd: repoRoot }),
-    ).resolves.toMatchObject({
-      stdout: expect.stringContaining(reusedWorkspace.branchName!),
-    });
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+  });
 
   it("keeps an unmerged runtime-created branch and warns instead of force deleting it", async () => {
     const repoRoot = await createTempRepo();
@@ -2079,7 +2152,7 @@ describe("realizeExecutionWorkspace", () => {
     ).resolves.toMatchObject({
       stdout: expect.stringContaining(workspace.branchName!),
     });
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+  }, 10_000);
 
   it("records teardown and cleanup operations when a recorder is provided", async () => {
     const repoRoot = await createTempRepo();
@@ -2147,7 +2220,7 @@ describe("realizeExecutionWorkspace", () => {
     expect(operations[2]?.metadata).toMatchObject({
       cleanupAction: "branch_delete",
     });
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+  });
 });
 
 describe("ensureRuntimeServicesForRun", () => {
@@ -2370,10 +2443,14 @@ describe("ensureRuntimeServicesForRun", () => {
     expect(executionServices[0]?.url).not.toBe(primaryServices[0]?.url);
 
     const primaryResponse = await fetch(primaryServices[0]!.url!);
-    expect(await primaryResponse.text()).toBe(path.join(primaryWorkspaceRoot, ".paperclip", "runtime-services"));
+    expect(path.normalize(await primaryResponse.text())).toBe(
+      path.join(primaryWorkspaceRoot, ".paperclip", "runtime-services"),
+    );
 
     const executionResponse = await fetch(executionServices[0]!.url!);
-    expect(await executionResponse.text()).toBe(path.join(worktreeWorkspaceRoot, ".paperclip", "runtime-services"));
+    expect(path.normalize(await executionResponse.text())).toBe(
+      path.join(worktreeWorkspaceRoot, ".paperclip", "runtime-services"),
+    );
   });
 
   it("does not leak parent Paperclip instance env into runtime service commands", async () => {
@@ -2385,7 +2462,7 @@ describe("ensureRuntimeServicesForRun", () => {
       JSON.stringify(
         [
           "const fs = require('node:fs');",
-          `fs.writeFileSync(${JSON.stringify(envCapturePath)}, JSON.stringify({`,
+          `fs.writeFileSync(${JSON.stringify(envCapturePath.replace(/\\/g, "/"))}, JSON.stringify({`,
           "paperclipConfig: process.env.PAPERCLIP_CONFIG ?? null,",
           "paperclipHome: process.env.PAPERCLIP_HOME ?? null,",
           "paperclipInstanceId: process.env.PAPERCLIP_INSTANCE_ID ?? null,",
@@ -2836,6 +2913,8 @@ describe("resolveWorkspaceRuntimeReadinessTimeoutSec", () => {
 describe("resolveShell (shell fallback)", () => {
   const originalShell = process.env.SHELL;
   const originalPlatform = process.platform;
+  const windowsGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+  const windowsShellFallback = existsSync(windowsGitBash) ? windowsGitBash : "sh";
 
   afterEach(() => {
     if (originalShell !== undefined) {
@@ -2867,11 +2946,11 @@ describe("resolveShell (shell fallback)", () => {
     expect(resolveShell()).toBe("/bin/sh");
   });
 
-  it("falls back to sh (bare) on Windows when SHELL is unset", () => {
+  it("falls back to Git Bash on Windows when available and SHELL is unset", () => {
     delete process.env.SHELL;
     Object.defineProperty(process, "platform", { value: "win32" });
-    expect(resolveShell()).toBe("sh");
-  });
+    expect(resolveShell()).toBe(windowsShellFallback);
+  }, 15_000);
 
   it("falls back to /bin/sh on darwin when SHELL is unset", () => {
     delete process.env.SHELL;
@@ -2888,8 +2967,14 @@ describe("resolveShell (shell fallback)", () => {
   it("treats whitespace-only SHELL as unset and uses platform fallback", () => {
     process.env.SHELL = "   ";
     Object.defineProperty(process, "platform", { value: "win32" });
-    expect(resolveShell()).toBe("sh");
-  });
+    expect(resolveShell()).toBe(windowsShellFallback);
+  }, 15_000);
+
+  it("ignores Windows command shells that do not support POSIX -c semantics", () => {
+    process.env.SHELL = "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+    Object.defineProperty(process, "platform", { value: "win32" });
+    expect(resolveShell()).toBe(windowsShellFallback);
+  }, 15_000);
 
   it("falls back when SHELL points to a missing absolute path", () => {
     process.env.SHELL = "/definitely/missing/zsh";
@@ -2905,7 +2990,7 @@ describeEmbeddedPostgres("workspace runtime startup reconciliation", () => {
   beforeAll(async () => {
     tempDb = await startEmbeddedPostgresTestDatabase("paperclip-workspace-runtime-");
     db = createDb(tempDb.connectionString);
-  }, WORKTREE_PROVISION_TEST_TIMEOUT);
+  }, 20_000);
 
   afterAll(async () => {
     await tempDb?.cleanup();

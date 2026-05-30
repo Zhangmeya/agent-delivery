@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type {
+  Agent,
   DocumentRevision,
   FeedbackDataSharingPreference,
   FeedbackVote,
@@ -15,9 +16,11 @@ import { ApiError } from "../api/client";
 import { issuesApi } from "../api/issues";
 import { useAutosaveIndicator } from "../hooks/useAutosaveIndicator";
 import { deriveDocumentRevisionState } from "../lib/document-revisions";
+import type { CompanyUserProfile } from "../lib/company-members";
 import { queryKeys } from "../lib/queryKeys";
 import { cn, relativeTime } from "../lib/utils";
 import { FoldCurtain } from "./FoldCurtain";
+import { DocumentAnnotationsCountChip, IssueDocumentAnnotations } from "./IssueDocumentAnnotations";
 import { MarkdownBody } from "./MarkdownBody";
 import { MarkdownEditor, type MentionOption } from "./MarkdownEditor";
 import { OutputFeedbackButtons } from "./OutputFeedbackButtons";
@@ -152,6 +155,11 @@ export function IssueDocumentsSection({
   imageUploadHandler,
   onVote,
   extraActions,
+  agentMap,
+  userProfileMap,
+  defaultAnnotationPanelOpenKeys,
+  defaultAnnotationFocusedThreadIds,
+  forceEditDocumentKey,
 }: {
   issue: Issue;
   canDeleteDocuments: boolean;
@@ -167,6 +175,17 @@ export function IssueDocumentsSection({
     options?: { allowSharing?: boolean; reason?: string },
   ) => Promise<void>;
   extraActions?: ReactNode;
+  agentMap?: ReadonlyMap<string, Pick<Agent, "id" | "name">>;
+  userProfileMap?: ReadonlyMap<string, CompanyUserProfile>;
+  /**
+   * Seed which document annotation panels are open on first render. Mostly useful
+   * for Storybook / screenshot harnesses; runtime callers usually omit this.
+   */
+  defaultAnnotationPanelOpenKeys?: string[];
+  /** Per-doc seed for the focused annotation thread id (Storybook-only). */
+  defaultAnnotationFocusedThreadIds?: Readonly<Record<string, string>>;
+  /** Force a doc into edit mode on mount (Storybook-only). */
+  forceEditDocumentKey?: string | null;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -176,6 +195,9 @@ export function IssueDocumentsSection({
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [documentConflict, setDocumentConflict] = useState<DocumentConflictState | null>(null);
   const [foldedDocumentKeys, setFoldedDocumentKeys] = useState<string[]>(() => loadFoldedDocumentKeys(issue.id));
+  const [annotationPanelOpenKeys, setAnnotationPanelOpenKeys] = useState<string[]>(
+    () => (defaultAnnotationPanelOpenKeys ?? []),
+  );
   const [autosaveDocumentKey, setAutosaveDocumentKey] = useState<string | null>(null);
   const [copiedDocumentKey, setCopiedDocumentKey] = useState<string | null>(null);
   const [highlightDocumentKey, setHighlightDocumentKey] = useState<string | null>(null);
@@ -215,8 +237,10 @@ export function IssueDocumentsSection({
       predicate: (query) =>
         Array.isArray(query.queryKey)
         && query.queryKey[0] === "issues"
-        && query.queryKey[1] === "document-revisions"
-        && query.queryKey[2] === issue.id,
+        && (
+          (query.queryKey[1] === "document-revisions" && query.queryKey[2] === issue.id)
+          || (query.queryKey[1] === "document-annotations" && query.queryKey[2] === issue.id)
+        ),
     });
   }, [issue.id, queryClient]);
 
@@ -327,7 +351,9 @@ export function IssueDocumentsSection({
   const isEmpty = sortedDocuments.length === 0 && !issue.legacyPlanDocument;
   const newDocumentKeyError =
     draft?.isNew && draft.key.trim().length > 0 && !DOCUMENT_KEY_PATTERN.test(draft.key.trim())
-      ? "Use lowercase letters, numbers, -, or _, and start with a letter or number."
+      ? t("issueDocuments.documentKeyPatternHint", {
+        defaultValue: "Use lowercase letters, numbers, -, or _, and start with a letter or number.",
+      })
       : null;
 
   const resetAutosaveState = useCallback(() => {
@@ -370,6 +396,17 @@ export function IssueDocumentsSection({
     setError(null);
   };
 
+  const initialEditAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!forceEditDocumentKey) return;
+    if (initialEditAppliedRef.current) return;
+    const target = (documents ?? []).find((entry) => entry.key === forceEditDocumentKey);
+    if (!target) return;
+    initialEditAppliedRef.current = true;
+    beginEdit(forceEditDocumentKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceEditDocumentKey, documents]);
+
   const cancelDraft = () => {
     if (autosaveDebounceRef.current) {
       clearTimeout(autosaveDebounceRef.current);
@@ -399,9 +436,9 @@ export function IssueDocumentsSection({
 
     if (!normalizedKey || !normalizedBody) {
       if (currentDraft.isNew) {
-        setError("Document key and body are required");
+        setError(t("Document key and body are required", { defaultValue: "Document key and body are required" }));
       } else if (!normalizedBody) {
-        setError("Document body cannot be empty");
+        setError(t("Document body cannot be empty", { defaultValue: "Document body cannot be empty" }));
       }
       if (options?.trackAutosave) {
         resetAutosaveState();
@@ -410,7 +447,9 @@ export function IssueDocumentsSection({
     }
 
     if (!DOCUMENT_KEY_PATTERN.test(normalizedKey)) {
-      setError("Document key must start with a letter or number and use only lowercase letters, numbers, -, or _.");
+      setError(t("Document key must start with a letter or number and use only lowercase letters, numbers, -, or _.", {
+        defaultValue: "Document key must start with a letter or number and use only lowercase letters, numbers, -, or _.",
+      }));
       if (options?.trackAutosave) {
         resetAutosaveState();
       }
@@ -470,7 +509,7 @@ export function IssueDocumentsSection({
       return true;
     } catch (err) {
       if (isLockedDocumentError(err)) {
-        setError("Document is locked. Unlock it before editing.");
+        setError(t("issueDocuments.lockedUnlockBeforeEditing", { defaultValue: "Document is locked. Unlock it before editing." }));
         resetAutosaveState();
         invalidateIssueDocuments();
         return false;
@@ -495,7 +534,9 @@ export function IssueDocumentsSection({
           resetAutosaveState();
           return false;
         } catch {
-          setError("Document changed remotely and the latest version could not be loaded");
+          setError(t("Document changed remotely and the latest version could not be loaded", {
+            defaultValue: "Document changed remotely and the latest version could not be loaded",
+          }));
           return false;
         }
       }
@@ -560,7 +601,7 @@ export function IssueDocumentsSection({
         setCopiedDocumentKey((current) => current === key ? null : current);
       }, 1400);
     } catch {
-      setError("Could not copy document");
+      setError(t("Could not copy document", { defaultValue: "Could not copy document" }));
     }
   }, []);
 
@@ -585,7 +626,9 @@ export function IssueDocumentsSection({
       return;
     }
     if (documentConflict?.key === doc.key || documentHasUnsavedChanges(doc, draft)) {
-      setError("Save or cancel your local changes before viewing an older revision.");
+      setError(t("issueDocuments.saveOrCancelBeforeHistoricalRevision", {
+        defaultValue: "Save or cancel your local changes before viewing an older revision.",
+      }));
       return;
     }
     resetAutosaveState();
@@ -599,7 +642,9 @@ export function IssueDocumentsSection({
   const toggleDocumentLock = useCallback((doc: IssueDocument, locked: boolean) => {
     if (!canManageDocumentLocks || setDocumentLock.isPending) return;
     if (locked && (documentConflict?.key === doc.key || documentHasUnsavedChanges(doc, draft))) {
-      setError("Save or cancel local changes before changing the document lock.");
+      setError(t("issueDocuments.saveOrCancelBeforeLockChange", {
+        defaultValue: "Save or cancel local changes before changing the document lock.",
+      }));
       return;
     }
     setDocumentLock.mutate({ key: doc.key, locked });
@@ -728,6 +773,24 @@ export function IssueDocumentsSection({
         : [...current, key],
     );
   };
+  const setAnnotationPanelOpen = useCallback((key: string, nextOpen: boolean) => {
+    setAnnotationPanelOpenKeys((current) => {
+      const isOpen = current.includes(key);
+      if (nextOpen && !isOpen) return [...current, key];
+      if (!nextOpen && isOpen) return current.filter((entry) => entry !== key);
+      return current;
+    });
+    if (nextOpen) {
+      setFoldedDocumentKeys((current) => current.filter((entry) => entry !== key));
+    }
+  }, []);
+  const toggleAnnotationPanel = useCallback((key: string) => {
+    setAnnotationPanelOpenKeys((current) => {
+      if (current.includes(key)) return current.filter((entry) => entry !== key);
+      setFoldedDocumentKeys((folded) => folded.filter((entry) => entry !== key));
+      return [...current, key];
+    });
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -960,6 +1023,14 @@ export function IssueDocumentsSection({
                     >
                       {t("updated {{time}}", { defaultValue: "updated {{time}}", time: relativeTime(displayedUpdatedAt) })}
                     </a>
+                    {!isSystemIssueDocumentKey(doc.key) ? (
+                      <DocumentAnnotationsCountChip
+                        issueId={issue.id}
+                        docKey={doc.key}
+                        panelOpen={annotationPanelOpenKeys.includes(doc.key)}
+                        onToggle={() => toggleAnnotationPanel(doc.key)}
+                      />
+                    ) : null}
                   </div>
                   {showTitle && <p className="mt-2 text-sm font-medium">{displayedTitle}</p>}
                 </div>
@@ -972,15 +1043,29 @@ export function IssueDocumentsSection({
                         "text-muted-foreground transition-colors",
                         isLocked && "text-amber-300 hover:text-amber-200",
                       )}
-                      title={isLocked ? "Unlock document" : "Lock document"}
-                      aria-label={isLocked ? `Unlock ${doc.key} document` : `Lock ${doc.key} document`}
+                      title={isLocked
+                        ? t("issueDocuments.unlockDocument", { defaultValue: "Unlock document" })
+                        : t("issueDocuments.lockDocument", { defaultValue: "Lock document" })}
+                      aria-label={isLocked
+                        ? t("issueDocuments.unlockDocumentAria", {
+                          defaultValue: "Unlock {{key}} document",
+                          key: doc.key,
+                        })
+                        : t("issueDocuments.lockDocumentAria", {
+                          defaultValue: "Lock {{key}} document",
+                          key: doc.key,
+                        })}
                       onClick={() => toggleDocumentLock(doc, !isLocked)}
                       disabled={lockActionPending}
                     >
                       {isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
                     </Button>
                   ) : isLocked ? (
-                    <span title="Locked document" aria-label="Locked document" className="inline-flex h-6 w-6 items-center justify-center text-amber-300">
+                    <span
+                      title={t("issueDocuments.lockedDocument", { defaultValue: "Locked document" })}
+                      aria-label={t("issueDocuments.lockedDocument", { defaultValue: "Locked document" })}
+                      className="inline-flex h-6 w-6 items-center justify-center text-amber-300"
+                    >
                       <Lock className="h-3.5 w-3.5" />
                     </span>
                   ) : null}
@@ -1165,9 +1250,19 @@ export function IssueDocumentsSection({
                       {activeConflict.showRemote && (
                         <div className="mt-3 rounded-md border border-border/70 bg-background/60 p-3">
                           <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <span>Remote revision {activeConflict.serverDocument.latestRevisionNumber}</span>
+                            <span>
+                              {t("issueDocuments.remoteRevision", {
+                                defaultValue: "Remote revision {{number}}",
+                                number: activeConflict.serverDocument.latestRevisionNumber,
+                              })}
+                            </span>
                             <span>•</span>
-                            <span>updated {relativeTime(activeConflict.serverDocument.updatedAt)}</span>
+                            <span>
+                              {t("updated {{time}}", {
+                                defaultValue: "updated {{time}}",
+                                time: relativeTime(activeConflict.serverDocument.updatedAt),
+                              })}
+                            </span>
                           </div>
                           {!isPlanKey(doc.key) && activeConflict.serverDocument.title ? (
                             <p className="mb-2 text-sm font-medium">{activeConflict.serverDocument.title}</p>
@@ -1184,7 +1279,7 @@ export function IssueDocumentsSection({
                         markDocumentDirty(doc.key);
                         setDraft((current) => current ? { ...current, title: event.target.value } : current);
                       }}
-                      placeholder="Optional title"
+                      placeholder={t("Optional title", { defaultValue: "Optional title" })}
                     />
                   )}
                   <div
@@ -1192,31 +1287,49 @@ export function IssueDocumentsSection({
                       activeDraft || isHistoricalPreview ? "" : "rounded-md hover:bg-accent/10"
                     }`}
                   >
-                    {isHistoricalPreview ? (
-                      renderFoldableBody(displayedBody, documentBodyContentClassName)
-                    ) : activeDraft ? (
-                      <MarkdownEditor
-                        value={displayedBody}
-                        onChange={(body) => {
-                          markDocumentDirty(doc.key);
-                          setDraft((current) => {
-                            if (current && current.key === doc.key && !current.isNew) {
-                              return { ...current, body };
-                            }
-                            return current;
-                          });
-                        }}
-                        placeholder="Markdown body"
-                        bordered={false}
-                        className="bg-transparent"
-                        contentClassName={documentBodyContentClassName}
-                        mentions={mentions}
-                        imageUploadHandler={imageUploadHandler}
-                        onSubmit={() => void commitDraft(activeDraft ?? draft, { clearAfterSave: false, trackAutosave: true })}
-                      />
-                    ) : (
-                      renderFoldableBody(displayedBody, documentBodyContentClassName)
-                    )}
+                    <IssueDocumentAnnotations
+                      issueId={issue.id}
+                      doc={doc}
+                      bodyMarkdown={displayedBody}
+                      draftDirty={Boolean(activeDraft) && (
+                        (activeDraft?.body ?? doc.body) !== doc.body
+                        || (autosaveDocumentKey === doc.key && autosaveState === "saving")
+                      )}
+                      draftConflicted={Boolean(activeConflict)}
+                      historicalPreview={isHistoricalPreview}
+                      locationHash={location.hash}
+                      panelOpen={annotationPanelOpenKeys.includes(doc.key)}
+                      onPanelOpenChange={(next) => setAnnotationPanelOpen(doc.key, next)}
+                      agentMap={agentMap}
+                      userProfileMap={userProfileMap}
+                      defaultFocusedThreadId={defaultAnnotationFocusedThreadIds?.[doc.key]}
+                    >
+                      {isHistoricalPreview ? (
+                        renderFoldableBody(displayedBody, documentBodyContentClassName)
+                      ) : activeDraft ? (
+                        <MarkdownEditor
+                          value={displayedBody}
+                          onChange={(body) => {
+                            markDocumentDirty(doc.key);
+                            setDraft((current) => {
+                              if (current && current.key === doc.key && !current.isNew) {
+                                return { ...current, body };
+                              }
+                              return current;
+                            });
+                          }}
+                          placeholder={t("issueDocuments.markdownBodyPlaceholder", { defaultValue: "Markdown body" })}
+                          bordered={false}
+                          className="bg-transparent"
+                          contentClassName={documentBodyContentClassName}
+                          mentions={mentions}
+                          imageUploadHandler={imageUploadHandler}
+                          onSubmit={() => void commitDraft(activeDraft ?? draft, { clearAfterSave: false, trackAutosave: true })}
+                        />
+                      ) : (
+                        renderFoldableBody(displayedBody, documentBodyContentClassName)
+                      )}
+                    </IssueDocumentAnnotations>
                   </div>
                   <div className="flex min-h-4 items-center justify-end px-1">
                     <span

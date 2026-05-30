@@ -2,9 +2,9 @@
  * `@penclipai/plugin-sdk/ui` — published package subpath for the Paperclip plugin UI SDK.
  *
  * For cross-host-compatible plugin source, import UI code from
- * `@paperclipai/plugin-sdk/ui`. Do **not** import this from plugin worker code.
+ * `@penclipai/plugin-sdk/ui`. Do **not** import this from plugin worker code.
  *
- * The worker-side compatibility SDK is available from `@paperclipai/plugin-sdk`.
+ * The worker-side compatibility SDK is available from `@penclipai/plugin-sdk`.
  *
  * @see PLUGIN_SPEC.md §19.0.1 — Plugin UI SDK
  * @see PLUGIN_SPEC.md §29.2 — SDK Versioning
@@ -12,8 +12,8 @@
  * @example
  * ```tsx
  * // Plugin UI bundle entry (dist/ui/index.tsx)
- * import { usePluginData, usePluginAction } from "@paperclipai/plugin-sdk/ui";
- * import type { PluginWidgetProps } from "@paperclipai/plugin-sdk/ui";
+ * import { usePluginData, usePluginAction } from "@penclipai/plugin-sdk/ui";
+ * import type { PluginWidgetProps } from "@penclipai/plugin-sdk/ui";
  *
  * export function DashboardWidget({ context }: PluginWidgetProps) {
  *   const { data, loading, error } = usePluginData("sync-health", {
@@ -146,6 +146,7 @@ export type {
 // Slot component prop interfaces
 export type {
   PluginPageProps,
+  PluginCompanySettingsPageProps,
   PluginWidgetProps,
   PluginDetailTabProps,
   PluginSidebarProps,

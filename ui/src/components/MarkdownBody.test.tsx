@@ -18,10 +18,14 @@ import { queryKeys } from "../lib/queryKeys";
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>();
+  const translate = (key: string, options?: Record<string, unknown>) =>
+    String(options?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+      options?.[name] == null ? `{{${name}}}` : String(options[name]),
+    );
   return {
     ...actual,
     useTranslation: () => ({
-      t: (_key: string, options?: Record<string, unknown>) => String(options?.defaultValue ?? _key),
+      t: translate,
     }),
   };
 });
@@ -459,9 +463,23 @@ describe("MarkdownBody", () => {
     const html = renderMarkdown("```ts\nconst a = 1;\n```");
 
     expect(html).toContain("paperclip-markdown-codeblock");
+    expect(html).toContain("paperclip-markdown-codeblock-actions");
+    expect(html).toContain("position:absolute;top:0.4rem;right:0.4rem;display:inline-flex");
+    expect(html).toContain("paperclip-markdown-codeblock-wrap");
+    expect(html).toContain('aria-label="Wrap lines"');
+    expect(html).toContain("position:static;opacity:1;display:inline-flex");
     expect(html).toContain("paperclip-markdown-codeblock-copy");
     expect(html).toContain('aria-label="Copy code"');
     expect(html).toContain("lucide-copy");
+  });
+
+  it("renders code block actions for indented preformatted markdown blocks", () => {
+    const html = renderMarkdown("Plan:\n\n    source fetch/sync -> signal inbox");
+
+    expect(html).toContain("paperclip-markdown-codeblock");
+    expect(html).toContain("paperclip-markdown-codeblock-wrap");
+    expect(html).toContain('aria-label="Wrap lines"');
+    expect(html).toContain("paperclip-markdown-codeblock-copy");
   });
 
   it("does not render a copy button on inline code", () => {

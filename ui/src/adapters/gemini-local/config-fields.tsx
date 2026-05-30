@@ -1,4 +1,5 @@
 import type { AdapterConfigFieldsProps } from "../types";
+import { useTranslation } from "react-i18next";
 import {
   DraftInput,
   Field,
@@ -19,10 +20,18 @@ export function GeminiLocalConfigFields({
   mark,
   hideInstructionsFile,
 }: AdapterConfigFieldsProps) {
+  const { t } = useTranslation();
   if (hideInstructionsFile) return null;
   return (
     <>
-      <Field label="Agent instructions file" hint={instructionsFileHint}>
+      <Field
+        label={t("agentConfig.instructionsFileLabel", {
+          defaultValue: "Agent instructions file",
+        })}
+        hint={t("agentConfig.geminiInstructionsFileHint", {
+          defaultValue: instructionsFileHint,
+        })}
+      >
         <div className="flex items-center gap-2">
           <DraftInput
             value={
@@ -41,7 +50,9 @@ export function GeminiLocalConfigFields({
             }
             immediate
             className={inputClass}
-            placeholder="/absolute/path/to/AGENTS.md"
+            placeholder={t("agentConfig.instructionsFilePlaceholder", {
+              defaultValue: "/absolute/path/to/AGENTS.md",
+            })}
           />
           <ChoosePathButton />
         </div>

@@ -3,6 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdapterModel } from "@penclipai/adapter-utils";
+import { models as claudeFallbackModels } from "@penclipai/adapter-claude-local";
+import { resetClaudeModelsCacheForTests } from "@penclipai/adapter-claude-local/server";
 import { resetCodeBuddyModelsCacheForTests } from "@penclipai/adapter-codebuddy-local/server";
 import { models as codexFallbackModels } from "@penclipai/adapter-codex-local";
 import { models as cursorFallbackModels } from "@penclipai/adapter-cursor-local";
@@ -40,7 +42,13 @@ describe("adapter model listing", () => {
   beforeEach(() => {
     delete process.env.PAPERCLIP_CODEBUDDY_COMMAND;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_BASE_URL;
+    delete process.env.ANTHROPIC_BEDROCK_BASE_URL;
+    delete process.env.CLAUDE_CODE_USE_BEDROCK;
     delete process.env.PAPERCLIP_OPENCODE_COMMAND;
+    resetCodeBuddyModelsCacheForTests();
+    resetClaudeModelsCacheForTests();
     resetCodeBuddyModelsCacheForTests();
     resetCodexModelsCacheForTests();
     resetCursorModelsCacheForTests();
@@ -82,6 +90,72 @@ describe("adapter model listing", () => {
 
     expect(models).toEqual(codexFallbackModels);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns claude fallback models including the latest Opus alias when no Anthropic key is available", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const models = await listAdapterModels("claude_local");
+
+    expect(models).toEqual(claudeFallbackModels);
+    expect(models.some((model) => model.id === "claude-opus-4-8")).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("loads claude models dynamically and merges fallback options", async () => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: "claude-sonnet-4-20250514", display_name: "Claude Sonnet 4" },
+          { id: "claude-opus-4-8-20260529", display_name: "Claude Opus 4.8" },
+        ],
+      }),
+    } as Response);
+
+    const first = await listAdapterModels("claude_local");
+    const second = await listAdapterModels("claude_local");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(first).toEqual(second);
+    expect(first.some((model) => model.id === "claude-opus-4-8-20260529")).toBe(true);
+    expect(first.some((model) => model.id === "claude-opus-4-8")).toBe(true);
+  });
+
+  it("refreshes cached claude models on demand", async () => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [{ id: "claude-sonnet-4-20250514", display_name: "Claude Sonnet 4" }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [{ id: "claude-opus-4-8-20260529", display_name: "Claude Opus 4.8" }],
+        }),
+      } as Response);
+
+    const initial = await listAdapterModels("claude_local");
+    const refreshed = await refreshAdapterModels("claude_local");
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(initial.some((model) => model.id === "claude-sonnet-4-20250514")).toBe(true);
+    expect(refreshed.some((model) => model.id === "claude-opus-4-8-20260529")).toBe(true);
+  });
+
+  it("falls back to static claude models when Anthropic model discovery fails", async () => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    } as Response);
+
+    const models = await listAdapterModels("claude_local");
+    expect(models).toEqual(claudeFallbackModels);
   });
 
   it("loads codex models dynamically and merges fallback options", async () => {

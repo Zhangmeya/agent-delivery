@@ -36,7 +36,7 @@ Outside this repo, the scaffold keeps those same compatibility imports and snaps
 If you want the generated package to target already-published npm artifacts instead, pass `--published`:
 
 ```bash
-node packages/plugins/create-paperclip-plugin/dist/cli.js @acme/my-plugin \
+node packages/plugins/create-paperclip-plugin/dist/bin.js @acme/my-plugin \
   --output /absolute/path/to/plugins \
   --sdk-path /absolute/path/to/paperclip/packages/plugins/sdk \
   --published

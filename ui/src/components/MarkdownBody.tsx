@@ -1,6 +1,7 @@
 import { isValidElement, useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, Github } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { Check, Copy, ExternalLink, Github, WrapText } from "lucide-react";
 import Markdown, { defaultUrlTransform, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "../lib/utils";
@@ -35,56 +36,43 @@ let mermaidLoaderPromise: Promise<typeof import("mermaid").default> | null = nul
 
 function MarkdownIssueLink({
   issuePathId,
-  href,
   children,
 }: {
   issuePathId: string;
-  href: string;
   children: ReactNode;
 }) {
-  const queryClient = useQueryClient();
-  const [issue, setIssue] = useState(() =>
-    queryClient.getQueryData<{ identifier?: string | null; title?: string | null; status?: string | null }>(
-      queryKeys.issues.detail(issuePathId),
-    ) ?? null,
-  );
+  const { t } = useTranslation();
+  const { data } = useQuery({
+    queryKey: queryKeys.issues.detail(issuePathId),
+    queryFn: () => issuesApi.get(issuePathId),
+    staleTime: 60_000,
+  });
 
-  useEffect(() => {
-    if (issue || typeof window === "undefined") return;
-
-    let active = true;
-    void queryClient
-      .fetchQuery({
-        queryKey: queryKeys.issues.detail(issuePathId),
-        queryFn: () => issuesApi.get(issuePathId),
-        staleTime: 60_000,
-      })
-      .then((nextIssue) => {
-        if (active) setIssue(nextIssue);
-      })
-      .catch(() => {
-        // Ignore issue-detail fetch failures inside markdown link decoration.
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [issue, issuePathId, queryClient]);
-
-  const identifier = issue?.identifier ?? issuePathId;
-  const title = issue?.title ?? identifier;
-  const status = issue?.status;
-  const issueLabel = title !== identifier ? `Issue ${identifier}: ${title}` : `Issue ${identifier}`;
+  const identifier = data?.identifier ?? issuePathId;
+  const title = data?.title ?? identifier;
+  const status = data?.status;
+  const issueLabel = title !== identifier
+    ? t("markdownBody.issueLinkWithTitle", {
+      defaultValue: "Issue {{identifier}}: {{title}}",
+      identifier,
+      title,
+    })
+    : t("markdownBody.issueLink", {
+      defaultValue: "Issue {{identifier}}",
+      identifier,
+    });
 
   return (
     <Link
-      to={issue?.identifier ? `/issues/${identifier}` : href}
+      to={`/issues/${identifier}`}
       data-mention-kind="issue"
       className="paperclip-markdown-issue-ref"
       title={title}
       aria-label={issueLabel}
     >
-      {status ? <StatusIcon status={status} className="mr-1 h-3 w-3 align-[-0.125em]" /> : null}
+      {status ? (
+        <StatusIcon status={status} className="mr-1 h-3 w-3 align-[-0.125em]" />
+      ) : null}
       {children}
     </Link>
   );
@@ -105,6 +93,39 @@ const wrapAnywhereStyle: React.CSSProperties = {
 const scrollableBlockStyle: React.CSSProperties = {
   maxWidth: "100%",
   overflowX: "auto",
+};
+
+const codeBlockActionsStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "0.4rem",
+  right: "0.4rem",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.25rem",
+};
+
+const codeBlockActionStyle: React.CSSProperties = {
+  position: "static",
+  opacity: 1,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "0.25rem",
+  minHeight: "1.55rem",
+  padding: "0.2rem 0.4rem",
+  borderRadius: "calc(var(--radius) - 4px)",
+  border: "1px solid color-mix(in oklab, var(--foreground) 14%, transparent)",
+  backgroundColor: "color-mix(in oklab, var(--muted) 92%, var(--background) 8%)",
+  color: "var(--muted-foreground)",
+  fontSize: "0.7rem",
+  lineHeight: 1,
+  cursor: "pointer",
+};
+
+const codeBlockWrapActionStyle: React.CSSProperties = {
+  ...codeBlockActionStyle,
+  width: "1.55rem",
+  paddingInline: 0,
 };
 
 const tableCellWrapStyle: React.CSSProperties = {
@@ -385,8 +406,10 @@ function CodeBlock({
   children: ReactNode;
   preProps: React.HTMLAttributes<HTMLPreElement>;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [wrapLines, setWrapLines] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -424,38 +447,81 @@ function CodeBlock({
     }, 1500);
   }, [children]);
 
-  const label = failed ? "Copy failed" : copied ? "Copied!" : "Copy";
+  const copyLabel = failed
+    ? t("Copy failed", { defaultValue: "Copy failed" })
+    : copied
+      ? t("Copied!", { defaultValue: "Copied!" })
+      : t("Copy", { defaultValue: "Copy" });
+  const wrapLabel = wrapLines
+    ? t("markdownBody.unwrapLines", { defaultValue: "Unwrap lines" })
+    : t("markdownBody.wrapLines", { defaultValue: "Wrap lines" });
 
   return (
-    <div className="paperclip-markdown-codeblock">
+    <div className="paperclip-markdown-codeblock" data-wrap-lines={wrapLines || undefined}>
       <pre
         {...preProps}
         ref={preRef}
-        style={mergeScrollableBlockStyle(preProps.style as React.CSSProperties | undefined)}
+        style={{
+          ...mergeScrollableBlockStyle(preProps.style as React.CSSProperties | undefined),
+          ...(wrapLines
+            ? {
+                overflowX: "hidden",
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+                wordBreak: "break-word",
+              }
+            : null),
+        }}
       >
         {children}
       </pre>
-      <button
-        type="button"
-        onClick={handleCopy}
-        aria-label="Copy code"
-        title={label}
-        className="paperclip-markdown-codeblock-copy"
-        data-copied={copied || undefined}
-        data-failed={failed || undefined}
+      <div
+        className="paperclip-markdown-codeblock-actions"
+        style={codeBlockActionsStyle}
+        data-active={copied || failed || wrapLines || undefined}
       >
-        {copied && !failed ? (
-          <Check aria-hidden="true" className="h-3.5 w-3.5" />
-        ) : (
-          <Copy aria-hidden="true" className="h-3.5 w-3.5" />
-        )}
-        <span className="paperclip-markdown-codeblock-copy-label">{label}</span>
-      </button>
+        <button
+          type="button"
+          onClick={() => setWrapLines((value) => !value)}
+          aria-label={wrapLabel}
+          title={wrapLabel}
+          className="paperclip-markdown-codeblock-action paperclip-markdown-codeblock-wrap"
+          style={wrapLines
+            ? {
+                ...codeBlockWrapActionStyle,
+                borderColor: "color-mix(in oklab, var(--primary) 38%, transparent)",
+                color: "var(--primary)",
+              }
+            : codeBlockWrapActionStyle}
+          aria-pressed={wrapLines}
+          data-active={wrapLines || undefined}
+        >
+          <WrapText aria-hidden="true" className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label={t("markdownBody.copyCode", { defaultValue: "Copy code" })}
+          title={copyLabel}
+          className="paperclip-markdown-codeblock-action paperclip-markdown-codeblock-copy"
+          style={codeBlockActionStyle}
+          data-copied={copied || undefined}
+          data-failed={failed || undefined}
+        >
+          {copied && !failed ? (
+            <Check aria-hidden="true" className="h-3.5 w-3.5" />
+          ) : (
+            <Copy aria-hidden="true" className="h-3.5 w-3.5" />
+          )}
+          <span className="paperclip-markdown-codeblock-action-label">{copyLabel}</span>
+        </button>
+      </div>
     </div>
   );
 }
 
 function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: boolean }) {
+  const { t } = useTranslation();
   const renderId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -483,14 +549,14 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
         const message =
           err instanceof Error && err.message
             ? err.message
-            : "Failed to render Mermaid diagram.";
+            : t("markdownBody.mermaidRenderFailed", { defaultValue: "Failed to render Mermaid diagram." });
         setError(message);
       });
 
     return () => {
       active = false;
     };
-  }, [darkMode, renderId, source]);
+  }, [darkMode, renderId, source, t]);
 
   return (
     <div className="paperclip-mermaid">
@@ -499,7 +565,12 @@ function MermaidDiagramBlock({ source, darkMode }: { source: string; darkMode: b
       ) : (
         <>
           <p className={cn("paperclip-mermaid-status", error && "paperclip-mermaid-status-error")}>
-            {error ? `Unable to render Mermaid diagram: ${error}` : "Rendering Mermaid diagram..."}
+            {error
+              ? t("markdownBody.mermaidUnableToRender", {
+                defaultValue: "Unable to render Mermaid diagram: {{error}}",
+                error,
+              })
+              : t("markdownBody.mermaidRendering", { defaultValue: "Rendering Mermaid diagram..." })}
           </p>
           <pre className="paperclip-mermaid-source">
             <code className="language-mermaid">{source}</code>
@@ -522,6 +593,7 @@ export function MarkdownBody({
   resolveImageSrc,
   onImageClick,
 }: MarkdownBodyProps) {
+  const { t } = useTranslation();
   const { theme } = useTheme();
   const remarkPlugins: NonNullable<Options["remarkPlugins"]> = [remarkGfm];
   if (enableWikiLinks) {
@@ -550,7 +622,12 @@ export function MarkdownBody({
       </blockquote>
     ),
     table: ({ node: _node, style: tableStyle, children: tableChildren, ...tableProps }) => (
-      <div className="paperclip-markdown-table-scroll" role="region" aria-label="Scrollable table" tabIndex={0}>
+      <div
+        className="paperclip-markdown-table-scroll"
+        role="region"
+        aria-label={t("markdownBody.scrollableTable", { defaultValue: "Scrollable table" })}
+        tabIndex={0}
+      >
         <table {...tableProps} style={tableStyle as React.CSSProperties | undefined}>
           {tableChildren}
         </table>
@@ -597,7 +674,7 @@ export function MarkdownBody({
       const issueRef = linkIssueReferences ? parseIssueReferenceFromHref(href) : null;
       if (issueRef) {
         return (
-          <MarkdownIssueLink issuePathId={issueRef.issuePathId} href={href ?? `/issues/${issueRef.issuePathId}`}>
+          <MarkdownIssueLink issuePathId={issueRef.issuePathId}>
             {linkChildren}
           </MarkdownIssueLink>
         );

@@ -29,6 +29,7 @@ import {
   type ReactNode,
   type ComponentType,
 } from "react";
+import { useTranslation } from "react-i18next";
 import * as ReactModule from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
@@ -124,9 +125,28 @@ type UsePluginSlotsResult = {
  * Keys are `${pluginKey}:${exportName}` to match manifest slot declarations.
  */
 const registry = new Map<string, RegisteredPluginComponent>();
+const registryListeners = new Set<() => void>();
 
 function buildRegistryKey(pluginKey: string, exportName: string): string {
   return `${pluginKey}:${exportName}`;
+}
+
+function notifyRegistryListeners(): void {
+  for (const listener of registryListeners) {
+    listener();
+  }
+}
+
+function usePluginRegistrySubscription(): void {
+  const [, forceRerender] = useState(0);
+
+  useEffect(() => {
+    const listener = () => forceRerender((tick) => tick + 1);
+    registryListeners.add(listener);
+    return () => {
+      registryListeners.delete(listener);
+    };
+  }, []);
 }
 
 function requiresEntityType(slotType: PluginUiSlotType): boolean {
@@ -150,6 +170,7 @@ export function registerPluginReactComponent(
     kind: "react",
     component,
   });
+  notifyRegistryListeners();
 }
 
 /**
@@ -164,6 +185,7 @@ export function registerPluginWebComponent(
     kind: "web-component",
     tagName,
   });
+  notifyRegistryListeners();
 }
 
 function resolveRegisteredComponent(slot: ResolvedPluginSlot): RegisteredPluginComponent | null {
@@ -175,6 +197,24 @@ export function resolveRegisteredPluginComponent(
   exportName: string,
 ): RegisteredPluginComponent | null {
   return registry.get(buildRegistryKey(pluginKey, exportName)) ?? null;
+}
+
+function isRegisterablePluginExport(exported: unknown): boolean {
+  return typeof exported === "function" || typeof exported === "string";
+}
+
+function collectRegisterableExportNames(
+  mod: Record<string, unknown>,
+  declaredExports: Set<string>,
+): Set<string> {
+  const exportNames = new Set(declaredExports);
+  for (const [exportName, exported] of Object.entries(mod)) {
+    if (exportName === "default") continue;
+    if (isRegisterablePluginExport(exported)) {
+      exportNames.add(exportName);
+    }
+  }
+  return exportNames;
 }
 
 // ---------------------------------------------------------------------------
@@ -493,7 +533,8 @@ async function loadPluginModule(contribution: PluginUiContribution): Promise<voi
         }
       }
 
-      for (const exportName of declaredExports) {
+      const exportNames = collectRegisterableExportNames(mod, declaredExports);
+      for (const exportName of exportNames) {
         const exported = mod[exportName];
         if (exported === undefined) {
           console.warn(
@@ -677,6 +718,7 @@ export function usePluginSlots(filters: SlotFilters): UsePluginSlotsResult {
 type PluginSlotErrorBoundaryProps = {
   slot: ResolvedPluginSlot;
   className?: string;
+  renderErrorLabel: string;
   children: ReactNode;
 };
 
@@ -705,7 +747,7 @@ class PluginSlotErrorBoundary extends Component<PluginSlotErrorBoundaryProps, Pl
     if (this.state.hasError) {
       return (
         <div className={cn("rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive", this.props.className)}>
-          {this.props.slot.pluginDisplayName}: failed to render
+          {this.props.slot.pluginDisplayName}: {this.props.renderErrorLabel}
         </div>
       );
     }
@@ -805,6 +847,8 @@ export function PluginSlotMount({
   className,
   missingBehavior = "hidden",
 }: PluginSlotMountProps) {
+  const { t } = useTranslation();
+  usePluginRegistrySubscription();
   const [, forceRerender] = useState(0);
   const component = resolveRegisteredComponent(slot);
 
@@ -837,7 +881,13 @@ export function PluginSlotMount({
   if (component.kind === "react") {
     const node = createElement(component.component, { slot, context });
     return (
-      <PluginSlotErrorBoundary slot={slot} className={className}>
+      <PluginSlotErrorBoundary
+        slot={slot}
+        className={className}
+        renderErrorLabel={t("pluginUi.slotFailedToRender", {
+          defaultValue: "failed to render",
+        })}
+      >
         <PluginBridgeScope pluginId={slot.pluginId} context={context}>
           {className ? <div className={className}>{node}</div> : node}
         </PluginBridgeScope>
@@ -846,7 +896,13 @@ export function PluginSlotMount({
   }
 
   return (
-    <PluginSlotErrorBoundary slot={slot} className={className}>
+    <PluginSlotErrorBoundary
+      slot={slot}
+      className={className}
+      renderErrorLabel={t("pluginUi.slotFailedToRender", {
+        defaultValue: "failed to render",
+      })}
+    >
       <PluginWebComponentMount
         tagName={component.tagName}
         slot={slot}
@@ -876,6 +932,7 @@ export function PluginSlotOutlet({
   errorClassName,
   missingBehavior = "hidden",
 }: PluginSlotOutletProps) {
+  const { t } = useTranslation();
   const { slots, errorMessage } = usePluginSlots({
     slotTypes,
     entityType,
@@ -885,7 +942,10 @@ export function PluginSlotOutlet({
   if (errorMessage) {
     return (
       <div className={cn("rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-xs text-destructive", errorClassName)}>
-        Plugin extensions unavailable: {errorMessage}
+        {t("pluginUi.extensionsUnavailable", {
+          message: errorMessage,
+          defaultValue: "Plugin extensions unavailable: {{message}}",
+        })}
       </div>
     );
   }
@@ -932,3 +992,4 @@ export function _resetPluginModuleLoader(): void {
 export const _applyJsxRuntimeKeyForTests = applyJsxRuntimeKey;
 export const _createReactShimSourceForTests = createReactShimSource;
 export const _rewriteBareSpecifiersForTests = rewriteBareSpecifiers;
+export const _collectRegisterableExportNamesForTests = collectRegisterableExportNames;

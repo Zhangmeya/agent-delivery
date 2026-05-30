@@ -10,36 +10,26 @@ import {
   agentTaskSessions,
   agentWakeupRequests,
   issues,
-  issueApprovals,
-  issueAttachments,
   issueComments,
-  issueDocuments,
-  issueExecutionDecisions,
-  issueInboxArchives,
-  issueLabels,
-  issueReadStates,
-  issueWorkProducts,
   projects,
   goals,
   heartbeatRuns,
   heartbeatRunEvents,
   costEvents,
   financeEvents,
+  issueReadStates,
   approvalComments,
   approvals,
   activityLog,
-  companySkills,
   companySecrets,
-  documents,
-  documentRevisions,
-  feedbackVotes,
   joinRequests,
   invites,
   principalPermissionGrants,
   companyMemberships,
+  companySkills,
+  documents,
 } from "@penclipai/db";
 import { notFound, unprocessable } from "../errors.js";
-import { isUniqueViolation } from "./db-errors.js";
 import { environmentService } from "./environments.js";
 
 export function companyService(db: Db) {
@@ -135,7 +125,18 @@ export function companyService(db: Db) {
   }
 
   function isIssuePrefixConflict(error: unknown) {
-    return isUniqueViolation(error, "companies_issue_prefix_idx");
+    const seen = new Set<unknown>();
+    let current = error;
+    while (typeof current === "object" && current !== null && !seen.has(current)) {
+      seen.add(current);
+      const maybe = current as { code?: string; constraint?: string; constraint_name?: string; cause?: unknown };
+      const constraint = maybe.constraint ?? maybe.constraint_name;
+      if (maybe.code === "23505" && constraint === "companies_issue_prefix_idx") {
+        return true;
+      }
+      current = maybe.cause;
+    }
+    return false;
   }
 
   async function createCompanyWithUniquePrefix(data: typeof companies.$inferInsert) {
@@ -266,35 +267,36 @@ export function companyService(db: Db) {
     remove: (id: string) =>
       db.transaction(async (tx) => {
         // Delete from child tables in dependency order
-        await tx.delete(activityLog).where(eq(activityLog.companyId, id));
+        const companyRunIds = await tx
+          .select({ id: heartbeatRuns.id })
+          .from(heartbeatRuns)
+          .where(eq(heartbeatRuns.companyId, id));
+
         await tx.delete(heartbeatRunEvents).where(eq(heartbeatRunEvents.companyId, id));
+        if (companyRunIds.length > 0) {
+          await tx
+            .delete(heartbeatRunEvents)
+            .where(inArray(heartbeatRunEvents.runId, companyRunIds.map((run) => run.id)));
+        }
         await tx.delete(agentTaskSessions).where(eq(agentTaskSessions.companyId, id));
+        await tx.delete(activityLog).where(eq(activityLog.companyId, id));
         await tx.delete(heartbeatRuns).where(eq(heartbeatRuns.companyId, id));
         await tx.delete(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, id));
         await tx.delete(agentApiKeys).where(eq(agentApiKeys.companyId, id));
         await tx.delete(agentRuntimeState).where(eq(agentRuntimeState.companyId, id));
-        await tx.delete(issueApprovals).where(eq(issueApprovals.companyId, id));
-        await tx.delete(issueAttachments).where(eq(issueAttachments.companyId, id));
         await tx.delete(issueComments).where(eq(issueComments.companyId, id));
-        await tx.delete(issueDocuments).where(eq(issueDocuments.companyId, id));
-        await tx.delete(issueExecutionDecisions).where(eq(issueExecutionDecisions.companyId, id));
-        await tx.delete(issueInboxArchives).where(eq(issueInboxArchives.companyId, id));
-        await tx.delete(issueLabels).where(eq(issueLabels.companyId, id));
-        await tx.delete(issueReadStates).where(eq(issueReadStates.companyId, id));
-        await tx.delete(issueWorkProducts).where(eq(issueWorkProducts.companyId, id));
         await tx.delete(costEvents).where(eq(costEvents.companyId, id));
         await tx.delete(financeEvents).where(eq(financeEvents.companyId, id));
         await tx.delete(approvalComments).where(eq(approvalComments.companyId, id));
         await tx.delete(approvals).where(eq(approvals.companyId, id));
-        await tx.delete(companySkills).where(eq(companySkills.companyId, id));
         await tx.delete(companySecrets).where(eq(companySecrets.companyId, id));
-        await tx.delete(documentRevisions).where(eq(documentRevisions.companyId, id));
-        await tx.delete(documents).where(eq(documents.companyId, id));
-        await tx.delete(feedbackVotes).where(eq(feedbackVotes.companyId, id));
         await tx.delete(joinRequests).where(eq(joinRequests.companyId, id));
         await tx.delete(invites).where(eq(invites.companyId, id));
         await tx.delete(principalPermissionGrants).where(eq(principalPermissionGrants.companyId, id));
         await tx.delete(companyMemberships).where(eq(companyMemberships.companyId, id));
+        await tx.delete(companySkills).where(eq(companySkills.companyId, id));
+        await tx.delete(issueReadStates).where(eq(issueReadStates.companyId, id));
+        await tx.delete(documents).where(eq(documents.companyId, id));
         await tx.delete(issues).where(eq(issues.companyId, id));
         await tx.delete(companyLogos).where(eq(companyLogos.companyId, id));
         await tx.delete(assets).where(eq(assets.companyId, id));

@@ -270,6 +270,11 @@ function RemovableIssueReferencePill({
       <span className="truncate">{issueLabel}</span>
     </>
   );
+  const issueAriaLabel = t("issueProperties.issueReferenceAria", {
+    defaultValue: "Issue {{label}}: {{title}}",
+    label: issueLabel,
+    title: issue.title,
+  });
   const removeLabel = t("issueProperties.removeBlockerAria", {
     defaultValue: "Remove {{label}} as blocker",
     label: issueLabel,
@@ -293,7 +298,7 @@ function RemovableIssueReferencePill({
           "inline-flex items-center gap-1 rounded-full border border-border py-0.5 pl-1 pr-2 text-xs",
         )}
         title={issue.title}
-        aria-label={`Issue ${issueLabel}: ${issue.title}`}
+        aria-label={issueAriaLabel}
       >
         <button
           type="button"
@@ -308,7 +313,7 @@ function RemovableIssueReferencePill({
           <Link
             to={`/issues/${issueLabel}`}
             className="inline-flex min-w-0 items-center gap-1 no-underline hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring"
-            aria-label={`Issue ${issueLabel}: ${issue.title}`}
+            aria-label={issueAriaLabel}
           >
             {content}
           </Link>
@@ -1286,8 +1291,8 @@ export function IssueProperties({
       type="button"
       className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
       onClick={() => setLabelsOpen(true)}
-      aria-label="Add label"
-      title="Add label"
+      aria-label={t("Add label", { defaultValue: "Add label" })}
+      title={t("Add label", { defaultValue: "Add label" })}
     >
       <Plus className="h-3 w-3" />
     </button>
@@ -1786,7 +1791,7 @@ export function IssueProperties({
         value={blockedBySearch}
         onChange={(e) => setBlockedBySearch(e.target.value)}
         autoFocus={!inline}
-        aria-label="Search issues to add as blockers"
+        aria-label={t("issueProperties.searchBlockersAria", { defaultValue: "Search issues to add as blockers" })}
       />
       <div className="max-h-48 overflow-y-auto overscroll-contain">
         <button
@@ -1823,9 +1828,13 @@ export function IssueProperties({
           );
         })}
         {blockerOptionsLoading ? (
-          <div className="px-2 py-2 text-xs text-muted-foreground">Searching issues...</div>
+          <div className="px-2 py-2 text-xs text-muted-foreground">
+            {t("issueProperties.searchingIssues", { defaultValue: "Searching issues..." })}
+          </div>
         ) : blockerOptions.length === 0 ? (
-          <div className="px-2 py-2 text-xs text-muted-foreground">No matching issues.</div>
+          <div className="px-2 py-2 text-xs text-muted-foreground">
+            {t("issueProperties.noMatchingIssues", { defaultValue: "No matching issues." })}
+          </div>
         ) : null}
       </div>
     </>
@@ -2134,7 +2143,7 @@ export function IssueProperties({
                   to={`/execution-workspaces/${issue.executionWorkspaceId}`}
                   className="text-sm text-primary hover:underline inline-flex items-center gap-1"
                 >
-                  View workspace
+                  {t("issueProperties.viewWorkspace", { defaultValue: "View workspace" })}
                   <ExternalLink className="h-3 w-3" />
                 </Link>
               </PropertyRow>

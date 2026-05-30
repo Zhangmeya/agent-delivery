@@ -215,6 +215,15 @@ export function translateSystemGeneratedText<T extends string | null | undefined
     });
   }
 
+  const cancelledTerminalStatusMatch = /^Cancelled because issue reached terminal status \(([^)]+)\) before the queued run could start$/.exec(trimmed);
+  if (cancelledTerminalStatusMatch) {
+    const status = cancelledTerminalStatusMatch[1] ?? "";
+    return t("systemGenerated.runEvent.cancelledTerminalStatusBeforeStart", {
+      status: translateStatusLabel(t, status),
+      defaultValue: `Cancelled because issue reached terminal status (${status}) before the queued run could start`,
+    });
+  }
+
   const notInProgressMatch = /^Scheduled max-turn continuation suppressed because issue is no longer in_progress \(current status: ([^)]+)\)$/.exec(trimmed);
   if (notInProgressMatch) {
     const status = notInProgressMatch[1] ?? "";
@@ -249,6 +258,7 @@ export function isKnownSystemGeneratedMarkdown(text: string): boolean {
 function matchesKnownSystemGeneratedText(text: string): boolean {
   if (SYSTEM_GENERATED_TEXT[text]) return true;
   if (/^Scheduled retry suppressed because issue reached terminal status \(([^)]+)\)$/.test(text)) return true;
+  if (/^Cancelled because issue reached terminal status \(([^)]+)\) before the queued run could start$/.test(text)) return true;
   return /^Scheduled max-turn continuation suppressed because issue is no longer in_progress \(current status: ([^)]+)\)$/.test(text);
 }
 

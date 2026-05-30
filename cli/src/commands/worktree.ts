@@ -45,6 +45,7 @@ import {
   runDatabaseRestore,
   createEmbeddedPostgresLogBuffer,
   formatEmbeddedPostgresError,
+  prepareEmbeddedPostgresNativeRuntime,
 } from "@penclipai/db";
 import type { Command } from "commander";
 import { ensureAgentJwtSecret, loadPaperclipEnvFile, mergePaperclipEnvEntries, readPaperclipEnvEntries, resolvePaperclipEnvFile } from "../config/env.js";
@@ -79,8 +80,6 @@ import {
   type PlannedIssueDocumentMerge,
   type PlannedIssueInsert,
 } from "./worktree-merge-history-lib.js";
-
-const WORKTREE_RESTORE_CONNECT_TIMEOUT_SECONDS = process.platform === "win32" ? 30 : 5;
 
 type WorktreeInitOptions = {
   name?: string;
@@ -683,7 +682,7 @@ function copyDirectoryContents(sourceDir: string, targetDir: string): boolean {
 
     if (entry.isSymbolicLink()) {
       rmSync(targetPath, { recursive: true, force: true });
-      copySymlinkEntry(sourcePath, targetPath);
+      symlinkSync(readlinkSync(sourcePath), targetPath);
       copied = true;
       continue;
     }
@@ -698,41 +697,6 @@ function copyDirectoryContents(sourceDir: string, targetDir: string): boolean {
   }
 
   return copied;
-}
-
-function copySymlinkEntry(sourcePath: string, targetPath: string): void {
-  const linkTarget = readlinkSync(sourcePath);
-  if (process.platform !== "win32") {
-    symlinkSync(linkTarget, targetPath);
-    return;
-  }
-
-  const resolvedLinkTarget = path.resolve(path.dirname(sourcePath), linkTarget);
-  const targetStats = (() => {
-    try {
-      return statSync(resolvedLinkTarget);
-    } catch {
-      return null;
-    }
-  })();
-  if (!targetStats) return;
-
-  if (targetStats.isDirectory()) {
-    symlinkSync(resolvedLinkTarget, targetPath, "junction");
-    return;
-  }
-
-  if (targetStats.isFile()) {
-    copyFileSync(resolvedLinkTarget, targetPath);
-    try {
-      chmodSync(targetPath, targetStats.mode & 0o777);
-    } catch {
-      // best effort
-    }
-    return;
-  }
-
-  // Other Windows reparse targets cannot be represented as junctions.
 }
 
 export function copyGitHooksToWorktreeGitDir(cwd: string): CopiedGitHooksResult | null {
@@ -1096,6 +1060,7 @@ async function ensureEmbeddedPostgres(dataDir: string, preferredPort: number): P
       "Embedded PostgreSQL support requires dependency `embedded-postgres`. Reinstall dependencies and try again.",
     );
   }
+  await prepareEmbeddedPostgresNativeRuntime();
 
   const postmasterPidFile = path.resolve(dataDir, "postmaster.pid");
   const runningPid = readRunningPostmasterPid(postmasterPidFile);
@@ -1331,8 +1296,12 @@ async function seedWorktreeDatabase(input: {
 
   try {
     if (input.sourceConfig.database.mode === "embedded-postgres") {
+      const sourceDataDir = path.resolve(input.sourceConfig.database.embeddedPostgresDataDir);
+      if (!existsSync(sourceDataDir)) {
+        throw new Error(`Embedded Postgres source at ${sourceDataDir} has no data directory.`);
+      }
       sourceHandle = await ensureEmbeddedPostgres(
-        input.sourceConfig.database.embeddedPostgresDataDir,
+        sourceDataDir,
         input.sourceConfig.database.embeddedPostgresPort,
       );
       const sourceAdminConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${sourceHandle.port}/postgres`;
@@ -1365,7 +1334,6 @@ async function seedWorktreeDatabase(input: {
     await runDatabaseRestore({
       connectionString: targetConnectionString,
       backupFile: backup.backupFile,
-      connectTimeoutSeconds: WORKTREE_RESTORE_CONNECT_TIMEOUT_SECONDS,
     });
     await applyPendingMigrations(targetConnectionString);
     const executionQuarantine = input.preserveLiveWork
@@ -1535,13 +1503,13 @@ async function runWorktreeInit(opts: WorktreeInitOptions): Promise<void> {
 
 export async function worktreeInitCommand(opts: WorktreeInitOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" penclip worktree init ")));
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree init ")));
   await runWorktreeInit(opts);
 }
 
 export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" penclip worktree:make ")));
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree:make ")));
 
   const name = resolveWorktreeMakeName(nameArg);
   const startPoint = resolveWorktreeStartPoint(opts.startPoint);
@@ -1754,7 +1722,7 @@ function worktreePathHasUncommittedChanges(worktreePath: string): boolean {
 
 export async function worktreeCleanupCommand(nameArg: string, opts: WorktreeCleanupOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" penclip worktree:cleanup ")));
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree:cleanup ")));
 
   const name = resolveWorktreeMakeName(nameArg);
   const sourceCwd = process.cwd();
@@ -2585,7 +2553,7 @@ async function promptForSourceEndpoint(excludeWorktreePath?: string): Promise<Re
       hint: `${choice.worktree}${choice.isCurrent ? " (current)" : ""}`,
     }));
   if (choices.length === 0) {
-    throw new Error("No Paperclip worktrees were found. Run `penclip worktree:list` to inspect the repo worktrees.");
+    throw new Error("No Paperclip worktrees were found. Run `paperclipai worktree:list` to inspect the repo worktrees.");
   }
   const selection = await p.select<string>({
     message: "Choose the source worktree to import from",
@@ -3127,12 +3095,6 @@ async function runWorktreeReseed(opts: WorktreeReseedOptions): Promise<void> {
   if (!sourceConfig) {
     throw new Error(`Source config not found at ${source.configPath}.`);
   }
-  if (
-    sourceConfig.database.mode === "embedded-postgres"
-    && !existsSync(sourceConfig.database.embeddedPostgresDataDir)
-  ) {
-    throw new Error(`Embedded-postgres reseed source at ${source.configPath} has no data directory.`);
-  }
 
   const targetPaths = resolveWorktreeReseedTargetPaths({
     configPath: targetEndpoint.configPath,
@@ -3198,13 +3160,13 @@ async function runWorktreeReseed(opts: WorktreeReseedOptions): Promise<void> {
 
 export async function worktreeReseedCommand(opts: WorktreeReseedOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" penclip worktree reseed ")));
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree reseed ")));
   await runWorktreeReseed(opts);
 }
 
 export async function worktreeRepairCommand(opts: WorktreeRepairOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" penclip worktree repair ")));
+  p.intro(pc.bgCyan(pc.black(" paperclipai worktree repair ")));
 
   const seedMode = opts.seedMode ?? "minimal";
   if (!isWorktreeSeedMode(seedMode)) {

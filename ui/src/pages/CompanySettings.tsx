@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   DEFAULT_COMPANY_ATTACHMENT_MAX_BYTES,
@@ -8,23 +8,16 @@ import {
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { companiesApi } from "../api/companies";
-import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
+import { instanceSettingsApi } from "../api/instanceSettings";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
-import { Settings, Check, Download, Upload } from "lucide-react";
+import { Settings, CloudUpload, Download, Upload } from "lucide-react";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
 import {
   Field,
   ToggleField,
-  HintIcon,
 } from "../components/agent-config-primitives";
-
-type AgentSnippetInput = {
-  onboardingTextUrl: string;
-  connectionCandidates?: string[] | null;
-  testResolutionUrl?: string | null;
-};
 
 const BYTES_PER_MIB = 1024 * 1024;
 const DEFAULT_COMPANY_ATTACHMENT_MAX_MIB = DEFAULT_COMPANY_ATTACHMENT_MAX_BYTES / BYTES_PER_MIB;
@@ -39,6 +32,10 @@ export function CompanySettings() {
   } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
+  const { data: experimentalSettings } = useQuery({
+    queryKey: queryKeys.instance.experimentalSettings,
+    queryFn: () => instanceSettingsApi.getExperimental(),
+  });
   // General settings local state
   const [companyName, setCompanyName] = useState("");
   const [description, setDescription] = useState("");
@@ -57,16 +54,12 @@ export function CompanySettings() {
     setLogoUrl(selectedCompany.logoUrl ?? "");
   }, [selectedCompany]);
 
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteSnippet, setInviteSnippet] = useState<string | null>(null);
-  const [snippetCopied, setSnippetCopied] = useState(false);
-  const [snippetCopyDelightId, setSnippetCopyDelightId] = useState(0);
-
   const attachmentMaxBytes = Number.parseInt(attachmentMaxMiB, 10) * BYTES_PER_MIB;
   const attachmentMaxValid =
     Number.isInteger(attachmentMaxBytes)
     && attachmentMaxBytes >= BYTES_PER_MIB
     && attachmentMaxBytes <= MAX_COMPANY_ATTACHMENT_MAX_BYTES;
+  const cloudSyncEnabled = experimentalSettings?.enableCloudSync === true;
 
   const generalDirty =
     !!selectedCompany &&
@@ -94,59 +87,6 @@ export function CompanySettings() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
-    }
-  });
-
-  const inviteMutation = useMutation({
-    mutationFn: () =>
-      accessApi.createOpenClawInvitePrompt(selectedCompanyId!),
-    onSuccess: async (invite) => {
-      setInviteError(null);
-      const base = window.location.origin.replace(/\/+$/, "");
-      const onboardingTextLink =
-        invite.onboardingTextUrl ??
-        invite.onboardingTextPath ??
-        `/api/invites/${invite.token}/onboarding.txt`;
-      const absoluteUrl = onboardingTextLink.startsWith("http")
-        ? onboardingTextLink
-        : `${base}${onboardingTextLink}`;
-      setSnippetCopied(false);
-      setSnippetCopyDelightId(0);
-      let snippet: string;
-      try {
-        const manifest = await accessApi.getInviteOnboarding(invite.token);
-        snippet = buildAgentSnippet({
-          onboardingTextUrl: absoluteUrl,
-          connectionCandidates:
-            manifest.onboarding.connectivity?.connectionCandidates ?? null,
-          testResolutionUrl:
-            manifest.onboarding.connectivity?.testResolutionEndpoint?.url ??
-            null
-        });
-      } catch {
-        snippet = buildAgentSnippet({
-          onboardingTextUrl: absoluteUrl,
-          connectionCandidates: null,
-          testResolutionUrl: null
-        });
-      }
-      setInviteSnippet(snippet);
-      try {
-        await navigator.clipboard.writeText(snippet);
-        setSnippetCopied(true);
-        setSnippetCopyDelightId((prev) => prev + 1);
-        setTimeout(() => setSnippetCopied(false), 2000);
-      } catch {
-        /* clipboard may not be available */
-      }
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.sidebarBadges(selectedCompanyId!)
-      });
-    },
-    onError: (err) => {
-      setInviteError(
-        err instanceof Error ? err.message : t("Failed to create invite", { defaultValue: "Failed to create invite" })
-      );
     }
   });
 
@@ -186,13 +126,6 @@ export function CompanySettings() {
     clearLogoMutation.mutate();
   }
 
-  useEffect(() => {
-    setInviteError(null);
-    setInviteSnippet(null);
-    setSnippetCopied(false);
-    setSnippetCopyDelightId(0);
-  }, [selectedCompanyId]);
-
   const archiveMutation = useMutation({
     mutationFn: ({
       companyId,
@@ -216,17 +149,15 @@ export function CompanySettings() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: selectedCompany?.name ?? t("Company", { defaultValue: "Company" }), href: "/dashboard" },
-      { label: t("Settings", { defaultValue: "Settings" }) }
+      { label: selectedCompany?.name ?? t("Company"), href: "/dashboard" },
+      { label: t("Settings") }
     ]);
   }, [setBreadcrumbs, selectedCompany?.name, t]);
 
   if (!selectedCompany) {
     return (
       <div className="text-sm text-muted-foreground">
-        {t("No company selected. Select a company from the switcher above.", {
-          defaultValue: "No company selected. Select a company from the switcher above.",
-        })}
+        {t("No company selected. Select a company from the switcher above.")}
       </div>
     );
   }
@@ -244,19 +175,16 @@ export function CompanySettings() {
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-2">
         <Settings className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-lg font-semibold">{t("Company Settings", { defaultValue: "Company Settings" })}</h1>
+        <h1 className="text-lg font-semibold">{t("Company Settings")}</h1>
       </div>
 
       {/* General */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {t("General", { defaultValue: "General" })}
+          {t("General")}
         </div>
         <div className="space-y-3 rounded-md border border-border px-4 py-4">
-          <Field
-            label={t("Company name", { defaultValue: "Company name" })}
-            hint={t("The display name for your company.", { defaultValue: "The display name for your company." })}
-          >
+          <Field label={t("Company name")} hint={t("The display name for your company.")}>
             <input
               className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
               type="text"
@@ -265,16 +193,14 @@ export function CompanySettings() {
             />
           </Field>
           <Field
-            label={t("Description", { defaultValue: "Description" })}
-            hint={t("Optional description shown in the company profile.", {
-              defaultValue: "Optional description shown in the company profile.",
-            })}
+            label={t("Description")}
+            hint={t("Optional description shown in the company profile.")}
           >
             <input
               className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
               type="text"
               value={description}
-              placeholder={t("Optional company description", { defaultValue: "Optional company description" })}
+              placeholder={t("Optional company description")}
               onChange={(e) => setDescription(e.target.value)}
             />
           </Field>
@@ -284,7 +210,7 @@ export function CompanySettings() {
       {/* Appearance */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {t("Appearance", { defaultValue: "Appearance" })}
+          {t("Appearance")}
         </div>
         <div className="space-y-3 rounded-md border border-border px-4 py-4">
           <div className="flex items-start gap-4">
@@ -298,28 +224,16 @@ export function CompanySettings() {
             </div>
             <div className="flex-1 space-y-3">
               <Field
-                label={t("Logo", { defaultValue: "Logo" })}
-                hint={t("Upload a PNG, JPEG, WEBP, GIF, or SVG logo image.", {
-                  defaultValue: "Upload a PNG, JPEG, WEBP, GIF, or SVG logo image.",
-                })}
+                label={t("Logo")}
+                hint={t("Upload a PNG, JPEG, WEBP, GIF, or SVG logo image.")}
               >
                 <div className="space-y-2">
-                  <div>
-                    <input
-                      id="company-logo-upload"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                      onChange={handleLogoFileChange}
-                      className="sr-only"
-                    />
-                    <label
-                      htmlFor="company-logo-upload"
-                      className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-                    >
-                      <Upload className="h-3.5 w-3.5" />
-                      {t("Choose logo file", { defaultValue: "Choose logo file" })}
-                    </label>
-                  </div>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                    onChange={handleLogoFileChange}
+                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none file:mr-4 file:rounded-md file:border-0 file:bg-muted file:px-2.5 file:py-1 file:text-xs"
+                  />
                   {logoUrl && (
                     <div className="flex items-center gap-2">
                       <Button
@@ -328,9 +242,7 @@ export function CompanySettings() {
                         onClick={handleClearLogo}
                         disabled={clearLogoMutation.isPending}
                       >
-                        {clearLogoMutation.isPending
-                          ? t("Removing...", { defaultValue: "Removing..." })
-                          : t("Remove logo", { defaultValue: "Remove logo" })}
+                        {clearLogoMutation.isPending ? t("Removing...") : t("Remove logo")}
                       </Button>
                     </div>
                   )}
@@ -339,7 +251,7 @@ export function CompanySettings() {
                       {logoUploadError ??
                         (logoUploadMutation.error instanceof Error
                           ? logoUploadMutation.error.message
-                          : t("Logo upload failed", { defaultValue: "Logo upload failed" }))}
+                          : t("Logo upload failed"))}
                     </span>
                   )}
                   {clearLogoMutation.isError && (
@@ -348,17 +260,13 @@ export function CompanySettings() {
                     </span>
                   )}
                   {logoUploadMutation.isPending && (
-                    <span className="text-xs text-muted-foreground">
-                      {t("Uploading logo...", { defaultValue: "Uploading logo..." })}
-                    </span>
+                    <span className="text-xs text-muted-foreground">{t("Uploading logo...")}</span>
                   )}
                 </div>
               </Field>
               <Field
-                label={t("Brand color", { defaultValue: "Brand color" })}
-                hint={t("Sets the hue for the company icon. Leave empty for auto-generated color.", {
-                  defaultValue: "Sets the hue for the company icon. Leave empty for auto-generated color.",
-                })}
+                label={t("Brand color")}
+                hint={t("Sets the hue for the company icon. Leave empty for auto-generated color.")}
               >
                 <div className="flex items-center gap-2">
                   <input
@@ -376,7 +284,7 @@ export function CompanySettings() {
                         setBrandColor(v);
                       }
                     }}
-                    placeholder={t("Auto", { defaultValue: "Auto" })}
+                    placeholder={t("Auto")}
                     className="w-28 rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm font-mono outline-none"
                   />
                   {brandColor && (
@@ -386,17 +294,14 @@ export function CompanySettings() {
                       onClick={() => setBrandColor("")}
                       className="text-xs text-muted-foreground"
                     >
-                      {t("Clear", { defaultValue: "Clear" })}
+                      {t("Clear")}
                     </Button>
                   )}
                 </div>
               </Field>
               <Field
-                label={t("Attachment size limit", { defaultValue: "Attachment size limit" })}
-                hint={t("Accepted range: 1-{{max}} MiB.", {
-                  defaultValue: `Accepted range: 1-${MAX_COMPANY_ATTACHMENT_MAX_MIB} MiB.`,
-                  max: MAX_COMPANY_ATTACHMENT_MAX_MIB,
-                })}
+                label={t("Attachment size limit")}
+                hint={t("Accepted range: 1-{{max}} MiB.", { max: MAX_COMPANY_ATTACHMENT_MAX_MIB })}
               >
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
@@ -413,10 +318,7 @@ export function CompanySettings() {
                   </div>
                   {!attachmentMaxValid && (
                     <span className="text-xs text-destructive">
-                      {t("Enter a whole number from 1 to {{max}}.", {
-                        defaultValue: `Enter a whole number from 1 to ${MAX_COMPANY_ATTACHMENT_MAX_MIB}.`,
-                        max: MAX_COMPANY_ATTACHMENT_MAX_MIB,
-                      })}
+                      {t("Enter a whole number from 1 to {{max}}.", { max: MAX_COMPANY_ATTACHMENT_MAX_MIB })}
                     </span>
                   )}
                 </div>
@@ -434,18 +336,16 @@ export function CompanySettings() {
             onClick={handleSaveGeneral}
             disabled={generalMutation.isPending || !companyName.trim() || !attachmentMaxValid}
           >
-            {generalMutation.isPending
-              ? t("Saving...", { defaultValue: "Saving..." })
-              : t("Save changes", { defaultValue: "Save changes" })}
+            {generalMutation.isPending ? t("Saving...") : t("Save changes")}
           </Button>
           {generalMutation.isSuccess && (
-            <span className="text-xs text-muted-foreground">{t("Saved", { defaultValue: "Saved" })}</span>
+            <span className="text-xs text-muted-foreground">{t("Saved")}</span>
           )}
           {generalMutation.isError && (
             <span className="text-xs text-destructive">
               {generalMutation.error instanceof Error
                   ? generalMutation.error.message
-                  : t("Failed to save", { defaultValue: "Failed to save" })}
+                  : t("Failed to save")}
             </span>
           )}
         </div>
@@ -454,14 +354,12 @@ export function CompanySettings() {
       {/* Hiring */}
       <div className="space-y-4" data-testid="company-settings-team-section">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {t("Hiring", { defaultValue: "Hiring" })}
+          {t("Hiring")}
         </div>
         <div className="rounded-md border border-border px-4 py-3">
           <ToggleField
-            label={t("Require board approval for new hires", { defaultValue: "Require board approval for new hires" })}
-            hint={t("New agent hires stay pending until approved by board.", {
-              defaultValue: "New agent hires stay pending until approved by board.",
-            })}
+            label={t("Require board approval for new hires")}
+            hint={t("New agent hires stay pending until approved by board.")}
             checked={!!selectedCompany.requireBoardApprovalForNewAgents}
             onChange={(v) => settingsMutation.mutate(v)}
             toggleTestId="company-settings-team-approval-toggle"
@@ -469,118 +367,36 @@ export function CompanySettings() {
         </div>
       </div>
 
-      {/* Invites */}
-      <div className="space-y-4" data-testid="company-settings-invites-section">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {t("Invites", { defaultValue: "Invites" })}
-        </div>
-        <div className="space-y-3 rounded-md border border-border px-4 py-4">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">
-              {t("Generate an OpenClaw agent invite snippet.", {
-                defaultValue: "Generate an OpenClaw agent invite snippet.",
-              })}
-            </span>
-            <HintIcon
-              text={t("Creates a short-lived OpenClaw agent invite and renders a copy-ready prompt.", {
-                defaultValue: "Creates a short-lived OpenClaw agent invite and renders a copy-ready prompt.",
-              })}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              data-testid="company-settings-invites-generate-button"
-              size="sm"
-              onClick={() => inviteMutation.mutate()}
-              disabled={inviteMutation.isPending}
-            >
-              {inviteMutation.isPending
-                ? t("Generating...", { defaultValue: "Generating..." })
-                : t("Generate OpenClaw Invite Prompt", { defaultValue: "Generate OpenClaw Invite Prompt" })}
-            </Button>
-          </div>
-          {inviteError && (
-            <p className="text-sm text-destructive">{inviteError}</p>
-          )}
-          {inviteSnippet && (
-            <div
-              className="rounded-md border border-border bg-muted/30 p-2"
-              data-testid="company-settings-invites-snippet"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs text-muted-foreground">
-                  {t("OpenClaw Invite Prompt", { defaultValue: "OpenClaw Invite Prompt" })}
-                </div>
-                {snippetCopied && (
-                  <span
-                    key={snippetCopyDelightId}
-                    className="flex items-center gap-1 text-xs text-green-600 animate-pulse"
-                  >
-                    <Check className="h-3 w-3" />
-                    {t("Copied", { defaultValue: "Copied" })}
-                  </span>
-                )}
-              </div>
-              <div className="mt-1 space-y-1.5">
-                <textarea
-                  data-testid="company-settings-invites-snippet-textarea"
-                  className="h-[28rem] w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none"
-                  value={inviteSnippet}
-                  readOnly
-                />
-                <div className="flex justify-end">
-                  <Button
-                    data-testid="company-settings-invites-copy-button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(inviteSnippet);
-                        setSnippetCopied(true);
-                        setSnippetCopyDelightId((prev) => prev + 1);
-                        setTimeout(() => setSnippetCopied(false), 2000);
-                      } catch {
-                        /* clipboard may not be available */
-                      }
-                    }}
-                  >
-                    {snippetCopied
-                      ? t("Copied snippet", { defaultValue: "Copied snippet" })
-                      : t("Copy snippet", { defaultValue: "Copy snippet" })}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Import / Export */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {t("Company Packages", { defaultValue: "Company Packages" })}
+          {t("Company Packages")}
         </div>
         <div className="rounded-md border border-border px-4 py-4">
           <p className="text-sm text-muted-foreground">
-            {t("Import and export have moved to dedicated pages accessible from the", {
-              defaultValue: "Import and export have moved to dedicated pages accessible from the",
-            })}{" "}
-            <a href="/org" className="underline hover:text-foreground">
-              {t("Org Chart", { defaultValue: "Org Chart" })}
-            </a>{" "}
-            {t("header.", { defaultValue: "header." })}
+            {t("Import and export have moved to dedicated pages accessible from the")}{" "}
+            <a href="/org" className="underline hover:text-foreground">{t("Org Chart")}</a>{" "}
+            {t("header.")}
           </p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {cloudSyncEnabled ? (
+              <Button size="sm" asChild>
+                <a href="/company/settings/cloud-upstream">
+                  <CloudUpload className="mr-1.5 h-3.5 w-3.5" />
+                  {t("Send to Paperclip Cloud")}
+                </a>
+              </Button>
+            ) : null}
             <Button size="sm" variant="outline" asChild>
               <a href="/company/export">
                 <Download className="mr-1.5 h-3.5 w-3.5" />
-                {t("Export", { defaultValue: "Export" })}
+                {t("Export")}
               </a>
             </Button>
             <Button size="sm" variant="outline" asChild>
               <a href="/company/import">
                 <Upload className="mr-1.5 h-3.5 w-3.5" />
-                {t("Import", { defaultValue: "Import" })}
+                {t("Import")}
               </a>
             </Button>
           </div>
@@ -590,13 +406,11 @@ export function CompanySettings() {
       {/* Danger Zone */}
       <div className="space-y-4">
         <div className="text-xs font-medium text-destructive uppercase tracking-wide">
-          {t("Danger Zone", { defaultValue: "Danger Zone" })}
+          {t("Danger Zone")}
         </div>
         <div className="space-y-3 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-4">
           <p className="text-sm text-muted-foreground">
-            {t("Archive this company to hide it from the sidebar. This persists in the database.", {
-              defaultValue: "Archive this company to hide it from the sidebar. This persists in the database.",
-            })}
+            {t("Archive this company to hide it from the sidebar. This persists in the database.")}
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -609,10 +423,7 @@ export function CompanySettings() {
               onClick={() => {
                 if (!selectedCompanyId) return;
                 const confirmed = window.confirm(
-                  t("companySettings.archiveConfirm", {
-                    defaultValue: `Archive company "${selectedCompany.name}"? It will be hidden from the sidebar.`,
-                    name: selectedCompany.name,
-                  })
+                  t("Archive company \"{{name}}\"? It will be hidden from the sidebar.", { name: selectedCompany.name })
                 );
                 if (!confirmed) return;
                 const nextCompanyId =
@@ -628,16 +439,16 @@ export function CompanySettings() {
               }}
             >
               {archiveMutation.isPending
-                ? t("Archiving...", { defaultValue: "Archiving..." })
+                ? t("Archiving...")
                 : selectedCompany.status === "archived"
-                ? t("Already archived", { defaultValue: "Already archived" })
-                : t("Archive company", { defaultValue: "Archive company" })}
+                ? t("Already archived")
+                : t("Archive company")}
             </Button>
             {archiveMutation.isError && (
               <span className="text-xs text-destructive">
                 {archiveMutation.error instanceof Error
                   ? archiveMutation.error.message
-                  : t("Failed to archive company", { defaultValue: "Failed to archive company" })}
+                  : t("Failed to archive company")}
               </span>
             )}
           </div>
@@ -645,118 +456,4 @@ export function CompanySettings() {
       </div>
     </div>
   );
-}
-
-function buildAgentSnippet(input: AgentSnippetInput) {
-  const candidateUrls = buildCandidateOnboardingUrls(input);
-  const resolutionTestUrl = buildResolutionTestUrl(input);
-
-  const candidateList =
-    candidateUrls.length > 0
-      ? candidateUrls.map((u) => `- ${u}`).join("\n")
-      : "- (No candidate URLs available yet.)";
-
-  const connectivityBlock =
-    candidateUrls.length === 0
-      ? `No candidate URLs are available. Ask your user to configure a reachable hostname in Paperclip, then retry.
-Suggested steps:
-- choose a hostname that resolves to the Paperclip host from your runtime
-- run: pnpm penclip allowed-hostname <host>
-- restart Paperclip
-- verify with: curl -fsS http://<host>:3100/api/health
-- regenerate this invite snippet`
-      : `If none are reachable, ask your user to add a reachable hostname in Paperclip, restart, and retry.
-Suggested command:
-- pnpm penclip allowed-hostname <host>
-Then verify with: curl -fsS <base-url>/api/health`;
-
-  const resolutionLine = resolutionTestUrl
-    ? `\nYou MUST test Paperclip-to-gateway reachability, call: ${resolutionTestUrl}?url=<urlencoded-gateway-url> (using the hostname that worked above). Do not assume your 172.x is necessarily reachable from Paperclip. Test it. `
-    : "";
-
-  return `You're invited to join a Paperclip organization.
-
-The URLs you should try are:
-${candidateList}
-
-Connectivity guidance:
-If you are running on a different machine than Paperclip, Paperclip must be reachable at one of the hostnames used above.
-Verify the hostname works from your runtime with: GET <base-url>/api/health
-
-${connectivityBlock}
-
-For your "agentName", just use your own agent name (OpenClaw or whatever your name is) and send it directly.
-You also need to send a gateway URL that Paperclip can access. Check your config and include that URL.${resolutionLine}
-
----
-
-This onboarding flow is for OpenClaw Gateway.
-When you submit the join request, use:
-- \`adapterType: "openclaw_gateway"\`
-- \`agentDefaultsPayload.url\` as your \`ws://\` or \`wss://\` gateway URL
-- \`agentDefaultsPayload.headers["x-openclaw-token"]\` with your gateway token
-- (legacy accepted) \`agentDefaultsPayload.headers["x-openclaw-auth"]\`
-- Keep device auth enabled (recommended). If \`devicePrivateKeyPem\` is omitted, Paperclip will generate and persist one during join so pairing approvals remain stable.
-- Only use \`disableDeviceAuth=true\` for special environments where pairing cannot be completed.
-
-Do NOT use \`/v1/responses\` or \`/hooks/*\` in this join flow.
-
-Before you do anything, please respond to your user that you understand the instructions and you're going to work on them. Then do the step above in another session called "paperclip-onboarding" and then tell your user when you're done. Update your user in intermediate steps along the way so they know what's going on.
-
-Then after you've connected to Paperclip (exchanged keys etc.) you MUST review and follow the onboarding instructions in onboarding.txt they give you.
-
-`;
-}
-
-function buildCandidateOnboardingUrls(input: AgentSnippetInput): string[] {
-  const candidates = (input.connectionCandidates ?? [])
-    .map((candidate) => candidate.trim())
-    .filter(Boolean);
-  const urls = new Set<string>();
-  let onboardingUrl: URL | null = null;
-
-  try {
-    onboardingUrl = new URL(input.onboardingTextUrl);
-    urls.add(onboardingUrl.toString());
-  } catch {
-    const trimmed = input.onboardingTextUrl.trim();
-    if (trimmed) {
-      urls.add(trimmed);
-    }
-  }
-
-  if (!onboardingUrl) {
-    for (const candidate of candidates) {
-      urls.add(candidate);
-    }
-    return Array.from(urls);
-  }
-
-  const onboardingPath = `${onboardingUrl.pathname}${onboardingUrl.search}`;
-  for (const candidate of candidates) {
-    try {
-      const base = new URL(candidate);
-      urls.add(`${base.origin}${onboardingPath}`);
-    } catch {
-      urls.add(candidate);
-    }
-  }
-
-  return Array.from(urls);
-}
-
-function buildResolutionTestUrl(input: AgentSnippetInput): string | null {
-  const explicit = input.testResolutionUrl?.trim();
-  if (explicit) return explicit;
-
-  try {
-    const onboardingUrl = new URL(input.onboardingTextUrl);
-    const testPath = onboardingUrl.pathname.replace(
-      /\/onboarding\.txt$/,
-      "/test-resolution"
-    );
-    return `${onboardingUrl.origin}${testPath}`;
-  } catch {
-    return null;
-  }
 }

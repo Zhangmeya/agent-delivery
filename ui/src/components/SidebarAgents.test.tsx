@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { Children, act, cloneElement, isValidElement } from "react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Agent } from "@penclipai/shared";
+import type { Agent, ResourceMemberships } from "@penclipai/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SidebarAgents } from "./SidebarAgents";
 
@@ -22,22 +22,14 @@ const mockHeartbeatsApi = vi.hoisted(() => ({
   liveRunsForCompany: vi.fn(),
 }));
 
+const mockResourceMembershipsApi = vi.hoisted(() => ({
+  listMine: vi.fn(),
+  updateAgent: vi.fn(),
+}));
+
 const mockOpenNewAgent = vi.hoisted(() => vi.fn());
 const mockPushToast = vi.hoisted(() => vi.fn());
 const mockSetSidebarOpen = vi.hoisted(() => vi.fn());
-
-vi.mock("react-i18next", () => ({
-  initReactI18next: { type: "3rdParty", init: () => {} },
-  useTranslation: () => ({
-    t: (key: string, options?: Record<string, unknown>) => {
-      let value = typeof options?.defaultValue === "string" ? options.defaultValue : key;
-      for (const [optionKey, optionValue] of Object.entries(options ?? {})) {
-        value = value.replaceAll(`{{${optionKey}}}`, String(optionValue));
-      }
-      return value;
-    },
-  }),
-}));
 
 vi.mock("@/lib/router", () => ({
   Link: ({ children, to, ...props }: { children: ReactNode; to: string }) => (
@@ -104,72 +96,8 @@ vi.mock("../api/heartbeats", () => ({
   heartbeatsApi: mockHeartbeatsApi,
 }));
 
-vi.mock("@/components/ui/collapsible", () => ({
-  Collapsible: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  CollapsibleTrigger: ({
-    asChild,
-    children,
-    ...props
-  }: ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean; children: ReactNode }) =>
-    asChild && isValidElement(children)
-      ? cloneElement(children, props as Record<string, unknown>)
-      : <button type="button" {...props}>{children}</button>,
-  CollapsibleContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}));
-
-vi.mock("@/components/ui/dropdown-menu", () => ({
-  DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-  DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DropdownMenuItem: ({
-    children,
-    disabled,
-    onClick,
-  }: {
-    children: ReactNode;
-    disabled?: boolean;
-    onClick?: () => void;
-  }) => (
-    <div
-      data-slot="dropdown-menu-item"
-      aria-disabled={disabled ? "true" : undefined}
-      onClick={disabled ? undefined : onClick}
-    >
-      {children}
-    </div>
-  ),
-  DropdownMenuRadioGroup: ({
-    children,
-    onValueChange,
-  }: {
-    children: ReactNode;
-    onValueChange?: (value: string) => void;
-  }) => (
-    <div data-slot="dropdown-menu-radio-group">
-      {Children.map(children, (child) =>
-        isValidElement(child)
-          ? cloneElement(child, { onSelectValue: onValueChange } as Record<string, unknown>)
-          : child,
-      )}
-    </div>
-  ),
-  DropdownMenuRadioItem: ({
-    children,
-    onSelectValue,
-    value,
-  }: {
-    children: ReactNode;
-    onSelectValue?: (value: string) => void;
-    value: string;
-  }) => (
-    <div
-      data-slot="dropdown-menu-radio-item"
-      onClick={() => onSelectValue?.(value)}
-    >
-      {children}
-    </div>
-  ),
-  DropdownMenuSeparator: () => <hr />,
+vi.mock("../api/resourceMemberships", () => ({
+  resourceMembershipsApi: mockResourceMembershipsApi,
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -178,6 +106,14 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 if (!globalThis.PointerEvent) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).PointerEvent = MouseEvent;
+}
+
+async function act(callback: () => void | Promise<void>) {
+  let result: void | Promise<void> = undefined;
+  flushSync(() => {
+    result = callback();
+  });
+  await result;
 }
 
 function makeAgent(overrides: Partial<Agent>): Agent {
@@ -215,26 +151,9 @@ async function flushReact() {
   });
 }
 
-async function waitForAssertion(assertion: () => void) {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    try {
-      assertion();
-      return;
-    } catch (error) {
-      lastError = error;
-      await flushReact();
-    }
-  }
-  throw lastError;
-}
-
 async function openAgentMenu(label = "Open actions for Alpha") {
-  let trigger: Element | null = null;
-  await waitForAssertion(() => {
-    trigger = document.body.querySelector(`button[aria-label="${label}"]`);
-    expect(trigger).not.toBeNull();
-  });
+  const trigger = document.body.querySelector(`button[aria-label="${label}"]`);
+  expect(trigger).not.toBeNull();
 
   await act(async () => {
     trigger?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
@@ -267,10 +186,6 @@ async function chooseSortMode(label: string) {
 
 function agentLinkLabels(container: HTMLElement) {
   return Array.from(container.querySelectorAll('a[href^="/agents/"]'))
-    .filter((anchor) => {
-      const href = anchor.getAttribute("href") ?? "";
-      return href !== "/agents/all" && !href.endsWith("/configuration");
-    })
     .map((anchor) => anchor.textContent?.trim())
     .filter(Boolean);
 }
@@ -279,6 +194,7 @@ describe("SidebarAgents", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot> | null;
   let queryClient: QueryClient;
+  let memberships: ResourceMemberships;
 
   beforeEach(() => {
     container = document.createElement("div");
@@ -295,6 +211,27 @@ describe("SidebarAgents", () => {
       user: { id: "user-1" },
     });
     mockHeartbeatsApi.liveRunsForCompany.mockResolvedValue([]);
+    memberships = {
+      projectMemberships: {},
+      agentMemberships: {},
+      updatedAt: null,
+    };
+    mockResourceMembershipsApi.listMine.mockImplementation(() => Promise.resolve(memberships));
+    mockResourceMembershipsApi.updateAgent.mockImplementation((_companyId, agentId, data) => {
+      memberships = {
+        ...memberships,
+        agentMemberships: {
+          ...memberships.agentMemberships,
+          [agentId]: data.state,
+        },
+        updatedAt: new Date(),
+      };
+      return Promise.resolve({
+        resourceType: "agent",
+        resourceId: agentId,
+        state: data.state,
+      });
+    });
     localStorage.clear();
   });
 
@@ -316,7 +253,7 @@ describe("SidebarAgents", () => {
     const currentRoot = createRoot(container);
     root = currentRoot;
 
-    act(() => {
+    await act(async () => {
       currentRoot.render(
         <QueryClientProvider client={queryClient}>
           <SidebarAgents />
@@ -336,9 +273,7 @@ describe("SidebarAgents", () => {
 
     await renderSidebarAgents();
 
-    await waitForAssertion(() => {
-      expect(agentLinkLabels(container)).toEqual(["Bravo", "Alpha", "Charlie"]);
-    });
+    expect(agentLinkLabels(container)).toEqual(["Bravo", "Alpha", "Charlie"]);
   });
 
   it("uses the heading for section menu and the plus button for agent creation", async () => {
@@ -415,6 +350,31 @@ describe("SidebarAgents", () => {
     expect(agentLinkLabels(container)).toEqual(["Bravo", "Charlie", "Alpha"]);
   });
 
+  it("filters left agents only after membership state loads", async () => {
+    mockAgentsApi.list.mockResolvedValue([
+      makeAgent({ id: "agent-1", name: "Alpha", urlKey: "alpha" }),
+      makeAgent({ id: "agent-2", name: "Beta", urlKey: "beta" }),
+    ]);
+    let resolveMemberships!: (value: unknown) => void;
+    mockResourceMembershipsApi.listMine.mockReturnValue(new Promise((resolve) => {
+      resolveMemberships = resolve;
+    }));
+
+    await renderSidebarAgents();
+    expect(agentLinkLabels(container)).toEqual(["Alpha", "Beta"]);
+
+    await act(async () => {
+      resolveMemberships({
+        projectMemberships: {},
+        agentMemberships: { "agent-1": "left" },
+        updatedAt: null,
+      });
+    });
+    await flushReact();
+
+    expect(agentLinkLabels(container)).toEqual(["Beta"]);
+  });
+
   it("shows edit and pause actions for an active sidebar agent", async () => {
     await renderSidebarAgents();
     await openAgentMenu();
@@ -435,6 +395,27 @@ describe("SidebarAgents", () => {
 
     expect(mockAgentsApi.pause).toHaveBeenCalledWith("agent-1", "company-1");
     expect(mockPushToast).toHaveBeenCalledWith(expect.objectContaining({ title: "Agent paused" }));
+  });
+
+  it("offers leave agent from each sidebar agent menu", async () => {
+    await renderSidebarAgents();
+    await openAgentMenu();
+
+    const leaveItem = Array.from(document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'))
+      .find((element) => element.textContent?.includes("Leave agent"));
+    expect(leaveItem).toBeTruthy();
+
+    await act(async () => {
+      leaveItem?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReact();
+
+    expect(mockResourceMembershipsApi.updateAgent).toHaveBeenCalledWith(
+      "company-1",
+      "agent-1",
+      { state: "left" },
+    );
+    expect(agentLinkLabels(container)).toEqual([]);
   });
 
   it("shows resume for paused sidebar agents", async () => {
@@ -483,7 +464,7 @@ describe("SidebarAgents", () => {
     )
       .find((element) => element.textContent?.includes("Pause agent"));
     expect(betaPauseItem).toBeTruthy();
-    expect(betaPauseItem?.textContent).not.toContain("Updating...");
+    expect(document.body.textContent).not.toContain("Updating...");
   });
 
   it("does not offer sidebar resume for budget-paused agents", async () => {

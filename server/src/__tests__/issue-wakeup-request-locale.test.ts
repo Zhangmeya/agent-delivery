@@ -20,6 +20,7 @@ const mockLogActivity = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock("../services/index.js", () => ({
   accessService: () => ({
     canUser: vi.fn(),
+    decide: vi.fn(async () => ({ allowed: true })),
     hasPermission: vi.fn(),
   }),
   agentService: () => ({
@@ -27,6 +28,9 @@ vi.mock("../services/index.js", () => ({
   }),
   companyService: () => ({
     getById: vi.fn(),
+  }),
+  documentAnnotationService: () => ({
+    remapOpenThreadsForDocument: vi.fn(async () => []),
   }),
   documentService: () => ({}),
   executionWorkspaceService: () => ({}),

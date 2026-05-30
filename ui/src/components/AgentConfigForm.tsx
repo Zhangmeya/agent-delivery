@@ -115,6 +115,10 @@ const emptyOverlay: AgentConfigOverlay = {
 /** Stable empty object used as fallback for missing env config to avoid new-object-per-render. */
 const EMPTY_ENV: Record<string, EnvBinding> = {};
 
+export function supportsAdapterModelRefresh(adapterType: string): boolean {
+  return adapterType === "claude_local" || adapterType === "codex_local" || adapterType === "acpx_local";
+}
+
 function isOverlayDirty(o: AgentConfigOverlay): boolean {
   return (
     Object.keys(o.identity).length > 0 ||
@@ -232,7 +236,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   });
   const createSecret = useMutation({
     mutationFn: (input: { name: string; value: string }) => {
-      if (!selectedCompanyId) throw new Error("Select a company to create secrets");
+      if (!selectedCompanyId) throw new Error(tr("agentConfig.selectCompanyToCreateSecrets", "Select a company before creating secrets."));
       return secretsApi.create(selectedCompanyId, input);
     },
     onSuccess: () => {
@@ -243,7 +247,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
 
   const uploadMarkdownImage = useMutation({
     mutationFn: async ({ file, namespace }: { file: File; namespace: string }) => {
-      if (!selectedCompanyId) throw new Error("Select a company to upload images");
+      if (!selectedCompanyId) throw new Error(tr("agentConfig.selectCompanyToUploadImages", "Select a company before uploading images."));
       return assetsApi.uploadImage(selectedCompanyId, file, namespace);
     },
   });
@@ -388,7 +392,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       : ["agents", "none", "detect-model", adapterType],
     queryFn: () => {
       if (!selectedCompanyId) {
-        throw new Error("Select a company to detect the model");
+        throw new Error(tr("agentConfig.selectCompanyToDetectModel", "Select a company before detecting the model."));
       }
       return agentsApi.detectModel(selectedCompanyId, adapterType);
     },
@@ -468,7 +472,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const testEnvironment = useMutation({
     mutationFn: async () => {
       if (!selectedCompanyId) {
-        throw new Error("Select a company to test adapter environment");
+        throw new Error(tr("agentConfig.selectCompanyToTestEnvironment", "Select a company before testing the adapter environment."));
       }
       return agentsApi.testEnvironment(selectedCompanyId, adapterType, {
         adapterConfig: buildAdapterConfigForTest(),
@@ -1023,7 +1027,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       return result.data?.model ?? null;
                     }}
                 onRefreshModels={
-                  adapterType === "codex_local" || adapterType === "acpx_local"
+                  supportsAdapterModelRefresh(adapterType)
                     ? handleRefreshModels
                     : undefined
                 }
@@ -1322,8 +1326,14 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
 }
 
 export function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmentTestResult }) {
+  const { t } = useTranslation();
+  const tr = (key: string, defaultValue: string) => t(key, { defaultValue });
   const statusLabel =
-    result.status === "pass" ? "Passed" : result.status === "warn" ? "Warnings" : "Failed";
+    result.status === "pass"
+      ? tr("agentConfig.passed", "Passed")
+      : result.status === "warn"
+        ? tr("agentConfig.warnings", "Warnings")
+        : tr("agentConfig.failed", "Failed");
   const statusClass =
     result.status === "pass"
       ? "text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10"
@@ -1348,7 +1358,11 @@ export function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmen
             <span className="mx-1 opacity-60">·</span>
             <span>{check.message}</span>
             {check.detail && <span className="block opacity-75 break-all">({check.detail})</span>}
-            {check.hint && <span className="block opacity-90 break-words">Hint: {check.hint}</span>}
+            {check.hint && (
+              <span className="block opacity-90 break-words">
+                {tr("agentConfig.hint", "Hint")}: {check.hint}
+              </span>
+            )}
           </div>
         ))}
       </div>

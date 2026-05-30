@@ -19,10 +19,12 @@ function SelectField({
   value,
   options,
   onChange,
+  placeholder,
 }: {
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
+  placeholder: string;
 }) {
   const [open, setOpen] = useState(false);
   const selectedOpt = options.find((o) => o.value === value);
@@ -31,7 +33,7 @@ function SelectField({
       <PopoverTrigger asChild>
         <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
           <span className={!value ? "text-muted-foreground" : ""}>
-            {selectedOpt?.label ?? value ?? "Select..."}
+            {selectedOpt?.label || value || placeholder}
           </span>
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </button>
@@ -67,11 +69,13 @@ function ComboboxField({
   options,
   onChange,
   placeholder,
+  customValueHint,
 }: {
   value: string;
   options: { label: string; value: string; group?: string }[];
   onChange: (val: string) => void;
   placeholder?: string;
+  customValueHint: (value: string) => string;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -139,7 +143,7 @@ function ComboboxField({
           type="text"
           className="flex-1 rounded-l-md border border-r-0 border-border px-2.5 py-1.5 bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40 focus:z-10"
           value={displayValue}
-          placeholder={placeholder ?? "Type or select..."}
+          placeholder={placeholder}
           onChange={(e) => {
             setFilter(e.target.value);
             if (!open) setOpen(true);
@@ -190,7 +194,7 @@ function ComboboxField({
             ))}
             {filter && filtered.length === 0 && (
               <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                Use &quot;{filter}&quot; as custom value (press Enter)
+                {customValueHint(filter)}
               </div>
             )}
           </PopoverContent>
@@ -343,6 +347,20 @@ export function SchemaConfigFields({
       })),
     [tr],
   );
+  const selectPlaceholder = t("schemaConfig.selectPlaceholder", {
+    defaultValue: "Select...",
+  });
+  const comboboxPlaceholder = t("schemaConfig.comboboxPlaceholder", {
+    defaultValue: "Type or select...",
+  });
+  const customValueHint = useCallback(
+    (value: string) =>
+      t("schemaConfig.useCustomValue", {
+        value,
+        defaultValue: 'Use "{{value}}" as custom value (press Enter)',
+      }),
+    [t],
+  );
 
   const [defaultsApplied, setDefaultsApplied] = useState(false);
   useEffect(() => {
@@ -427,6 +445,7 @@ export function SchemaConfigFields({
                     value={currentVal}
                     options={translateOptions(field.options)}
                     onChange={(v) => writeValue(field, v)}
+                    placeholder={selectPlaceholder}
                   />
                 </Field>
               );
@@ -502,7 +521,8 @@ export function SchemaConfigFields({
                     value={currentVal}
                     options={translateOptions(comboboxOptions)}
                     onChange={(v) => writeValue(field, v || undefined)}
-                    placeholder={tr(field.hint)}
+                    placeholder={tr(field.hint) ?? comboboxPlaceholder}
+                    customValueHint={customValueHint}
                   />
                 </Field>
               );

@@ -59,7 +59,14 @@ export function CodexLocalConfigFields({
   return (
     <>
       {!hideInstructionsFile && (
-        <Field label="Agent instructions file" hint={instructionsFileHint}>
+        <Field
+          label={t("agentConfig.instructionsFileLabel", {
+            defaultValue: "Agent instructions file",
+          })}
+          hint={t("agentConfig.codexInstructionsFileHint", {
+            defaultValue: instructionsFileHint,
+          })}
+        >
           <div className="flex items-center gap-2">
             <DraftInput
               value={
@@ -78,14 +85,16 @@ export function CodexLocalConfigFields({
               }
               immediate
               className={inputClass}
-              placeholder="/absolute/path/to/AGENTS.md"
+              placeholder={t("agentConfig.instructionsFilePlaceholder", {
+                defaultValue: "/absolute/path/to/AGENTS.md",
+              })}
             />
             <ChoosePathButton />
           </div>
         </Field>
       )}
       <ToggleField
-        label="Bypass sandbox"
+        label={t("agentConfig.bypassSandbox", { defaultValue: "Bypass sandbox" })}
         hint={help.dangerouslyBypassSandbox}
         checked={
           isCreate
@@ -103,7 +112,7 @@ export function CodexLocalConfigFields({
         }
       />
       <ToggleField
-        label="Enable search"
+        label={t("agentConfig.enableSearch", { defaultValue: "Enable search" })}
         hint={help.search}
         checked={
           isCreate

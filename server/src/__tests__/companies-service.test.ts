@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { companies, createDb, environmentLeases, environments } from "@penclipai/db";
+import { companies, createDb } from "@penclipai/db";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
@@ -8,7 +8,6 @@ import { companyService } from "../services/companies.js";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
-const EMBEDDED_POSTGRES_TIMEOUT = process.platform === "win32" ? 60_000 : 20_000;
 
 if (!embeddedPostgresSupport.supported) {
   console.warn(
@@ -21,13 +20,11 @@ describeEmbeddedPostgres("companyService", () => {
   let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
 
   beforeAll(async () => {
-    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-companies-service-");
+    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-company-service-");
     db = createDb(tempDb.connectionString);
-  }, EMBEDDED_POSTGRES_TIMEOUT);
+  }, 20_000);
 
   afterEach(async () => {
-    await db.delete(environmentLeases);
-    await db.delete(environments);
     await db.delete(companies);
   });
 
@@ -35,13 +32,19 @@ describeEmbeddedPostgres("companyService", () => {
     await tempDb?.cleanup();
   });
 
-  it("retries issue prefix allocation after a wrapped unique conflict", async () => {
-    const svc = companyService(db);
+  it("retries generated issue prefixes when Drizzle wraps the unique constraint error", async () => {
+    await db.insert(companies).values({
+      name: "Aron Existing",
+      issuePrefix: "ARO",
+    });
 
-    const first = await svc.create({ name: "bigdata", budgetMonthlyCents: 0 });
-    const second = await svc.create({ name: "bigdata1", budgetMonthlyCents: 0 });
+    const created = await companyService(db).create({
+      name: "Aron & Sharon",
+    });
 
-    expect(first.issuePrefix).toBe("BIG");
-    expect(second.issuePrefix).toBe("BIGA");
+    expect(created.issuePrefix).toBe("AROA");
+
+    const rows = await db.select({ issuePrefix: companies.issuePrefix }).from(companies);
+    expect(rows.map((row) => row.issuePrefix).sort()).toEqual(["ARO", "AROA"]);
   });
 });

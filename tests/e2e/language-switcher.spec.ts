@@ -73,7 +73,7 @@ test.describe("Language switcher", () => {
 
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page).toHaveTitle(/Dashboard/);
-    await expect(page.getByText("Documentation")).toBeVisible();
+    await expect(page.getByRole("button", { name: "New Issue" })).toBeVisible();
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page).toHaveTitle(/Dashboard/);

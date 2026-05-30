@@ -70,6 +70,11 @@
     "publishFromCi": true
   },
   {
+    "dir": "packages/skills-catalog",
+    "name": "@penclipai/skills-catalog",
+    "publishFromCi": false
+  },
+  {
     "dir": "packages/db",
     "name": "@penclipai/db",
     "publishFromCi": true
