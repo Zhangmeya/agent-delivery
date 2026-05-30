@@ -20,6 +20,7 @@ Core fields:
 - headers (object, optional): handshake headers; supports x-openclaw-token / x-openclaw-auth
 - authToken (string, optional): shared gateway token override
 - password (string, optional): gateway shared password, if configured
+- Gateway protocol: this adapter advertises minProtocol=3,maxProtocol=4 and uses the protocol returned by connect. If the gateway omits protocol, Paperclip treats it as protocol 3 for backward compatibility.
 
 Gateway connect identity fields:
 - clientId (string, optional): gateway client id (default gateway-client)
@@ -28,6 +29,7 @@ Gateway connect identity fields:
 - role (string, optional): gateway role (default operator)
 - scopes (string[] | comma string, optional): gateway scopes (default ["operator.admin"])
 - disableDeviceAuth (boolean, optional): disable signed device payload in connect params (default false)
+- v4 connect: Paperclip declares only the commands it actually uses (agent, agent.wait) and includes conservative client/caps/commands/permissions/locale/userAgent fields for v4 gateways.
 
 Request behavior fields:
 - payloadTemplate (object, optional): additional fields merged into gateway agent params
@@ -43,9 +45,10 @@ Session routing fields:
 - sessionKey (string, optional): fixed session key when strategy=fixed (default paperclip)
 
 Standard outbound payload additions:
-- paperclip (object): standardized Paperclip context added to every gateway agent request
-- paperclip.workspace (object, optional): resolved execution workspace for this run
-- paperclip.workspaces (array, optional): additional workspace hints Paperclip exposed to the run
+- protocol 3: paperclip (object) adds standardized Paperclip context for compatible gateways
+- protocol 4: Paperclip context remains in the wake message; root-level paperclip is omitted because v4 gateways may strictly reject unknown agent params
+- paperclip.workspace (object, optional): resolved execution workspace for this run when protocol 3 structured context is sent
+- paperclip.workspaces (array, optional): additional workspace hints Paperclip exposed to the run when protocol 3 structured context is sent
 - paperclip.workspaceRuntime (object, optional): reserved workspace runtime metadata when explicitly supplied outside normal heartbeat execution
 
 Standard result metadata supported:

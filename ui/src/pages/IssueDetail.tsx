@@ -3203,8 +3203,13 @@ export function IssueDetail() {
   const pausedComposerHint = activePauseHold
     ? (
       issue.assigneeAgentId
-        ? `Sending this comment will wake ${agentMap.get(issue.assigneeAgentId)?.name ?? "the assignee"} for triage while the subtree remains paused.`
-        : "Assign an agent to wake them for triage while the subtree remains paused."
+        ? t("Sending this comment will wake {{name}} for triage while the subtree remains paused.", {
+          defaultValue: "Sending this comment will wake {{name}} for triage while the subtree remains paused.",
+          name: agentMap.get(issue.assigneeAgentId)?.name ?? t("the assignee", { defaultValue: "the assignee" }),
+        })
+        : t("Assign an agent to wake them for triage while the subtree remains paused.", {
+          defaultValue: "Assign an agent to wake them for triage while the subtree remains paused.",
+        })
     )
     : null;
   const composerHint = pausedComposerHint;
@@ -3275,7 +3280,7 @@ export function IssueDetail() {
       {issue.hiddenAt && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           <EyeOff className="h-4 w-4 shrink-0" />
-          This issue is hidden
+          {t("This issue is hidden", { defaultValue: "This issue is hidden" })}
         </div>
       )}
       {activePauseHold && (
@@ -3284,19 +3289,31 @@ export function IssueDetail() {
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">
-                  {childIssues.length === 0 ? "Paused by board." : "Subtree pause is active."}
+                  {childIssues.length === 0
+                    ? t("Paused by board.", { defaultValue: "Paused by board." })
+                    : t("Subtree pause is active.", { defaultValue: "Subtree pause is active." })}
                 </span>
                 <span className="text-xs text-amber-900/80 dark:text-amber-100/80">
                   {childIssues.length === 0
-                    ? "Issue execution is held until resume. Human comments can still wake the assignee for triage."
-                    : "Root and descendant execution is held until resume. Human comments can still wake assignees for triage."}
+                    ? t("Issue execution is held until resume. Human comments can still wake the assignee for triage.", {
+                      defaultValue: "Issue execution is held until resume. Human comments can still wake the assignee for triage.",
+                    })
+                    : t("Root and descendant execution is held until resume. Human comments can still wake assignees for triage.", {
+                      defaultValue: "Root and descendant execution is held until resume. Human comments can still wake assignees for triage.",
+                    })}
                 </span>
               </div>
               <div className="text-xs text-amber-900/80 dark:text-amber-100/80">
                 {childIssues.length === 0
-                  ? "1 issue held"
-                  : `${heldDescendantCount} descendant${heldDescendantCount === 1 ? "" : "s"} held`}
-                {activeRootPauseHold?.createdAt ? ` · started ${relativeTime(activeRootPauseHold.createdAt)}` : ""}
+                  ? t("1 issue held", { defaultValue: "1 issue held" })
+                  : t("{{count}} descendants held", {
+                    defaultValue: "{{count}} descendants held",
+                    count: heldDescendantCount,
+                  })}
+                {activeRootPauseHold?.createdAt ? t(" · started {{time}}", {
+                  defaultValue: " · started {{time}}",
+                  time: relativeTime(activeRootPauseHold.createdAt),
+                }) : ""}
               </div>
               {canShowSubtreeControls || canResumeLeafWork ? (
                 <div className="flex flex-wrap items-center gap-2">
@@ -3308,7 +3325,9 @@ export function IssueDetail() {
                       setTreeControlOpen(true);
                     }}
                   >
-                    {childIssues.length === 0 ? "Resume work" : "Resume subtree"}
+                    {childIssues.length === 0
+                      ? t("Resume work", { defaultValue: "Resume work" })
+                      : t("Resume subtree", { defaultValue: "Resume subtree" })}
                   </Button>
                   <Button
                     variant="outline"
@@ -3319,7 +3338,10 @@ export function IssueDetail() {
                       setTreeControlOpen(true);
                     }}
                   >
-                    View affected ({childIssues.length === 0 ? 1 : heldDescendantCount})
+                    {t("View affected ({{count}})", {
+                      defaultValue: "View affected ({{count}})",
+                      count: childIssues.length === 0 ? 1 : heldDescendantCount,
+                    })}
                   </Button>
                   {canShowSubtreeControls ? (
                     <Button
@@ -3332,7 +3354,7 @@ export function IssueDetail() {
                         setTreeControlOpen(true);
                       }}
                     >
-                      Cancel subtree...
+                      {t("Cancel subtree...", { defaultValue: "Cancel subtree..." })}
                     </Button>
                   ) : null}
                 </div>
@@ -3544,7 +3566,7 @@ export function IssueDetail() {
                   }}
                 >
                   <PauseCircle className="h-3 w-3" />
-                  Pause work...
+                  {t("Pause work...", { defaultValue: "Pause work..." })}
                 </button>
               ) : null}
               {canResumeLeafWork ? (
@@ -3558,7 +3580,7 @@ export function IssueDetail() {
                   }}
                 >
                   <PlayCircle className="h-3 w-3" />
-                  Resume work
+                  {t("Resume work", { defaultValue: "Resume work" })}
                 </button>
               ) : null}
               {canShowSubtreeControls ? (
@@ -3573,7 +3595,7 @@ export function IssueDetail() {
                     }}
                   >
                     <PauseCircle className="h-3 w-3" />
-                    Pause subtree...
+                    {t("Pause subtree...", { defaultValue: "Pause subtree..." })}
                   </button>
                   {canResumeSubtree ? (
                     <button
@@ -3586,7 +3608,7 @@ export function IssueDetail() {
                       }}
                     >
                       <PlayCircle className="h-3 w-3" />
-                      Resume subtree
+                      {t("Resume subtree", { defaultValue: "Resume subtree" })}
                     </button>
                   ) : null}
                   <button
@@ -3599,7 +3621,7 @@ export function IssueDetail() {
                     }}
                   >
                     <XCircle className="h-3 w-3" />
-                    Cancel subtree...
+                    {t("Cancel subtree...", { defaultValue: "Cancel subtree..." })}
                   </button>
                   {canRestoreSubtree ? (
                     <button
@@ -3613,7 +3635,7 @@ export function IssueDetail() {
                       }}
                     >
                       <Repeat className="h-3 w-3" />
-                      Restore subtree...
+                      {t("Restore subtree...", { defaultValue: "Restore subtree..." })}
                     </button>
                   ) : null}
                 </>
@@ -3629,7 +3651,7 @@ export function IssueDetail() {
                 }}
               >
                 <EyeOff className="h-3 w-3" />
-                Hide this Issue
+                {t("Hide this Issue", { defaultValue: "Hide this Issue" })}
               </button>
             </PopoverContent>
             </Popover>
