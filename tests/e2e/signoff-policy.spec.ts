@@ -1,4 +1,4 @@
-import { test, expect, request as pwRequest, type APIRequestContext } from "@playwright/test";
+import { test, expect, request as pwRequest, type APIRequestContext, type Page } from "@playwright/test";
 
 /**
  * E2E: Signoff execution policy flow.
@@ -235,6 +235,12 @@ async function createIssueWithPolicy(ctx: TestContext, title: string, stages?: u
   return issue;
 }
 
+async function expectIssueStatusVisible(page: Page) {
+  await expect(
+    page.getByRole("button", { name: /^(In review|审核中)(\s+(In review|审核中))?$/ }),
+  ).toBeVisible({ timeout: 10_000 });
+}
+
 test.describe("Signoff execution policy", () => {
   let ctx: TestContext;
 
@@ -296,9 +302,7 @@ test.describe("Signoff execution policy", () => {
 
     // Step 2: Navigate to issue in UI and verify the routed in-review state is visible
     await page.goto(`/${ctx.companyPrefix}/issues/${issue.identifier}`);
-    await expect(
-      page.getByText(/In review|审核中/),
-    ).toBeVisible({ timeout: 10_000 });
+    await expectIssueStatusVisible(page);
 
     // Step 3: Reviewer approves → should route to approver
     const step3Res = await agentPatch(
@@ -316,9 +320,7 @@ test.describe("Signoff execution policy", () => {
 
     // Step 4: Verify the issue still shows the in-review state after advancing to approval
     await page.reload();
-    await expect(
-      page.getByText(/In review|审核中/),
-    ).toBeVisible({ timeout: 10_000 });
+    await expectIssueStatusVisible(page);
 
     // Step 5: Approver approves → should complete
     const step5Res = await agentPatch(
