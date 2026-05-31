@@ -94,6 +94,8 @@ Electron 桌面包装链路：
   - Electron 桌面默认 `userData` 目录使用无空格 slug `penclip`
   - 可见品牌名仍是 `Paperclip CN`
   - CLI/server 默认 home 仍是 `~/.paperclip`
+- 自定义 titlebar 会占用窗口 chrome；packaged UI 的共享布局必须使用 Electron 注入的可用高度变量，避免把 app 撑成完整 `100dvh` 后出现外层滚动条和主内容滚动条并存
+- repo 根级 `desktop:*` 和 desktop smoke 命令是维护入口；新增、删除或改名 `packages/desktop-electron` 脚本时，同步更新根 `package.json` 和 `doc/DEVELOPING.md`
 - fork 自维护的桌面发布链路
   - `.github/workflows/desktop-release.yml` 负责 Windows、macOS、Linux 桌面资产构建
   - `.github/workflows/release.yml` 的 stable live 路径会把桌面资产挂到同一个 GitHub Release
@@ -235,6 +237,12 @@ git merge <upstream remote>/master
 - canary 不会意外发布桌面资产
 - 桌面包版本仍来自 stable release 版本，而不是 `packages/desktop-electron/package.json` 里的占位版本
 
+如果上游改动触及 `ui/src/components/Layout.tsx`、Electron preload/titlebar、桌面 shell 或全局 viewport/overflow CSS，还要额外确认：
+
+- shared layout 仍使用 Electron 可用高度变量，而不是直接回到完整 viewport 高度
+- packaged 桌面窗口右侧不会同时出现 document 滚动条和 main 内容滚动条
+- 根 `desktop:*` 命令仍覆盖 dev、build、build:release、typecheck、prepare-stage、pack、dist 和平台 dist 入口，desktop smoke 命令仍覆盖 dev/package smoke 和 core/full acceptance
+
 ### 7.4 lockfile
 
 默认规则：
@@ -309,6 +317,15 @@ pnpm build
 ```
 
 如果门禁失败的主要形态是 timeout，先单独复跑失败测试确认是不是脏进程或本机状态，再看是否是本次分支新增的重型测试或实现里的慢 probe / 白耗时。只有在当前 PR 无法安全修根因时，才临时调整全局并发或超时；根因修掉后应回收这些兜底参数。
+
+触及 Electron layout、preload/titlebar 或 packaging 时，额外跑：
+
+```sh
+pnpm desktop:typecheck
+pnpm desktop:pack
+```
+
+触及 PR/release automation 时，PR 自查必须以最新 head SHA 的 check rollup 为准；stable 发布完成后必须直接验证 npm `latest`、git tag、GitHub Release、release workflow jobs、smoke job 和预期 desktop assets。
 
 ### 8.2 页面烟雾验证
 

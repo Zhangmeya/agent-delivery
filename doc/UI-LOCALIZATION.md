@@ -214,10 +214,11 @@ Paperclip CN 品牌替换必须遵守以下边界：
 - `OpenClaw`
 - `CLI` / `API` / `URL` / `Webhook`
 - provider、model、package 名称
+- adapter ID、adapter type、protocol 字段、Gateway 事件字段
 - 环境变量名
 - issue id、run id、company prefix
 - 文件名、路径、命令行参数
-- 日志正文、stdout、stderr
+- 日志正文、stdout、stderr、OpenClaw/Gateway 原始事件
 - 模型生成正文
 - 用户输入名称
 - 外部插件名称
@@ -375,6 +376,10 @@ pnpm build
 - tabs、tabs 下子页和筛选器
 - loading / empty / error 状态
 - tooltip、aria label 和图标按钮可见辅助文案
+- 多级 tab / segmented control / filter chip 中的短标签
+- system notice、banner、resume/hide/retry 等操作弹框
+- comment composer 旁的提示、禁用原因、唤醒/暂停说明
+- agent run / transcript / Events 区块里的标题、状态、空态和错误说明
 
 语言相关改动额外必须看：
 
@@ -389,6 +394,7 @@ pnpm build
   - 不要在组件里写死中文或英文枚举标签
 - UI 中直接展示的服务端 warning、validation hint、timeline/event 描述是否仍经过 locale 控制
   - 不要只检查页面壳层中文，漏掉 bundle / activity / warning banner 里的原始英文
+  - 对服务端 event / validation code，优先通过受控映射或 locale key 展示，不要把原始英文结构直接透传到 UI 壳层
 - 如果本次改动涉及运行时动态 prompt 或 operator remediation
   - 确认所选语言下的运行时说明仍会被注入，而且不要因 adapter 差异出现一处有翻译、一处没有翻译
 
@@ -402,7 +408,16 @@ pnpm build
 - 外部插件名称
 - 代码块和路径
 
-### 11.4 locale 资源检查
+### 11.4 浏览器标注反馈处理
+
+浏览器里人工标注的漏翻译，应当作为定位线索，而不是直接替换截图里的文字：
+
+- 先从元素位置、文本和路由定位 owning component
+- 优先复用已有 locale key；没有合适 key 时同时补 `en` 和 `zh-CN`
+- 不要为了快速修复在 JSX 里硬编码中文
+- 如果标注文本来自日志、协议字段、adapter ID、用户输入或模型正文，记录为允许保留原文
+
+### 11.5 locale 资源检查
 
 每次修改 `common.json` 之后，至少确认：
 

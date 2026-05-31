@@ -23,6 +23,7 @@ const DEV_PLUGIN_BUILD_FILTERS = [
   "@penclipai/plugin-file-browser-example",
   "@penclipai/plugin-kitchen-sink-example",
 ];
+const DEV_PLUGIN_SMOKE_PACKAGES = new Set(DEV_PLUGIN_BUILD_FILTERS);
 
 function parseArgs(argv) {
   const args = { mode: "dev" };
@@ -372,8 +373,11 @@ async function runExtendedDevAcceptance(origin, page, company) {
     await visitRoute(page, route.url, route.label);
   }
 
-  const examples = await fetchJson(origin, "/api/plugins/examples", {});
-  if (!Array.isArray(examples) || examples.length === 0) {
+  const bundledPlugins = await fetchJson(origin, "/api/plugins/examples", {});
+  const examples = Array.isArray(bundledPlugins)
+    ? bundledPlugins.filter((plugin) => DEV_PLUGIN_SMOKE_PACKAGES.has(plugin.packageName))
+    : [];
+  if (examples.length === 0) {
     throw new Error("Expected bundled plugin examples to be available in dev mode.");
   }
 

@@ -72,6 +72,12 @@ Desktop commands from repo root:
 
 ```sh
 pnpm desktop:dev
+pnpm desktop:build
+pnpm desktop:build:release
+pnpm desktop:typecheck
+pnpm desktop:prepare-stage
+pnpm desktop:pack
+pnpm desktop:dist
 pnpm desktop:dist:win
 pnpm desktop:dist:mac
 pnpm desktop:dist:linux
@@ -84,6 +90,12 @@ pnpm smoke:desktop:acceptance:full
 What they do:
 
 - `pnpm desktop:dev` builds the Electron shell and launches a desktop window against the local Paperclip server entrypoint with `PAPERCLIP_UI_DEV_MIDDLEWARE=true`
+- `pnpm desktop:build` builds the Electron shell for local development
+- `pnpm desktop:build:release` builds the Electron shell for packaged release staging
+- `pnpm desktop:typecheck` runs the desktop package TypeScript check
+- `pnpm desktop:prepare-stage` stages the packaged server/runtime payload without creating an installer
+- `pnpm desktop:pack` creates a verified unpacked desktop output for the current platform target without producing installer files
+- `pnpm desktop:dist` runs the desktop distribution script with its default platform/arch behavior
 - `pnpm desktop:dist:win` stages a packaged runtime in `packages/desktop-electron/.stage/app-runtime`, builds a small Electron shell, bundles `app-runtime` as extra resources, and creates the Windows installer plus unpacked app output
 - `pnpm desktop:dist:mac` builds a macOS desktop package for the current host arch
 - `pnpm desktop:dist:linux` builds a Linux x64 desktop package
@@ -110,6 +122,7 @@ Current scope and notes:
 - `pnpm` stays on the repo-standard `9.15.4`
 - the desktop shell uses `custom-electron-titlebar` with native Windows controls exposed via `titleBarOverlay`
 - packaged desktop assets now live under `resources/app-runtime/{server,node_modules,skills}` instead of using the server runtime as the Electron app directory
+- the app content height is adjusted for Electron chrome through `--paperclip-available-height`; shared UI layout should not bypass that variable with a raw full-viewport height, or packaged windows can show both a document scrollbar and an internal content scrollbar
 - startup splash screenshots are written to `packages/desktop-electron/.artifacts/smoke/<mode>/`
 - acceptance evidence is written to `packages/desktop-electron/.artifacts/smoke/acceptance-dev-core/` or `acceptance-dev-full/`
 
@@ -144,13 +157,14 @@ Do not “normalize” these into one name during upstream merges unless the pro
 
 Acceptance speed tips:
 
-- use `pnpm smoke:desktop:acceptance` for routine regression
+- use `pnpm desktop:pack` for routine packaged-runtime regression
+- use `pnpm smoke:desktop:acceptance` for routine desktop acceptance regression
 - use `pnpm smoke:desktop:acceptance:full` only for release-level deep validation
 - add `--skip-build` when you already have fresh local builds and only want to re-run the Electron acceptance flow:
 
 ```sh
-node packages/desktop-electron/scripts/smoke/desktop-acceptance.mjs --skip-build
-node packages/desktop-electron/scripts/smoke/desktop-acceptance.mjs --scope full --skip-build
+pnpm smoke:desktop:acceptance -- --skip-build
+pnpm smoke:desktop:acceptance:full -- --skip-build
 ```
 
 `pnpm dev:once` now tracks backend-relevant file changes and pending migrations. When the current boot is stale, the board UI shows a `Restart required` banner. You can also enable guarded auto-restart in `Instance Settings > Experimental`, which waits for queued/running local agent runs to finish before restarting the dev server.
