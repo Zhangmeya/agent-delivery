@@ -747,6 +747,7 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
   onResumeFromBacklog,
   resumeFromBacklogPending,
 }: IssueDetailChatTabProps) {
+  const { t } = useTranslation();
   const { data: activity } = useQuery({
     queryKey: queryKeys.issues.activity(issueId),
     queryFn: () => activityApi.forIssue(issueId),
@@ -893,7 +894,9 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
             disabled={commentsLoadingOlder}
             onClick={onLoadOlderComments}
           >
-            {commentsLoadingOlder ? "Loading earlier comments..." : "Load earlier comments"}
+            {commentsLoadingOlder
+              ? t("issueDetail.loadingEarlierComments", { defaultValue: "Loading earlier comments..." })
+              : t("issueDetail.loadEarlierComments", { defaultValue: "Load earlier comments" })}
           </Button>
         </div>
       ) : null}
@@ -1104,6 +1107,26 @@ function IssueDetailActivityTab({
       || issueTreeCostSummary.issueCount > 1);
   const shouldShowCostSummary =
     (linkedRuns && linkedRuns.length > 0) || hasIssueTreeCost;
+  const formatTokenSummary = (total: number, input: number, output: number, cached: number) =>
+    `${t("Tokens", { defaultValue: "Tokens" })} ${formatTokens(total)}${
+      cached > 0
+        ? t(" (in {{input}}, out {{output}}, cached {{cached}})", {
+          input: formatTokens(input),
+          output: formatTokens(output),
+          cached: formatTokens(cached),
+          defaultValue: " (in {{input}}, out {{output}}, cached {{cached}})",
+        })
+        : t(" (in {{input}}, out {{output}})", {
+          input: formatTokens(input),
+          output: formatTokens(output),
+          defaultValue: " (in {{input}}, out {{output}})",
+        })
+    }`;
+  const formatRuntimeSummary = (runtimeMs: number, runCount: number) =>
+    `${t("Runtime {{duration}}", {
+      duration: formatDurationMs(runtimeMs),
+      defaultValue: "Runtime {{duration}}",
+    })} ${t("({{count}} runs)", { count: runCount, defaultValue: "({{count}} runs)" })}`;
 
   if (initialLoading) {
     return <IssueSectionSkeleton titleWidth="w-20" rows={4} />;
@@ -1127,16 +1150,17 @@ function IssueDetailActivityTab({
                 ) : null}
                 {issueCostSummary.hasTokens ? (
                   <span>
-                    Tokens {formatTokens(issueCostSummary.totalTokens)}
-                    {issueCostSummary.cached > 0
-                      ? ` (in ${formatTokens(issueCostSummary.input)}, out ${formatTokens(issueCostSummary.output)}, cached ${formatTokens(issueCostSummary.cached)})`
-                      : ` (in ${formatTokens(issueCostSummary.input)}, out ${formatTokens(issueCostSummary.output)})`}
+                    {formatTokenSummary(
+                      issueCostSummary.totalTokens,
+                      issueCostSummary.input,
+                      issueCostSummary.output,
+                      issueCostSummary.cached,
+                    )}
                   </span>
                 ) : null}
                 {issueCostSummary.hasRuntime ? (
                   <span>
-                    Runtime {formatDurationMs(issueCostSummary.runtimeMs)}
-                    {` (${issueCostSummary.runCount} run${issueCostSummary.runCount === 1 ? "" : "s"})`}
+                    {formatRuntimeSummary(issueCostSummary.runtimeMs, issueCostSummary.runCount)}
                   </span>
                 ) : null}
                 {!issueCostSummary.hasCost && !issueCostSummary.hasTokens && !issueCostSummary.hasRuntime ? (
@@ -1146,26 +1170,35 @@ function IssueDetailActivityTab({
               {hasIssueTreeCost && issueTreeCostSummary ? (
                 <div className="flex flex-wrap gap-3">
                   <span className="font-medium text-foreground">
-                    Including sub-issues {(issueTreeCostSummary.costCents / 100).toLocaleString(undefined, {
-                      style: "currency",
-                      currency: "USD",
-                      minimumFractionDigits: 4,
-                      maximumFractionDigits: 4,
+                    {t("Including sub-issues {{cost}}", {
+                      cost: (issueTreeCostSummary.costCents / 100).toLocaleString(undefined, {
+                        style: "currency",
+                        currency: "USD",
+                        minimumFractionDigits: 4,
+                        maximumFractionDigits: 4,
+                      }),
+                      defaultValue: "Including sub-issues {{cost}}",
                     })}
                   </span>
                   <span>
-                    Tokens {formatTokens(issueTreeCostTokens)}
-                    {issueTreeCostSummary.cachedInputTokens > 0
-                      ? ` (in ${formatTokens(issueTreeCostSummary.inputTokens)}, out ${formatTokens(issueTreeCostSummary.outputTokens)}, cached ${formatTokens(issueTreeCostSummary.cachedInputTokens)})`
-                      : ` (in ${formatTokens(issueTreeCostSummary.inputTokens)}, out ${formatTokens(issueTreeCostSummary.outputTokens)})`}
+                    {formatTokenSummary(
+                      issueTreeCostTokens,
+                      issueTreeCostSummary.inputTokens,
+                      issueTreeCostSummary.outputTokens,
+                      issueTreeCostSummary.cachedInputTokens,
+                    )}
                   </span>
                   {issueTreeCostSummary.runCount > 0 ? (
                     <span>
-                      Runtime {formatDurationMs(issueTreeCostSummary.runtimeMs)}
-                      {` (${issueTreeCostSummary.runCount} run${issueTreeCostSummary.runCount === 1 ? "" : "s"})`}
+                      {formatRuntimeSummary(issueTreeCostSummary.runtimeMs, issueTreeCostSummary.runCount)}
                     </span>
                   ) : null}
-                  <span>{issueTreeCostSummary.issueCount} issue{issueTreeCostSummary.issueCount === 1 ? "" : "s"}</span>
+                  <span>
+                    {t("issueDetail.issueCount", {
+                      count: issueTreeCostSummary.issueCount,
+                      defaultValue: "{{count}} issues",
+                    })}
+                  </span>
                 </div>
               ) : null}
             </div>

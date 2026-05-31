@@ -1319,11 +1319,14 @@ export function IssuesList({
     viewState.groupBy,
   ]);
 
-  const createActionLabel = createIssueLabel
-    ? t("Create {{label}}", { label: createIssueLabel, defaultValue: `Create ${createIssueLabel}` })
+  const localizedCreateIssueLabel = createIssueLabel
+    ? t(createIssueLabel, { defaultValue: createIssueLabel })
+    : null;
+  const createActionLabel = localizedCreateIssueLabel
+    ? t("Create {{label}}", { label: localizedCreateIssueLabel, defaultValue: `Create ${createIssueLabel}` })
     : t("Create Issue", { defaultValue: "Create Issue" });
-  const createButtonLabel = createIssueLabel
-    ? t("New {{label}}", { label: createIssueLabel, defaultValue: `New ${createIssueLabel}` })
+  const createButtonLabel = localizedCreateIssueLabel
+    ? t("New {{label}}", { label: localizedCreateIssueLabel, defaultValue: `New ${createIssueLabel}` })
     : t("New Issue", { defaultValue: "New Issue" });
   const openCreateIssueDialog = useCallback((group?: { key: string; items: Issue[] }) => {
     openNewIssue(newIssueDefaults(group));
