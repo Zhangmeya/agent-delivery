@@ -122,6 +122,11 @@ function buildLaunchEnv(userDataDir) {
 }
 
 async function cleanupUserDataDir(userDataDir) {
+  if (process.env.PAPERCLIP_DESKTOP_SMOKE_KEEP_USER_DATA === "true") {
+    console.warn(`[desktop-acceptance] Preserving smoke user data dir: ${userDataDir}`);
+    return;
+  }
+
   await fs.promises.rm(userDataDir, {
     recursive: true,
     force: true,
@@ -309,7 +314,7 @@ async function createAgent(origin, companyId, body) {
 }
 
 async function wakeAgent(origin, agentId, body) {
-  return await fetchJson(
+  const response = await fetchJson(
     origin,
     `/api/agents/${agentId}/wakeup`,
     {
@@ -319,6 +324,10 @@ async function wakeAgent(origin, agentId, body) {
     },
     "wake agent",
   );
+  if (!response || typeof response.id !== "string") {
+    throw new Error(`wake agent did not queue a run: ${JSON.stringify(response)}`);
+  }
+  return response;
 }
 
 async function addIssueComment(origin, issueId, body) {
@@ -347,6 +356,31 @@ async function getRunLog(origin, runId) {
   const body = text ? JSON.parse(text) : null;
   assertResponseOk(response, body, "get heartbeat run log");
   return body;
+}
+
+async function listIssueRuns(origin, issueId) {
+  return await fetchJson(origin, `/api/issues/${issueId}/runs`, undefined, "list issue runs");
+}
+
+async function waitForIssueRun(origin, issueId, agentId, timeoutMs = 120_000) {
+  const start = Date.now();
+  let lastSeen = [];
+  while (Date.now() - start < timeoutMs) {
+    const runs = await listIssueRuns(origin, issueId);
+    lastSeen = Array.isArray(runs) ? runs : [];
+    const run = lastSeen.find((entry) =>
+      entry &&
+      typeof entry.runId === "string" &&
+      entry.agentId === agentId &&
+      entry.status !== "cancelled"
+    );
+    if (run) return run;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+
+  throw new Error(
+    `Timed out waiting for issue ${issueId} to create a run for agent ${agentId}. Last seen: ${JSON.stringify(lastSeen)}`,
+  );
 }
 
 async function waitForRunOutput(origin, runId, timeoutMs = 240_000) {
@@ -724,11 +758,10 @@ async function runAcceptanceFlow({ page, origin, company, project, issue, agent,
         body: JSON.stringify({
           projectId: project.id,
           title: "Implementation Issue",
-          description: "Assigned to the Claude acceptance agent and blocked by coordination.",
-          status: "backlog",
+          description: "Assigned to the Claude acceptance agent for desktop full acceptance.",
+          status: "todo",
           priority: "medium",
           assigneeAgentId: agent.id,
-          blockedByIssueIds: [coordinationIssue.id],
         }),
       },
       "create implementation issue",
@@ -780,23 +813,20 @@ async function runAcceptanceFlow({ page, origin, company, project, issue, agent,
 
   let runEvidence = null;
   if (fullScope) {
-    const run = await wakeAgent(origin, agent.id, {
-      source: "on_demand",
-      triggerDetail: "manual",
-      reason: "desktop_acceptance_multi_agent_issue",
-      payload: {
-        issueId: implementationIssue.id,
-        projectId: project.id,
-      },
-      contextSnapshot: {
-        issueId: implementationIssue.id,
-        taskId: implementationIssue.id,
-        projectId: project.id,
-        source: "desktop.acceptance.multi-agent",
-        wakeReason: "desktop_acceptance_multi_agent_issue",
-      },
-    });
-    runEvidence = await waitForRunOutput(origin, run.id);
+    let run = await waitForIssueRun(origin, implementationIssue.id, agent.id, 10_000).catch(() => null);
+    if (!run) {
+      const queuedRun = await wakeAgent(origin, agent.id, {
+        source: "on_demand",
+        triggerDetail: "manual",
+        reason: "desktop_acceptance_multi_agent_issue",
+        payload: {
+          issueId: implementationIssue.id,
+          projectId: project.id,
+        },
+      });
+      run = { runId: queuedRun.id };
+    }
+    runEvidence = await waitForRunOutput(origin, run.runId);
     const claudeEvidenceText = buildRunEvidenceText(runEvidence);
 
     await fs.promises.writeFile(
@@ -806,7 +836,7 @@ async function runAcceptanceFlow({ page, origin, company, project, issue, agent,
     );
 
     if (!claudeEvidenceText.trim()) {
-      throw new Error(`Claude acceptance run ${run.id} did not produce any terminal evidence.`);
+      throw new Error(`Claude acceptance run ${run.runId} did not produce any terminal evidence.`);
     }
 
     if (!/API Error|assistant|result|summary|message|provider|provider_response_error|Arrearage|READY|claude/i.test(claudeEvidenceText)) {

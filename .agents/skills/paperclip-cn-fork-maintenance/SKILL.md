@@ -84,6 +84,17 @@ Do not consider `sync-fork` complete until all are true:
 - required verification is green
 - a PR has been opened unless the user explicitly asked to stop before PR creation
 
+## Field Lessons
+
+Keep these as reusable maintenance rules, not as one-off incident notes:
+
+- PR status must be evaluated on the latest head SHA. Ignore stale failures from older commits.
+- A PR is merge-ready only after every required check is terminal green and draft status has been cleared.
+- Stable `latest` releases should run the stable workflow in dry-run mode before the live publish.
+- After a live stable release, verify the external surfaces directly: npm `latest`, git tag, GitHub Release, release workflow jobs, smoke job, and desktop assets when installers are expected.
+- In PowerShell sessions, pass environment variables into bash release helpers inline, for example `bash -c 'RELEASE_REMOTE=private ./scripts/release.sh stable --date YYYY-MM-DD --print-version'`.
+- If local canary or stable tags conflict with the remote during release work, refresh tags explicitly from the fork remote before trusting local tag state.
+
 ## Default Verification Commands
 
 Unless the user explicitly narrows verification, use these as the default gate set for `sync-fork` and `sync-fork-fix`:
@@ -137,6 +148,7 @@ Do not write the PR like a changelog dump. Keep it grouped by behavior and maint
 Keep this skill focused on preserving fork boundaries during maintenance work.
 
 - Once a sync PR exists, use or reference `$prcheckloop` for CI polling and repair instead of duplicating that loop here.
+- Before merging a PR, confirm the latest PR head SHA, all status contexts/check runs, mergeability, and draft status. Do not merge based on an older green SHA.
 - After a sync PR merges to the fork `master`, confirm the automatic canary before treating the commit as a stable candidate.
 - For merge-to-latest release work, use or reference `$release` plus `doc/RELEASING.md` and `doc/PUBLISHING.md`.
 - If a package is newly public or changes to `publishFromCi: true`, complete the one-time npm bootstrap and trusted publisher setup described in `doc/PUBLISHING.md` before merge.
@@ -329,7 +341,7 @@ Use these defaults when the user gives only the short command:
   - classify drift instead of changing code
 
 - `audit-i18n`
-  - inspect touched UI/components/locales for untranslated text and wrong command wording
+  - inspect touched UI/components/locales for untranslated text and wrong command wording, including nested tabs, dialogs, toasts, aria labels, placeholders, empty/error states, system notices, and run/event panels
 
 - `audit-i18n-keys`
   - snapshot or compare locale key definitions and static source usages with the skill-local script
@@ -338,10 +350,10 @@ Use these defaults when the user gives only the short command:
   - inspect touched scripts/runtime/tests for Windows-only hazards
 
 - `audit-electron`
-  - inspect desktop package isolation and smoke/build coverage
+  - inspect desktop package isolation, root `desktop:*` script aliases, packaged UI sizing, and smoke/build coverage
 
 - `audit-adapters`
-  - inspect external adapter install/loader surfaces and prevent built-in adapter regressions
+  - inspect external adapter install/loader surfaces, OpenClaw Gateway compatibility, and prevent built-in adapter regressions
 
 - `audit-rebrand`
   - inspect brand copy vs technical identifier boundary discipline
@@ -351,10 +363,12 @@ Use these defaults when the user gives only the short command:
 Audit zh-CN localization completeness and command wording boundaries:
 
 - untranslated UI strings
+- missing nested tab labels, dialog titles/actions, toast content, aria labels, placeholders, empty/error states, system notices, comment composer hints, and run/event panel labels
 - stale cached labels after language switch
 - missing `en` / `zh-CN` key parity
 - incorrect command normalization in user-visible copy
 - merge-touched UI files where upstream structure changes may have overwritten already-translated Chinese copy
+- browser-reported untranslated text, which should be traced back to the owning component and locale catalog key instead of fixed with hardcoded Chinese
 
 Use the skill-local i18n key audit script when the task involves upstream sync, locale catalog changes, or suspected translation regressions:
 
@@ -409,6 +423,10 @@ Audit desktop packaging and desktop-specific isolation:
 - packaged app behavior for external adapter install, package resolution, and user data paths
 - config/runtime leakage into shared web paths
 - packaging commands and release assets that are wider than the real supported desktop target
+- packaged UI sizing issues such as a document scrollbar plus a main content scrollbar. Shared layout should consume `--paperclip-available-height` instead of hardcoding the full viewport height when Electron chrome reserves titlebar space
+- root `desktop:*` and desktop smoke script aliases drifting away from `packages/desktop-electron` scripts
+
+When desktop scripts change, keep the repo-root aliases and `doc/DEVELOPING.md` in sync. At minimum, maintain entries for dev, build, build:release, typecheck, prepare-stage, pack, dist, platform-specific dist commands, `smoke:desktop`, `smoke:desktop:acceptance`, and `smoke:desktop:acceptance:full`.
 
 ### `audit-adapters`
 
@@ -419,6 +437,9 @@ Audit external adapter boundary discipline:
 - package manifests that reintroduce external adapter dependencies into core workspaces
 - external adapter install, resolution, and loader behavior across web dev and packaged Electron
 - adapter display/config schemas where host UI should stay generic and localized around raw package identifiers
+- OpenClaw Gateway protocol compatibility when touching `@penclipai/adapter-openclaw-gateway`: v3 gateways must not regress, v4-only gateways must negotiate cleanly, and `PROTOCOL_MISMATCH` details must stay visible and actionable
+- OpenClaw device auth behavior: continue using the gateway challenge nonce and keep nonce/signature handling version-aware if protocol requirements diverge
+- OpenClaw request payload shape: do not send fields a newer gateway rejects, and do not translate protocol fields, adapter IDs, stdout/stderr, or gateway logs
 
 Keep Hermes, Droid, and similar third-party agent adapters external unless the user explicitly changes the fork strategy. Once loaded, adapter type identifiers may remain stable raw technical IDs; do not translate or rebrand them.
 
@@ -645,11 +666,14 @@ Prefer fixing generic plugin-loader, package-resolution, and Adapter Manager beh
 - calling an upstream feature "fork drift" without checking `origin/master`
 - replacing every command with `npx penclip`
 - translating technical identifiers
+- translating protocol fields, adapter IDs, logs, stdout/stderr, model/provider names, or gateway event payloads
 - keeping whole old files instead of reapplying a minimal fork delta
 - reintroducing external-only adapters as built-in dependencies or hardcoded registrations
 - adding heavy tests when a helper- or route-level test would protect the invariant
 - leaving locale changes in only one catalog
 - treating Electron packaging as a web-only concern and skipping desktop verification
+- hiding packaged Electron overflow instead of sizing the app to the Electron-adjusted available height
+- publishing stable `latest` from a workflow summary alone without verifying npm, tag, GitHub Release, smoke, and desktop asset surfaces
 
 ## Output Expectations
 

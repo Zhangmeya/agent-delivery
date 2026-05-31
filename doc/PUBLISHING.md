@@ -3,6 +3,7 @@
 Low-level reference for how Paperclip packages are prepared and published to npm.
 
 For the maintainer workflow, use [doc/RELEASING.md](RELEASING.md). This document focuses on packaging internals.
+Do not duplicate the normal `latest` promotion checklist here; keep stable dry-run/live workflow and post-release surface verification in the releasing runbook.
 
 ## Current Release Entry Points
 

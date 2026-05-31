@@ -97,7 +97,9 @@ Before running stable:
 1. pick the canary commit or tag you trust
 2. resolve the target stable version with `./scripts/release.sh stable --date "$(date +%F)" --print-version`
 3. create or update `releases/vYYYY.MDD.P.md` on that source ref
-4. run the stable workflow from that source ref
+4. dispatch the stable workflow with `dry_run=true` and wait for `verify_stable` / preview jobs to succeed
+5. dispatch the same stable workflow input with `dry_run=false`
+6. verify the published surfaces directly after the live workflow completes
 
 Example:
 
@@ -129,6 +131,14 @@ gh run view <release-run-id> --repo penclipai/paperclip-cn --json status,conclus
 ```
 
 For stable releases, the GitHub Release assets should include the supported desktop installer set listed below. Do not use this checklist to record one-off version numbers or run ids.
+
+On Windows PowerShell, prefer inline environment variables inside bash when invoking release helpers:
+
+```powershell
+bash -c 'RELEASE_REMOTE=<paperclip-cn-remote> ./scripts/release.sh stable --date YYYY-MM-DD --print-version'
+```
+
+Do not assume `$env:RELEASE_REMOTE = "..."` has reached a nested bash process unless the command output proves it used the intended remote.
 
 ### Desktop Installer Assets
 
@@ -174,6 +184,8 @@ RELEASE_REMOTE=<paperclip-cn-remote> ./scripts/release.sh canary --dry-run
 ```bash
 RELEASE_REMOTE=<paperclip-cn-remote> ./scripts/release.sh stable --dry-run
 ```
+
+From PowerShell, use the inline bash form shown in Post-Release Verification when you need to guarantee the variable is visible to the shell script.
 
 ### Publish a stable locally
 
