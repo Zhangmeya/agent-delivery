@@ -1,15 +1,15 @@
 const DEFAULT_RECENT_LOG_LIMIT = 40;
 const RECENT_LOG_SUMMARY_LINES = 8;
 
-function toError(error: unknown, fallbackMessage: string): Error {
-  if (error instanceof Error) return error;
-  if (error === undefined) return new Error(fallbackMessage);
-  if (typeof error === "string") return new Error(`${fallbackMessage}: ${error}`);
+function formatErrorDetail(error: unknown): string | null {
+  if (error instanceof Error) return error.message.length > 0 ? error.message : error.name;
+  if (error === undefined) return null;
+  if (typeof error === "string") return error;
 
   try {
-    return new Error(`${fallbackMessage}: ${JSON.stringify(error)}`);
+    return JSON.stringify(error);
   } catch {
-    return new Error(`${fallbackMessage}: ${String(error)}`);
+    return String(error);
   }
 }
 
@@ -80,12 +80,15 @@ export function formatEmbeddedPostgresError(
     recentLogs?: string[];
   },
 ): Error {
-  const baseError = toError(error, input.fallbackMessage);
   const recentLogs = input.recentLogs ?? [];
-  const parts = [baseError.message];
+  const errorDetail = formatErrorDetail(error);
+  const parts = [input.fallbackMessage];
   const hint = detectEmbeddedPostgresHint(recentLogs);
   const recentSummary = summarizeRecentLogs(recentLogs);
 
+  if (errorDetail && errorDetail !== input.fallbackMessage) {
+    parts.push(errorDetail);
+  }
   if (hint) {
     parts.push(hint);
   }

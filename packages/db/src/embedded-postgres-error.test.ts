@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { createEmbeddedPostgresLogBuffer, formatEmbeddedPostgresError } from "./embedded-postgres-error.js";
 
 describe("formatEmbeddedPostgresError", () => {
+  it("preserves caller startup context when wrapping upstream Error instances", () => {
+    const error = formatEmbeddedPostgresError(
+      new Error("Postgres init script failed (code: 1). ERROR OUTPUT: initdb: illegal option -- nope"),
+      {
+        fallbackMessage: "Failed to initialize embedded PostgreSQL cluster in C:\\tmp\\paperclip-db on port 55432",
+        recentLogs: ["initdb: illegal option -- nope"],
+      },
+    );
+
+    expect(error.message).toContain("Failed to initialize embedded PostgreSQL cluster");
+    expect(error.message).toContain("port 55432");
+    expect(error.message).toContain("Postgres init script failed");
+    expect(error.message).toContain("Recent embedded Postgres logs: initdb: illegal option -- nope");
+  });
+
   it("adds a shared-memory hint when initdb logs expose the real cause", () => {
     const error = formatEmbeddedPostgresError("Postgres init script exited with code 1.", {
       fallbackMessage: "Failed to initialize embedded PostgreSQL cluster",
