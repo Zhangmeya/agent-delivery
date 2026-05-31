@@ -283,6 +283,7 @@ describe("Layout", () => {
     await flushReact();
 
     expect(mockHealthApi.get).toHaveBeenCalled();
+    expect(container.firstElementChild?.className).toContain("h-[var(--paperclip-available-height)]");
     expect(container.textContent).toContain("Breadcrumbs");
     expect(container.textContent).toContain("Outlet content");
     expect(container.textContent).not.toContain("Company rail");
@@ -290,6 +291,31 @@ describe("Layout", () => {
     expect(container.textContent).not.toContain(
       "Sign-in is required and this instance is intended for private-network access.",
     );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("uses the desktop-adjusted available height for mobile layout", async () => {
+    mockSidebarState.isMobile = true;
+    mockSidebarState.sidebarOpen = false;
+    const root = createRoot(container);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Layout />
+        </QueryClientProvider>,
+      );
+    });
+    await flushReact();
+    await flushReact();
+
+    expect(container.firstElementChild?.className).toContain("min-h-[var(--paperclip-available-height)]");
 
     await act(async () => {
       root.unmount();
