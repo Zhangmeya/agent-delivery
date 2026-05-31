@@ -32,6 +32,9 @@ const translations: Record<string, string> = {
   "Latest visible activity time.": "最近一次可见活动时间。",
   "Reset defaults": "恢复默认值",
   "issuesList.defaultColumnsSummary": "状态、编号、更新时间",
+  "Create {{label}}": "创建{{label}}",
+  "New {{label}}": "新建{{label}}",
+  "Sub-issue": "子任务",
 };
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -426,14 +429,14 @@ describe("IssuesList", () => {
 
     await waitForAssertion(() => {
       const button = Array.from(container.querySelectorAll("button")).find(
-        (candidate) => candidate.textContent?.includes("New Sub-issue"),
+        (candidate) => candidate.textContent?.includes("新建子任务"),
       );
       expect(button).not.toBeUndefined();
     });
 
     await act(async () => {
       const button = Array.from(container.querySelectorAll("button")).find(
-        (candidate) => candidate.textContent?.includes("New Sub-issue"),
+        (candidate) => candidate.textContent?.includes("新建子任务"),
       );
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
