@@ -235,6 +235,7 @@ function hasBrokenInheritedDesktopPaperclipEnv(desktopUserDataDir: string): bool
 
 export function buildWorkerEnvironment(input: DesktopRuntimeInput): NodeJS.ProcessEnv {
   const inheritedEnv: NodeJS.ProcessEnv = { ...process.env };
+  const packagedRuntimeRoot = input.mode === "development" ? null : resolvePackagedRuntimeRoot(input.appRoot);
 
   // Desktop smoke/acceptance runs intentionally inject a temp PAPERCLIP_HOME.
   // If a later desktop session inherits one of those temp paths after cleanup,
@@ -280,6 +281,9 @@ export function buildWorkerEnvironment(input: DesktopRuntimeInput): NodeJS.Proce
     ...workerEnv,
     PAPERCLIP_CONFIG: resolveDesktopPaperclipConfigPath(paperclipHome, paperclipInstanceId),
     PAPERCLIP_CONTEXT: resolveDesktopPaperclipContextPath(paperclipHome),
+    PAPERCLIP_BUNDLED_PLUGINS_DIR: packagedRuntimeRoot
+      ? path.resolve(packagedRuntimeRoot, "packages", "plugins")
+      : undefined,
     PAPERCLIP_IN_WORKTREE: "",
     PAPERCLIP_WORKTREE_NAME: "",
     PAPERCLIP_WORKTREES_DIR: "",

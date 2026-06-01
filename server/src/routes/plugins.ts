@@ -21,7 +21,7 @@
 import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { and, desc, eq, gte } from "drizzle-orm";
@@ -151,12 +151,18 @@ const PLUGIN_SCOPED_API_RESPONSE_HEADER_ALLOWLIST = new Set([
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../..");
+const DEFAULT_BUNDLED_PLUGIN_ROOT = path.resolve(REPO_ROOT, "packages/plugins");
 const EXPERIMENTAL_BUNDLED_PLUGIN_PACKAGE_NAMES = new Set([
   "@paperclipai/plugin-llm-wiki",
   "@penclipai/plugin-modal",
   "@penclipai/plugin-workspace-diff",
 ]);
 let bundledPluginsCache: Promise<AvailableBundledPlugin[]> | null = null;
+
+function resolveBundledPluginRoot(): string {
+  const override = process.env.PAPERCLIP_BUNDLED_PLUGINS_DIR?.trim();
+  return override ? path.resolve(override) : DEFAULT_BUNDLED_PLUGIN_ROOT;
+}
 
 function titleCasePluginName(packageName: string): string {
   const localName = packageName.split("/").pop() ?? packageName;
@@ -235,6 +241,12 @@ async function bundledPluginMetadata(
   packageRoot: string,
   pkgJson: Record<string, unknown>,
 ): Promise<{ pluginKey?: string; displayName?: string; description?: string }> {
+  const manifestPath = resolveBundledPluginManifestPath(packageRoot, pkgJson);
+  if (manifestPath && await fileExists(manifestPath)) {
+    const metadata = await bundledPluginMetadataFromManifest(manifestPath);
+    if (metadata) return metadata;
+  }
+
   const sourcePath = manifestSourcePath(packageRoot, pkgJson);
   if (!sourcePath || !(await fileExists(sourcePath))) return {};
 
@@ -256,6 +268,43 @@ async function bundledPluginMetadata(
   }
 }
 
+function resolveBundledPluginManifestPath(
+  packageRoot: string,
+  pkgJson: Record<string, unknown>,
+): string | null {
+  const paperclipPlugin = pkgJson.paperclipPlugin;
+  if (
+    !paperclipPlugin
+    || typeof paperclipPlugin !== "object"
+    || Array.isArray(paperclipPlugin)
+  ) {
+    return null;
+  }
+
+  const manifestPath = (paperclipPlugin as Record<string, unknown>).manifest;
+  return typeof manifestPath === "string" ? path.resolve(packageRoot, manifestPath) : null;
+}
+
+async function bundledPluginMetadataFromManifest(
+  manifestPath: string,
+): Promise<{ pluginKey?: string; displayName?: string; description?: string } | null> {
+  try {
+    const manifestModule = await import(pathToFileURL(manifestPath).href);
+    const manifest = manifestModule.default;
+    if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+      return null;
+    }
+    const record = manifest as Record<string, unknown>;
+    return {
+      pluginKey: typeof record.id === "string" ? record.id : undefined,
+      displayName: typeof record.displayName === "string" ? record.displayName : undefined,
+      description: typeof record.description === "string" ? record.description : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function isExperimentalBundledPlugin(packageRoot: string, packageName: string): boolean {
   return (
     EXPERIMENTAL_BUNDLED_PLUGIN_PACKAGE_NAMES.has(packageName)
@@ -265,7 +314,7 @@ function isExperimentalBundledPlugin(packageRoot: string, packageName: string): 
 }
 
 async function discoverBundledPlugins(): Promise<AvailableBundledPlugin[]> {
-  const pluginRoot = path.resolve(REPO_ROOT, "packages/plugins");
+  const pluginRoot = resolveBundledPluginRoot();
   const bundledPlugins: AvailableBundledPlugin[] = [];
   for (const packageJsonPath of await findPackageJsonFiles(pluginRoot)) {
     const packageRoot = path.dirname(packageJsonPath);

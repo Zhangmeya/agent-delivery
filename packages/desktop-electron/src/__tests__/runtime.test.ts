@@ -81,6 +81,15 @@ describe("buildWorkerEnvironment", () => {
     expect(env.PAPERCLIP_CONTEXT).toBe(
       path.resolve("C:\\legacy-paperclip-home", "context.json"),
     );
+    expect(env.PAPERCLIP_BUNDLED_PLUGINS_DIR).toBe(
+      path.resolve(
+        "C:\\paperclip\\desktop-electron",
+        "..",
+        "app-runtime",
+        "packages",
+        "plugins",
+      ),
+    );
     expect(env.PAPERCLIP_IN_WORKTREE).toBe("");
     expect(env.PAPERCLIP_WORKTREE_NAME).toBe("");
     expect(env.PORT).toBe("3201");

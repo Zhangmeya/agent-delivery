@@ -26,7 +26,9 @@ const appRuntimeDir = path.resolve(stageRootDir, "app-runtime");
 const appRuntimeServerDir = path.resolve(appRuntimeDir, "server");
 const appRuntimeNodeModulesDir = path.resolve(appRuntimeDir, "node_modules");
 const appRuntimeSkillsDir = path.resolve(appRuntimeDir, "skills");
+const appRuntimeBundledPluginsDir = path.resolve(appRuntimeDir, "packages", "plugins");
 const bundledSkillsDir = path.resolve(repoRoot, "skills");
+const bundledPluginsDir = path.resolve(repoRoot, "packages", "plugins");
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
@@ -130,10 +132,154 @@ function patchPublishMetadata(packageJsonPath) {
   return true;
 }
 
+function findBundledPluginPackageJsons(rootDir, maxDepth = 4) {
+  if (!existsSync(rootDir)) return [];
+
+  const packageJsons = [];
+  const walk = (dir, depth) => {
+    if (depth > maxDepth) return;
+
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === "dist") continue;
+      const entryPath = path.resolve(dir, entry.name);
+      if (entry.isFile() && entry.name === "package.json") {
+        const pkg = readJson(entryPath);
+        if (
+          pkg.paperclipPlugin
+          && typeof pkg.paperclipPlugin === "object"
+          && !Array.isArray(pkg.paperclipPlugin)
+        ) {
+          packageJsons.push(entryPath);
+        }
+        continue;
+      }
+      if (entry.isDirectory()) {
+        walk(entryPath, depth + 1);
+      }
+    }
+  };
+
+  walk(rootDir, 0);
+  return packageJsons;
+}
+
+function copyIfExists(sourcePath, destinationPath, options = {}) {
+  if (!existsSync(sourcePath)) return false;
+  mkdirSync(path.dirname(destinationPath), { recursive: true });
+  cpSync(sourcePath, destinationPath, {
+    recursive: true,
+    force: true,
+    ...options,
+  });
+  return true;
+}
+
+function copyBundledPluginPackage(packageJsonPath) {
+  const packageRoot = path.dirname(packageJsonPath);
+  const relativePackageRoot = path.relative(bundledPluginsDir, packageRoot);
+  const destinationRoot = path.resolve(appRuntimeBundledPluginsDir, relativePackageRoot);
+  const pkg = readJson(packageJsonPath);
+
+  mkdirSync(destinationRoot, { recursive: true });
+  copyIfExists(packageJsonPath, path.resolve(destinationRoot, "package.json"));
+
+  for (const fileName of ["README.md", "LICENSE", "LICENSE.md"]) {
+    copyIfExists(path.resolve(packageRoot, fileName), path.resolve(destinationRoot, fileName));
+  }
+
+  const publishFiles = Array.isArray(pkg.files)
+    ? pkg.files.filter((entry) => typeof entry === "string")
+    : [];
+  const requiredEntries = new Set([
+    "dist",
+    "migrations",
+    ...publishFiles,
+  ]);
+
+  for (const entryName of requiredEntries) {
+    copyIfExists(path.resolve(packageRoot, entryName), path.resolve(destinationRoot, entryName), {
+      dereference: true,
+    });
+  }
+
+  return { sourceRoot: packageRoot, stagedRoot: destinationRoot };
+}
+
+function packageDependencyPath(nodeModulesRoot, packageName) {
+  return packageName.startsWith("@")
+    ? path.resolve(nodeModulesRoot, ...packageName.split("/"))
+    : path.resolve(nodeModulesRoot, packageName);
+}
+
+function getRuntimeDependencyNames(pkg) {
+  const dependencies = pkg.dependencies && typeof pkg.dependencies === "object" && !Array.isArray(pkg.dependencies)
+    ? Object.keys(pkg.dependencies)
+    : [];
+  const optionalDependencies =
+    pkg.optionalDependencies && typeof pkg.optionalDependencies === "object" && !Array.isArray(pkg.optionalDependencies)
+      ? Object.keys(pkg.optionalDependencies)
+      : [];
+
+  return [...new Set([...dependencies, ...optionalDependencies])].filter((dependencyName) =>
+    dependencyName !== "@paperclipai/plugin-sdk"
+    && dependencyName !== "@penclipai/plugin-sdk"
+    && dependencyName !== "@paperclipai/shared"
+    && dependencyName !== "@penclipai/shared");
+}
+
+function dependencySiblingRoot(packageRoot, packageName) {
+  return packageName.startsWith("@")
+    ? path.dirname(path.dirname(packageRoot))
+    : path.dirname(packageRoot);
+}
+
+function copyDependencyClosure(sourceNodeModulesRoot, stagedNodeModulesRoot, dependencyName, visited) {
+  const sourcePath = packageDependencyPath(sourceNodeModulesRoot, dependencyName);
+  if (!existsSync(sourcePath)) return;
+
+  const realSourcePath = realpathSync(sourcePath);
+  const visitedKey = `${dependencyName}:${realSourcePath}`;
+  if (visited.has(visitedKey)) return;
+  visited.add(visitedKey);
+
+  const destinationPath = packageDependencyPath(stagedNodeModulesRoot, dependencyName);
+  if (existsSync(destinationPath)) return;
+  copyIfExists(sourcePath, destinationPath, { dereference: true });
+
+  const dependencyPackageJsonPath = path.resolve(realSourcePath, "package.json");
+  if (!existsSync(dependencyPackageJsonPath)) return;
+
+  const dependencyPackageJson = readJson(dependencyPackageJsonPath);
+  const transitiveRoot = dependencySiblingRoot(realSourcePath, dependencyName);
+  for (const transitiveName of getRuntimeDependencyNames(dependencyPackageJson)) {
+    copyDependencyClosure(transitiveRoot, stagedNodeModulesRoot, transitiveName, visited);
+  }
+}
+
+function copyBundledPluginDependencies(sourcePackageRoot, stagedPluginRoot) {
+  const pkg = readJson(path.resolve(sourcePackageRoot, "package.json"));
+  const sourceNodeModulesRoot = path.resolve(sourcePackageRoot, "node_modules");
+  const stagedNodeModulesRoot = path.resolve(stagedPluginRoot, "node_modules");
+  const visited = new Set();
+
+  for (const dependencyName of getRuntimeDependencyNames(pkg)) {
+    copyDependencyClosure(sourceNodeModulesRoot, stagedNodeModulesRoot, dependencyName, visited);
+  }
+}
+
 console.log("[desktop-stage] Building server workspace and dependencies...");
 runPnpm(["--dir", repoRoot, "--filter", "@penclipai/server...", "build"], {
   cwd: repoRoot,
 });
+
+console.log("[desktop-stage] Building bundled plugin packages...");
+for (const packageJsonPath of findBundledPluginPackageJsons(bundledPluginsDir)) {
+  const packageRoot = path.dirname(packageJsonPath);
+  const pkg = readJson(packageJsonPath);
+  if (pkg.scripts?.build) {
+    runPnpm(["--dir", packageRoot, "run", "build"], { cwd: packageRoot });
+  }
+}
 
 console.log("[desktop-stage] Preparing bundled UI...");
 runNodeScript(path.resolve(repoRoot, "scripts", "prepare-server-ui-dist.mjs"), [], {
@@ -210,5 +356,24 @@ cpSync(bundledSkillsDir, appRuntimeSkillsDir, {
   recursive: true,
   force: true,
 });
+
+console.log("[desktop-stage] Assembling bundled plugin packages...");
+const bundledPluginPackageJsons = findBundledPluginPackageJsons(bundledPluginsDir);
+const stagedPluginRoots = bundledPluginPackageJsons.map(copyBundledPluginPackage);
+
+copyIfExists(
+  path.resolve(bundledPluginsDir, "sdk", "package.json"),
+  path.resolve(appRuntimeBundledPluginsDir, "sdk", "package.json"),
+);
+copyIfExists(
+  path.resolve(bundledPluginsDir, "sdk", "dist"),
+  path.resolve(appRuntimeBundledPluginsDir, "sdk", "dist"),
+  { dereference: true },
+);
+
+console.log("[desktop-stage] Preparing bundled plugin runtime dependencies...");
+for (const { sourceRoot, stagedRoot } of stagedPluginRoots) {
+  copyBundledPluginDependencies(sourceRoot, stagedRoot);
+}
 
 console.log("[desktop-stage] Packaged runtime ready in .stage/app-runtime.");
