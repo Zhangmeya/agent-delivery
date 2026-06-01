@@ -24,7 +24,7 @@
  * @see PLUGIN_SPEC.md §10 — Package Contract
  * @see PLUGIN_SPEC.md §12 — Process Model
  */
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, symlinkSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -47,9 +47,10 @@ import type { PluginJobStore } from "./plugin-job-store.js";
 import type { PluginToolDispatcher } from "./plugin-tool-dispatcher.js";
 import type { PluginLifecycleManager } from "./plugin-lifecycle.js";
 import { pluginDatabaseService } from "./plugin-database.js";
-import { execNpmCommand } from "./npm-command.js";
+import { execNpmCommand, execPnpmCommand } from "./npm-command.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, "../../..");
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -568,6 +569,131 @@ async function readPackageJson(
   }
 }
 
+function isPathInside(parent: string, child: string): boolean {
+  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function getStringRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function declaresDependency(pkgJson: Record<string, unknown>, packageName: string): boolean {
+  return [
+    getStringRecord(pkgJson["dependencies"]),
+    getStringRecord(pkgJson["devDependencies"]),
+    getStringRecord(pkgJson["peerDependencies"]),
+  ].some((deps) => packageName in deps);
+}
+
+function declaresWorkspaceDependency(pkgJson: Record<string, unknown>): boolean {
+  return [
+    getStringRecord(pkgJson["dependencies"]),
+    getStringRecord(pkgJson["devDependencies"]),
+    getStringRecord(pkgJson["peerDependencies"]),
+  ].some((deps) => Object.values(deps).some((value) => typeof value === "string" && value.startsWith("workspace:")));
+}
+
+function hasBuildScript(pkgJson: Record<string, unknown>): boolean {
+  const scripts = getStringRecord(pkgJson["scripts"]);
+  return typeof scripts["build"] === "string" && scripts["build"].trim().length > 0;
+}
+
+function formatPackageCommandError(error: unknown): string {
+  const maybeExecError = error as { stdout?: unknown; stderr?: unknown; message?: unknown };
+  const details = [
+    typeof maybeExecError.message === "string" ? maybeExecError.message : String(error),
+    typeof maybeExecError.stderr === "string" ? maybeExecError.stderr.trim() : "",
+    typeof maybeExecError.stdout === "string" ? maybeExecError.stdout.trim() : "",
+  ].filter((part) => part.length > 0);
+  return details.join("\n");
+}
+
+async function ensureLocalPluginSdkLink(packageRoot: string, pkgJson: Record<string, unknown>): Promise<void> {
+  if (!declaresDependency(pkgJson, "@paperclipai/plugin-sdk")) return;
+
+  const sdkDir = path.join(REPO_ROOT, "packages", "plugins", "sdk");
+  if (!existsSync(sdkDir)) return;
+
+  const scopeDir = path.join(packageRoot, "node_modules", "@paperclipai");
+  const linkTarget = path.join(scopeDir, "plugin-sdk");
+  mkdirSync(scopeDir, { recursive: true });
+
+  try {
+    const current = lstatSync(linkTarget);
+    if (!current.isSymbolicLink()) {
+      return;
+    }
+    await rm(linkTarget, { force: true });
+  } catch {
+    // target does not exist yet
+  }
+
+  const linkSource = process.platform === "win32" ? sdkDir : path.relative(scopeDir, sdkDir);
+  const linkType = process.platform === "win32" ? "junction" : "dir";
+  symlinkSync(linkSource, linkTarget, linkType);
+}
+
+async function runLocalPluginBuild(packageRoot: string, packageName: string): Promise<void> {
+  try {
+    await execPnpmCommand(["--dir", packageRoot, "run", "build"], { timeout: 180_000 });
+  } catch (error) {
+    throw new Error(
+      `Failed to build local plugin package ${packageName} at ${packageRoot}.\n${formatPackageCommandError(error)}`,
+    );
+  }
+}
+
+async function installStandaloneLocalPluginDeps(packageRoot: string, packageName: string): Promise<void> {
+  try {
+    await execPnpmCommand(
+      ["--dir", packageRoot, "install", "--ignore-scripts", "--ignore-workspace", "--lockfile=false"],
+      { timeout: 180_000 },
+    );
+  } catch (error) {
+    throw new Error(
+      `Failed to prepare dependencies for local plugin package ${packageName} at ${packageRoot}.\n${formatPackageCommandError(error)}`,
+    );
+  }
+}
+
+async function prepareLocalPluginPackage(
+  packageRoot: string,
+  pkgJson: Record<string, unknown>,
+  packageName: string,
+): Promise<Record<string, unknown>> {
+  await ensureLocalPluginSdkLink(packageRoot, pkgJson);
+
+  const manifestPath = resolveManifestPath(packageRoot, pkgJson);
+  if (!manifestPath || existsSync(manifestPath)) {
+    return pkgJson;
+  }
+
+  if (!hasBuildScript(pkgJson)) {
+    return pkgJson;
+  }
+
+  const isRepoBundledPlugin = isPathInside(path.join(REPO_ROOT, "packages", "plugins"), packageRoot);
+  if (!isRepoBundledPlugin) {
+    return pkgJson;
+  }
+
+  try {
+    await runLocalPluginBuild(packageRoot, packageName);
+  } catch (buildError) {
+    if (declaresWorkspaceDependency(pkgJson)) {
+      throw buildError;
+    }
+    await installStandaloneLocalPluginDeps(packageRoot, packageName);
+    await ensureLocalPluginSdkLink(packageRoot, pkgJson);
+    await runLocalPluginBuild(packageRoot, packageName);
+  }
+
+  return await readPackageJson(packageRoot) ?? pkgJson;
+}
+
 /**
  * Resolve the manifest entrypoint from a package.json and package root.
  *
@@ -897,8 +1023,11 @@ export function pluginLoader(
 
     // Step 3: Read and validate plugin manifest
     // Note: this.loadManifest (used via current context)
-    const pkgJson = await readPackageJson(resolvedPackagePath);
+    let pkgJson = await readPackageJson(resolvedPackagePath);
     if (!pkgJson) throw new Error(`Missing package.json at ${resolvedPackagePath}`);
+    if (localPath) {
+      pkgJson = await prepareLocalPluginPackage(resolvedPackagePath, pkgJson, resolvedPackageName);
+    }
 
     const manifestPath = resolveManifestPath(resolvedPackagePath, pkgJson);
     if (!manifestPath || !existsSync(manifestPath)) {
@@ -979,9 +1108,13 @@ export function pluginLoader(
 
   async function loadManifestFromPackageRoot(
     packageRoot: string,
+    packageName?: string,
   ): Promise<PaperclipPluginManifestV1 | null> {
-    const pkgJson = await readPackageJson(packageRoot);
+    let pkgJson = await readPackageJson(packageRoot);
     if (!pkgJson) return null;
+    if (packageName) {
+      pkgJson = await prepareLocalPluginPackage(packageRoot, pkgJson, packageName);
+    }
 
     const manifestPath = resolveManifestPath(packageRoot, pkgJson);
     if (!manifestPath || !existsSync(manifestPath)) return null;
@@ -993,7 +1126,7 @@ export function pluginLoader(
     plugin: PluginRecord,
     packageRoot: string,
   ): Promise<PluginRecord> {
-    const manifest = await loadManifestFromPackageRoot(packageRoot);
+    const manifest = await loadManifestFromPackageRoot(packageRoot, plugin.packageName);
     if (!manifest) {
       throw new Error(`Plugin package ${plugin.packageName} no longer exposes a Paperclip manifest`);
     }
