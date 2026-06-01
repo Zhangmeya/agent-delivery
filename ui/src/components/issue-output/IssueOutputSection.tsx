@@ -1,5 +1,6 @@
 import { Play } from "lucide-react";
-import type { IssueWorkProduct } from "@paperclipai/shared";
+import { useTranslation } from "react-i18next";
+import type { IssueWorkProduct } from "@penclipai/shared";
 import { getIssueOutputs, type IssueOutputItem } from "@/lib/issue-output";
 import { OutputPrimaryCard } from "./OutputPrimaryCard";
 import { OutputRow } from "./OutputRow";
@@ -20,6 +21,7 @@ interface IssueOutputSectionProps {
  * permanent empty card.
  */
 export function IssueOutputSection({ workProducts, resolveCreatorName }: IssueOutputSectionProps) {
+  const { t } = useTranslation();
   const { primary, rest, count } = getIssueOutputs(workProducts);
 
   if (!primary) return null;
@@ -27,10 +29,12 @@ export function IssueOutputSection({ workProducts, resolveCreatorName }: IssueOu
   const creatorFor = (item: IssueOutputItem) => resolveCreatorName?.(item) ?? null;
 
   return (
-    <section className="space-y-3" aria-label="Issue outputs">
+    <section className="space-y-3" aria-label={t("issueOutput.ariaLabel", { defaultValue: "Issue outputs" })}>
       <div className="flex items-center gap-2">
         <Play className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-        <h3 className="text-sm font-medium text-muted-foreground">Output</h3>
+        <h3 className="text-sm font-medium text-muted-foreground">
+          {t("issueOutput.title", { defaultValue: "Output" })}
+        </h3>
         <span className="text-xs text-muted-foreground">{count}</span>
       </div>
 
@@ -38,7 +42,9 @@ export function IssueOutputSection({ workProducts, resolveCreatorName }: IssueOu
 
       {rest.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Also produced</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("issueOutput.alsoProduced", { defaultValue: "Also produced" })}
+          </p>
           {rest.map((item) => (
             <OutputRow key={item.id} item={item} creatorName={creatorFor(item)} />
           ))}

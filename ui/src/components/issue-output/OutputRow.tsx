@@ -1,4 +1,5 @@
 import { Download, ExternalLink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn, relativeTime } from "@/lib/utils";
 import { formatBytes, outputFilename, type IssueOutputItem } from "@/lib/issue-output";
@@ -11,6 +12,7 @@ interface OutputRowProps {
 
 /** Compact row for a non-primary output ("ALSO PRODUCED"). */
 export function OutputRow({ item, creatorName }: OutputRowProps) {
+  const { t } = useTranslation();
   const filename = outputFilename(item);
   const meta = item.metadata;
 
@@ -35,18 +37,33 @@ export function OutputRow({ item, creatorName }: OutputRowProps) {
             item.degraded ? "text-destructive" : "text-muted-foreground",
           )}
         >
-          {item.degraded ? "File details unavailable" : metaBits.join(" · ")}
+          {item.degraded
+            ? t("issueOutput.fileDetailsUnavailable", { defaultValue: "File details unavailable" })
+            : metaBits.join(" · ")}
         </p>
       </div>
       {meta ? (
         <div className="flex shrink-0 items-center gap-1">
-          <Button asChild variant="ghost" size="icon-sm" title="Open in new tab">
-            <a href={meta.openPath} target="_blank" rel="noreferrer" aria-label={`Open ${filename}`}>
+          <Button
+            asChild
+            variant="ghost"
+            size="icon-sm"
+            title={t("issueOutput.openInNewTab", { defaultValue: "Open in new tab" })}
+          >
+            <a
+              href={meta.openPath}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={t("issueOutput.openAria", { defaultValue: "Open {{filename}}", filename })}
+            >
               <ExternalLink className="h-4 w-4" />
             </a>
           </Button>
-          <Button asChild variant="ghost" size="icon-sm" title="Download">
-            <a href={meta.downloadPath} aria-label={`Download ${filename}`}>
+          <Button asChild variant="ghost" size="icon-sm" title={t("issueOutput.download", { defaultValue: "Download" })}>
+            <a
+              href={meta.downloadPath}
+              aria-label={t("issueOutput.downloadAria", { defaultValue: "Download {{filename}}", filename })}
+            >
               <Download className="h-4 w-4" />
             </a>
           </Button>
