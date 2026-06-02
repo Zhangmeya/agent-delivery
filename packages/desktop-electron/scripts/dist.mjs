@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  readFileSync,
   readdirSync,
   rmSync,
   statSync,
@@ -21,6 +22,7 @@ const stageAppRuntimeDir = path.resolve(packageDir, ".stage", "app-runtime");
 const stageAppRuntimeServerDir = path.resolve(stageAppRuntimeDir, "server");
 const stageAppRuntimeNodeModulesDir = path.resolve(stageAppRuntimeDir, "node_modules");
 const stageAppRuntimeSkillsDir = path.resolve(stageAppRuntimeDir, "skills");
+const stageAppRuntimeBundledPluginsDir = path.resolve(stageAppRuntimeDir, "packages", "plugins");
 const prepareStageScript = path.resolve(packageDir, "scripts", "prepare-stage.mjs");
 const desktopReleaseVersion = process.env.PAPERCLIP_DESKTOP_RELEASE_VERSION?.trim() ?? "";
 const desktopArtifactManifestPath = path.resolve(releaseDir, "desktop-artifacts.json");
@@ -266,6 +268,42 @@ function listSkillDirectories(skillsDir) {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function readJsonFile(filePath) {
+  return JSON.parse(readFileSync(filePath, "utf8"));
+}
+
+function listBundledPluginPackageNames(pluginRootDir, maxDepth = 4) {
+  if (!existsSync(pluginRootDir)) return [];
+
+  const packageNames = [];
+  const walk = (dir, depth) => {
+    if (depth > maxDepth) return;
+
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === "dist") continue;
+      const entryPath = path.resolve(dir, entry.name);
+      if (entry.isFile() && entry.name === "package.json") {
+        const pkg = readJsonFile(entryPath);
+        if (
+          typeof pkg.name === "string"
+          && pkg.paperclipPlugin
+          && typeof pkg.paperclipPlugin === "object"
+          && !Array.isArray(pkg.paperclipPlugin)
+        ) {
+          packageNames.push(pkg.name);
+        }
+        continue;
+      }
+      if (entry.isDirectory()) {
+        walk(entryPath, depth + 1);
+      }
+    }
+  };
+
+  walk(pluginRootDir, 0);
+  return packageNames.sort((left, right) => left.localeCompare(right));
+}
+
 function findFirstExistingPath(candidates) {
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
@@ -386,6 +424,10 @@ function verifyPackagedRuntime(targetConfig, appLayout, embeddedPostgresPackageN
     throw new Error(`Missing staged runtime skills directory: ${stageAppRuntimeSkillsDir}`);
   }
 
+  if (!existsSync(stageAppRuntimeBundledPluginsDir)) {
+    throw new Error(`Missing staged runtime bundled plugins directory: ${stageAppRuntimeBundledPluginsDir}`);
+  }
+
   if (!existsSync(appLayout.runtimePath)) {
     throw new Error(`Missing packaged runtime directory: ${appLayout.runtimePath}`);
   }
@@ -393,6 +435,7 @@ function verifyPackagedRuntime(targetConfig, appLayout, embeddedPostgresPackageN
   const packagedRuntimeServerDir = path.resolve(appLayout.runtimePath, "server");
   const packagedRuntimeNodeModulesDir = path.resolve(appLayout.runtimePath, "node_modules");
   const packagedRuntimeSkillsDir = path.resolve(appLayout.runtimePath, "skills");
+  const packagedRuntimeBundledPluginsDir = path.resolve(appLayout.runtimePath, "packages", "plugins");
 
   if (!existsSync(packagedRuntimeServerDir)) {
     throw new Error(`Missing packaged runtime server directory: ${packagedRuntimeServerDir}`);
@@ -404,6 +447,10 @@ function verifyPackagedRuntime(targetConfig, appLayout, embeddedPostgresPackageN
 
   if (!existsSync(packagedRuntimeSkillsDir)) {
     throw new Error(`Missing packaged runtime skills directory: ${packagedRuntimeSkillsDir}`);
+  }
+
+  if (!existsSync(packagedRuntimeBundledPluginsDir)) {
+    throw new Error(`Missing packaged runtime bundled plugins directory: ${packagedRuntimeBundledPluginsDir}`);
   }
 
   const requiredRuntimePaths = [
@@ -469,8 +516,18 @@ function verifyPackagedRuntime(targetConfig, appLayout, embeddedPostgresPackageN
     );
   }
 
+  const stagedPluginPackages = listBundledPluginPackageNames(stageAppRuntimeBundledPluginsDir);
+  const packagedPluginPackages = new Set(listBundledPluginPackageNames(packagedRuntimeBundledPluginsDir));
+  const missingPluginPackages = stagedPluginPackages.filter((name) => !packagedPluginPackages.has(name));
+
+  if (missingPluginPackages.length > 0) {
+    throw new Error(
+      `Packaged runtime is missing bundled Paperclip plugins: ${missingPluginPackages.join(", ")}`,
+    );
+  }
+
   console.log(
-    `[desktop-dist] Verified packaged runtime completeness for ${targetConfig.id}/${targetConfig.arch} (${stagedPackages.length} top-level package roots, ${sourceSkillDirs.length} bundled skills).`,
+    `[desktop-dist] Verified packaged runtime completeness for ${targetConfig.id}/${targetConfig.arch} (${stagedPackages.length} top-level package roots, ${sourceSkillDirs.length} bundled skills, ${stagedPluginPackages.length} bundled plugins).`,
   );
 }
 

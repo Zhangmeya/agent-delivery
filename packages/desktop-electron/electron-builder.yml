@@ -27,6 +27,10 @@ extraResources:
     to: app-runtime/skills
     filter:
       - "**/*"
+  - from: .stage/app-runtime/packages/plugins
+    to: app-runtime/packages/plugins
+    filter:
+      - "**/*"
 
 dmg:
   format: UDBZ

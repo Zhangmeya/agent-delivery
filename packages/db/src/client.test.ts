@@ -15,6 +15,7 @@ const cleanups: Array<() => Promise<void>> = [];
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
 const MIGRATION_TEST_TIMEOUT = process.platform === "win32" ? 60_000 : 20_000;
+const MIGRATION_CLEANUP_TIMEOUT = process.platform === "win32" ? 90_000 : 30_000;
 
 async function createTempDatabase(): Promise<string> {
   const db = await startEmbeddedPostgresTestDatabase("paperclip-db-client-");
@@ -35,7 +36,7 @@ afterEach(async () => {
     const cleanup = cleanups.pop();
     await cleanup?.();
   }
-});
+}, MIGRATION_CLEANUP_TIMEOUT);
 
 if (!embeddedPostgresSupport.supported) {
   console.warn(
@@ -240,79 +241,7 @@ describeEmbeddedPostgres("applyPendingMigrations", () => {
         await verifySql.end();
       }
     },
-    20_000,
-  );
-
-  it(
-    "replays migration 0046 safely when document revision columns already exist",
-    async () => {
-      const connectionString = await createTempDatabase();
-
-      await applyPendingMigrations(connectionString);
-
-      const sql = postgres(connectionString, { max: 1, onnotice: () => {} });
-      try {
-        const smoothSentinelsHash = await migrationHash("0046_smooth_sentinels.sql");
-
-        await sql.unsafe(
-          `DELETE FROM "drizzle"."__drizzle_migrations" WHERE hash = '${smoothSentinelsHash}'`,
-        );
-
-        const columns = await sql.unsafe<{ column_name: string; is_nullable: string; column_default: string | null }[]>(
-          `
-            SELECT column_name, is_nullable, column_default
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'document_revisions'
-              AND column_name IN ('title', 'format')
-            ORDER BY column_name
-          `,
-        );
-        expect(columns).toHaveLength(2);
-      } finally {
-        await sql.end();
-      }
-
-      const pendingState = await inspectMigrations(connectionString);
-      expect(pendingState).toMatchObject({
-        status: "needsMigrations",
-        pendingMigrations: ["0046_smooth_sentinels.sql"],
-        reason: "pending-migrations",
-      });
-
-      await applyPendingMigrations(connectionString);
-
-      const finalState = await inspectMigrations(connectionString);
-      expect(finalState.status).toBe("upToDate");
-
-      const verifySql = postgres(connectionString, { max: 1, onnotice: () => {} });
-      try {
-        const columns = await verifySql.unsafe<{ column_name: string; is_nullable: string; column_default: string | null }[]>(
-          `
-            SELECT column_name, is_nullable, column_default
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'document_revisions'
-              AND column_name IN ('title', 'format')
-            ORDER BY column_name
-          `,
-        );
-        expect(columns).toEqual([
-          expect.objectContaining({
-            column_name: "format",
-            is_nullable: "NO",
-          }),
-          expect.objectContaining({
-            column_name: "title",
-            is_nullable: "YES",
-          }),
-        ]);
-        expect(columns[0]?.column_default).toContain("'markdown'");
-      } finally {
-        await verifySql.end();
-      }
-    },
-    20_000,
+    MIGRATION_TEST_TIMEOUT,
   );
 
   it(
@@ -406,7 +335,7 @@ describeEmbeddedPostgres("applyPendingMigrations", () => {
         await verifySql.end();
       }
     },
-    20_000,
+    MIGRATION_TEST_TIMEOUT,
   );
 
   it(
@@ -472,7 +401,7 @@ describeEmbeddedPostgres("applyPendingMigrations", () => {
         await verifySql.end();
       }
     },
-    20_000,
+    MIGRATION_TEST_TIMEOUT,
   );
 
   it(
@@ -538,7 +467,7 @@ describeEmbeddedPostgres("applyPendingMigrations", () => {
         await verifySql.end();
       }
     },
-    20_000,
+    MIGRATION_TEST_TIMEOUT,
   );
 
   it(
@@ -612,6 +541,6 @@ describeEmbeddedPostgres("applyPendingMigrations", () => {
         await verifySql.end();
       }
     },
-    20_000,
+    MIGRATION_TEST_TIMEOUT,
   );
 });

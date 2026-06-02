@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { OrgChart } from "./OrgChart";
 
 const navigateMock = vi.hoisted(() => vi.fn());
 const orgMock = vi.hoisted(() => vi.fn());
@@ -213,7 +214,6 @@ describe("OrgChart mobile gestures", () => {
   });
 
   async function renderOrgChart() {
-    const { OrgChart } = await import("./OrgChart");
     root = createRoot(container);
     await act(async () => {
       root.render(

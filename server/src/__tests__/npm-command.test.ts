@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveNpmInvocation } from "../services/npm-command.js";
+import { resolveNpmInvocation, resolvePnpmInvocation } from "../services/npm-command.js";
 
 function existsOnly(paths: string[]) {
   const existing = new Set(paths);
@@ -67,5 +67,33 @@ describe("resolveNpmInvocation", () => {
       exists: existsOnly([]),
       platform: "linux",
     })).toThrow("npm executable not found");
+  });
+});
+
+describe("resolvePnpmInvocation", () => {
+  it("uses pnpm npm_execpath through the current Node executable", () => {
+    const pnpmCli = path.posix.resolve("/opt/pnpm/pnpm.cjs");
+
+    expect(resolvePnpmInvocation(["--dir", "/repo/plugin", "run", "build"], {
+      env: { npm_execpath: pnpmCli },
+      execPath: "/opt/node/bin/node",
+      platform: "linux",
+    })).toEqual({
+      command: "/opt/node/bin/node",
+      args: [pnpmCli, "--dir", "/repo/plugin", "run", "build"],
+      source: "npm_execpath",
+    });
+  });
+
+  it("uses a quoted Windows pnpm shim command when npm_execpath is unavailable", () => {
+    expect(resolvePnpmInvocation(["--dir", "C:\\repo path\\plugin", "run", "build"], {
+      env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+      execPath: "C:\\Program Files\\Paperclip CN\\Paperclip CN.exe",
+      platform: "win32",
+    })).toEqual({
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: ["/d", "/s", "/c", 'pnpm --dir "C:\\repo path\\plugin" run build'],
+      source: "path_shim",
+    });
   });
 });

@@ -69,6 +69,8 @@ import { IssueChatThread, type IssueChatComposerHandle } from "../components/Iss
 import { IssueContinuationHandoff } from "../components/IssueContinuationHandoff";
 import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
 import { IssuePlanDecompositionsSection } from "../components/IssuePlanDecompositionsSection";
+import { IssueOutputSection } from "../components/issue-output/IssueOutputSection";
+import { formatBytes } from "../lib/issue-output";
 import { IssueSiblingNavigation } from "../components/IssueSiblingNavigation";
 import { IssuesList } from "../components/IssuesList";
 import { AgentIcon } from "../components/AgentIconPicker";
@@ -152,6 +154,7 @@ import {
   type Issue,
   type IssueAttachment,
   type IssueComment,
+  type IssueWorkProduct,
   type IssueWorkMode,
   type IssueThreadInteraction,
   type RequestConfirmationInteraction,
@@ -1380,6 +1383,13 @@ export function IssueDetail() {
     queryFn: () => issuesApi.listAttachments(issueId!),
     enabled: !!issueId,
     placeholderData: keepPreviousDataForSameQueryTail<IssueAttachment[]>(issueId ?? "pending"),
+  });
+
+  const { data: workProducts } = useQuery({
+    queryKey: queryKeys.issues.workProducts(issueId!),
+    queryFn: () => issuesApi.listWorkProducts(issueId!),
+    enabled: !!issueId,
+    placeholderData: keepPreviousDataForSameQueryTail<IssueWorkProduct[]>(issueId ?? "pending"),
   });
 
   const { data: liveRunCount = 0 } = useQuery<LiveRunForIssue[], Error, number>({
@@ -3828,6 +3838,8 @@ export function IssueDetail() {
         userProfileMap={userProfileMap}
       />
 
+      <IssueOutputSection workProducts={workProducts} />
+
       {attachmentsInitialLoading ? (
         <IssueSectionSkeleton titleWidth="w-24" rows={2} />
       ) : hasAttachments ? (
@@ -3951,7 +3963,7 @@ export function IssueDetail() {
                   </button>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {attachment.contentType} · {(attachment.byteSize / 1024).toFixed(1)} KB
+                  {attachment.contentType} · {formatBytes(attachment.byteSize)}
                 </p>
               </div>
             ))}

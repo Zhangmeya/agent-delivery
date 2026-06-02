@@ -11,6 +11,12 @@ export interface NpmInvocation {
   source: "npm_execpath" | "path_npm_cli" | "path_npm_shim";
 }
 
+export interface PackageManagerInvocation {
+  command: string;
+  args: string[];
+  source: "npm_execpath" | "path_shim";
+}
+
 interface ResolveNpmInvocationOptions {
   env?: NodeJS.ProcessEnv;
   platform?: NodeJS.Platform;
@@ -55,6 +61,11 @@ function pushIfUnique(items: string[], item: string): void {
   if (!items.includes(item)) {
     items.push(item);
   }
+}
+
+function quoteCmdArg(value: string): string {
+  if (/^[A-Za-z0-9_/:=.,@+-]+$/.test(value)) return value;
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 function collectNpmCliCandidates(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {
@@ -153,6 +164,45 @@ export function resolveNpmInvocation(options: ResolveNpmInvocationOptions = {}):
 export async function execNpmCommand(args: string[], options: ExecNpmOptions = {}) {
   const invocation = resolveNpmInvocation({ env: options.env ?? process.env });
   return await execFileAsync(invocation.command, [...invocation.argsPrefix, ...args], {
+    cwd: options.cwd,
+    env: options.env,
+    timeout: options.timeout,
+    windowsHide: true,
+  });
+}
+
+export function resolvePnpmInvocation(args: string[], options: ResolveNpmInvocationOptions = {}): PackageManagerInvocation {
+  const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
+  const execPath = options.execPath ?? process.execPath;
+  const npmExecPath = getEnvValue(env, "npm_execpath")?.trim();
+
+  if (npmExecPath && /(?:^|[\\/])pnpm(?:\.cjs)?$/i.test(npmExecPath)) {
+    return {
+      command: execPath,
+      args: [resolvePath(npmExecPath, platform), ...args],
+      source: "npm_execpath",
+    };
+  }
+
+  if (platform === "win32") {
+    return {
+      command: getEnvValue(env, "ComSpec")?.trim() || "cmd.exe",
+      args: ["/d", "/s", "/c", ["pnpm", ...args].map(quoteCmdArg).join(" ")],
+      source: "path_shim",
+    };
+  }
+
+  return {
+    command: "pnpm",
+    args,
+    source: "path_shim",
+  };
+}
+
+export async function execPnpmCommand(args: string[], options: ExecNpmOptions = {}) {
+  const invocation = resolvePnpmInvocation(args, { env: options.env ?? process.env });
+  return await execFileAsync(invocation.command, invocation.args, {
     cwd: options.cwd,
     env: options.env,
     timeout: options.timeout,

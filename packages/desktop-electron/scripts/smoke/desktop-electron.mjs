@@ -358,7 +358,7 @@ async function visitRoute(page, url, routeLabel) {
   assertTitlebarChromeState(await readTitlebarChromeState(page), routeLabel);
 }
 
-async function runExtendedDevAcceptance(origin, page, company) {
+async function runBundledPluginAcceptance(mode, origin, page, company) {
   const companyBase = `${origin}/${company.issuePrefix}`;
   const routeChecks = [
     { url: `${companyBase}/dashboard`, label: "desktop dashboard" },
@@ -375,10 +375,14 @@ async function runExtendedDevAcceptance(origin, page, company) {
 
   const bundledPlugins = await fetchJson(origin, "/api/plugins/examples", {});
   const examples = Array.isArray(bundledPlugins)
-    ? bundledPlugins.filter((plugin) => DEV_PLUGIN_SMOKE_PACKAGES.has(plugin.packageName))
+    ? (
+      mode === "packaged"
+        ? bundledPlugins
+        : bundledPlugins.filter((plugin) => DEV_PLUGIN_SMOKE_PACKAGES.has(plugin.packageName))
+    )
     : [];
   if (examples.length === 0) {
-    throw new Error("Expected bundled plugin examples to be available in dev mode.");
+    throw new Error("Expected bundled plugin examples to be available.");
   }
 
   for (const example of examples) {
@@ -761,9 +765,7 @@ async function runThemeScenario(mode, theme, artifactDir) {
       page.locator('[data-testid="desktop-nav-forward"]').click(),
     ]);
 
-    if (mode === "dev") {
-      await runExtendedDevAcceptance(origin, page, company);
-    }
+    await runBundledPluginAcceptance(mode, origin, page, company);
 
     const boardShot = path.resolve(artifactDir, `board-${locale}-${theme}.png`);
     await page.screenshot({ path: boardShot, fullPage: true });
