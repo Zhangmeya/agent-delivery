@@ -300,7 +300,7 @@ for (const packageJsonPath of findBundledPluginPackageJsons(bundledPluginsDir)) 
   if (shouldInstallBundledPluginBeforeBuild(packageRoot)) {
     const relativePackageRoot = bundledPluginRelativeRoot(packageRoot);
     console.log(`[desktop-stage] Installing standalone bundled plugin deps for ${relativePackageRoot}...`);
-    runPnpm(["--dir", packageRoot, "install", "--lockfile=false"], { cwd: packageRoot });
+    runPnpm(["--dir", packageRoot, "install", "--ignore-workspace", "--no-lockfile"], { cwd: packageRoot });
   }
   if (pkg.scripts?.build) {
     runPnpm(["--dir", packageRoot, "run", "build"], { cwd: packageRoot });
