@@ -17,6 +17,8 @@ jobs:
   review:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      HAS_COMMITPERCLIP_KEY: ${{ secrets.COMMITPERCLIP_KEY != '' }}
     steps:
       - name: Checkout base branch (never PR code)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -36,7 +38,7 @@ jobs:
           node-version: '20'
 
       - name: Generate commitperclip token
-        if: secrets.COMMITPERCLIP_KEY != ''
+        if: env.HAS_COMMITPERCLIP_KEY == 'true'
         id: token
         run: |
           TOKEN=$(node .github/scripts/get-bot-token.mjs)
