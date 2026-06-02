@@ -29,6 +29,9 @@ const appRuntimeSkillsDir = path.resolve(appRuntimeDir, "skills");
 const appRuntimeBundledPluginsDir = path.resolve(appRuntimeDir, "packages", "plugins");
 const bundledSkillsDir = path.resolve(repoRoot, "skills");
 const bundledPluginsDir = path.resolve(repoRoot, "packages", "plugins");
+const bundledPluginPackageExclusions = new Set([
+  "examples/plugin-orchestration-smoke-example",
+]);
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
@@ -143,6 +146,11 @@ function findBundledPluginPackageJsons(rootDir, maxDepth = 4) {
       if (entry.name === "node_modules" || entry.name === "dist") continue;
       const entryPath = path.resolve(dir, entry.name);
       if (entry.isFile() && entry.name === "package.json") {
+        const relativePackageRoot = path.relative(rootDir, dir).replaceAll(path.sep, "/");
+        if (bundledPluginPackageExclusions.has(relativePackageRoot)) {
+          continue;
+        }
+
         const pkg = readJson(entryPath);
         if (
           pkg.paperclipPlugin
