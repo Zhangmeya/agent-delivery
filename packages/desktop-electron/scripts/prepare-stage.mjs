@@ -32,6 +32,9 @@ const bundledPluginsDir = path.resolve(repoRoot, "packages", "plugins");
 const bundledPluginPackageExclusions = new Set([
   "examples/plugin-orchestration-smoke-example",
 ]);
+const standaloneBundledPluginPackagePrefixes = [
+  "sandbox-providers/",
+];
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
@@ -171,6 +174,16 @@ function findBundledPluginPackageJsons(rootDir, maxDepth = 4) {
   return packageJsons;
 }
 
+function bundledPluginRelativeRoot(packageRoot) {
+  return path.relative(bundledPluginsDir, packageRoot).replaceAll(path.sep, "/");
+}
+
+function shouldInstallBundledPluginBeforeBuild(packageRoot) {
+  const relativePackageRoot = bundledPluginRelativeRoot(packageRoot);
+  return standaloneBundledPluginPackagePrefixes.some((prefix) =>
+    relativePackageRoot.startsWith(prefix));
+}
+
 function copyIfExists(sourcePath, destinationPath, options = {}) {
   if (!existsSync(sourcePath)) return false;
   mkdirSync(path.dirname(destinationPath), { recursive: true });
@@ -284,6 +297,11 @@ console.log("[desktop-stage] Building bundled plugin packages...");
 for (const packageJsonPath of findBundledPluginPackageJsons(bundledPluginsDir)) {
   const packageRoot = path.dirname(packageJsonPath);
   const pkg = readJson(packageJsonPath);
+  if (shouldInstallBundledPluginBeforeBuild(packageRoot)) {
+    const relativePackageRoot = bundledPluginRelativeRoot(packageRoot);
+    console.log(`[desktop-stage] Installing standalone bundled plugin deps for ${relativePackageRoot}...`);
+    runPnpm(["--dir", packageRoot, "install", "--lockfile=false"], { cwd: packageRoot });
+  }
   if (pkg.scripts?.build) {
     runPnpm(["--dir", packageRoot, "run", "build"], { cwd: packageRoot });
   }
