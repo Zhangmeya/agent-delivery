@@ -65,6 +65,29 @@ All client commands support:
 
 Company-scoped commands also support `--company-id <id>`.
 
+API base resolution order:
+
+1. `--api-base <url>`
+2. `PAPERCLIP_API_URL`
+3. selected context profile `apiBase`
+4. local Paperclip config server port
+5. `http://localhost:3100`
+
+Connection failures include the attempted URL and a `GET /api/health` check hint.
+
+## Connect Wizard
+
+```sh
+pnpm penclip connect
+```
+
+`connect` confirms the resolved API base, verifies `GET /api/health`, authenticates board access when needed, and saves a persona-aware profile:
+
+- `persona=board` for board operator profiles
+- `persona=agent` with `agentId` and `agentName` for agent profiles
+
+Profiles store token env-var names, not plaintext tokens. The wizard prints shell exports for the newly created token.
+
 Use `--data-dir` on any CLI command to isolate all default local state (config/context/db/logs/storage/secrets) away from `~/.paperclip`:
 
 ```sh
@@ -78,6 +101,7 @@ Store local defaults in `~/.paperclip/context.json`:
 
 ```sh
 pnpm penclip context set --api-base http://localhost:3100 --company-id <company-id>
+pnpm penclip context set --persona agent --agent-id <agent-id> --api-key-env-var-name PAPERCLIP_API_KEY
 pnpm penclip context show
 pnpm penclip context list
 pnpm penclip context use default
@@ -95,6 +119,17 @@ export PAPERCLIP_API_KEY=...
 ```sh
 pnpm penclip company list
 pnpm penclip company get <company-id>
+pnpm penclip company stats
+pnpm penclip company create --payload-json '{...}'
+pnpm penclip company update <company-id> --payload-json '{...}'
+pnpm penclip company branding:update <company-id> --payload-json '{...}'
+pnpm penclip company archive <company-id>
+pnpm penclip company export <company-id> --out ./company --include company,agents,projects,issues,skills
+pnpm penclip company export:preview <company-id> --payload-json '{...}'
+pnpm penclip company export:api <company-id> --payload-json '{...}'
+pnpm penclip company import ./company --target new --new-company-name "Imported Company"
+pnpm penclip company import:preview <company-id> --payload-json '{...}'
+pnpm penclip company import:apply <company-id> --payload-json '{...}'
 pnpm penclip company delete <company-id-or-prefix> --yes --confirm <same-id-or-prefix>
 ```
 
@@ -117,9 +152,102 @@ pnpm penclip issue list --company-id <company-id> [--status todo,in_progress] [-
 pnpm penclip issue get <issue-id-or-identifier>
 pnpm penclip issue create --company-id <company-id> --title "..." [--description "..."] [--status todo] [--priority high]
 pnpm penclip issue update <issue-id> [--status in_progress] [--comment "..."]
+pnpm penclip issue delete <issue-id> --yes
 pnpm penclip issue comment <issue-id> --body "..." [--reopen]
+pnpm penclip issue comments <issue-id> [--limit 50]
+pnpm penclip issue comment:get <issue-id> <comment-id>
+pnpm penclip issue comment:delete <issue-id> <comment-id>
+pnpm penclip issue runs <issue-id-or-identifier>
+pnpm penclip issue live-runs <issue-id-or-identifier>
+pnpm penclip issue active-run <issue-id-or-identifier>
+pnpm penclip issue heartbeat-context <issue-id>
 pnpm penclip issue checkout <issue-id> --agent-id <agent-id> [--expected-statuses todo,backlog,blocked]
 pnpm penclip issue release <issue-id>
+pnpm penclip issue force-release <issue-id>
+```
+
+Issue subresources are exposed as Paperclip API wrappers. Commands that map to broad server schemas accept JSON payloads and validate them with shared schemas before sending.
+
+```sh
+pnpm penclip issue child:create <issue-id> --payload-json '{"title":"Child task"}'
+pnpm penclip issue approvals <issue-id>
+pnpm penclip issue approval:link <issue-id> <approval-id>
+pnpm penclip issue approval:unlink <issue-id> <approval-id>
+pnpm penclip issue read <issue-id>
+pnpm penclip issue unread <issue-id>
+pnpm penclip issue archive <issue-id>
+pnpm penclip issue unarchive <issue-id>
+pnpm penclip issue recovery-actions <issue-id>
+pnpm penclip issue recovery:resolve <issue-id> --outcome restored --source-issue-status todo
+```
+
+```sh
+pnpm penclip issue documents <issue-id> [--include-system]
+pnpm penclip issue document:get <issue-id> <key>
+pnpm penclip issue document:put <issue-id> <key> --body-file ./plan.md [--title Plan]
+pnpm penclip issue document:lock <issue-id> <key>
+pnpm penclip issue document:unlock <issue-id> <key>
+pnpm penclip issue document:revisions <issue-id> <key>
+pnpm penclip issue document:restore <issue-id> <key> <revision-id>
+pnpm penclip issue document:delete <issue-id> <key>
+```
+
+```sh
+pnpm penclip issue work-products <issue-id>
+pnpm penclip issue work-product:create <issue-id> --payload-json '{"type":"pull_request","provider":"github","title":"PR"}'
+pnpm penclip issue work-product:update <work-product-id> --payload-json '{"status":"archived"}'
+pnpm penclip issue work-product:delete <work-product-id>
+pnpm penclip issue interactions <issue-id>
+pnpm penclip issue interaction:create <issue-id> --payload-json '{"kind":"request_confirmation","payload":{"version":1,"prompt":"Continue?"}}'
+pnpm penclip issue interaction:accept <issue-id> <interaction-id> [--selected-client-keys key1,key2]
+pnpm penclip issue interaction:reject <issue-id> <interaction-id> [--reason "..."]
+pnpm penclip issue interaction:respond <issue-id> <interaction-id> --answers-json '[{"questionId":"q1","optionIds":["yes"]}]'
+pnpm penclip issue interaction:cancel <issue-id> <interaction-id> [--reason "..."]
+```
+
+```sh
+pnpm penclip issue tree-state <issue-id>
+pnpm penclip issue tree-preview <issue-id> --payload-json '{"mode":"pause"}'
+pnpm penclip issue tree-holds <issue-id> [--status active] [--include-members]
+pnpm penclip issue tree-hold:create <issue-id> --payload-json '{"mode":"pause","reason":"review"}'
+pnpm penclip issue tree-hold:get <issue-id> <hold-id>
+pnpm penclip issue tree-hold:release <issue-id> <hold-id> [--payload-json '{"reason":"done"}']
+pnpm penclip issue attachments <issue-id>
+pnpm penclip issue attachment:upload <issue-id> --company-id <company-id> --file ./artifact.txt
+pnpm penclip issue attachment:download <attachment-id> [--out ./artifact.txt]
+pnpm penclip issue attachment:delete <attachment-id>
+pnpm penclip issue label:list --company-id <company-id>
+pnpm penclip issue label:create --company-id <company-id> --name bug --color '#ff0000'
+pnpm penclip issue label:delete <label-id>
+pnpm penclip issue feedback:votes <issue-id>
+pnpm penclip issue feedback:vote <issue-id> --payload-json '{"targetType":"issue_comment","targetId":"...","vote":"up"}'
+```
+
+## Project Commands
+
+```sh
+pnpm penclip project list --company-id <company-id>
+pnpm penclip project get <project-id-or-shortname> [--company-id <company-id>]
+pnpm penclip project create --company-id <company-id> --name "Launch Site" [--goal-ids <id1,id2>] [--lead-agent-id <id>]
+pnpm penclip project update <project-id-or-shortname> [--status in_progress] [--company-id <company-id>]
+pnpm penclip project delete <project-id-or-shortname> --yes [--company-id <company-id>]
+```
+
+Advanced project fields accept JSON:
+
+```sh
+pnpm penclip project create --company-id <company-id> --name "Ops" --env-json '{"OPENAI_API_KEY":{"kind":"secret","secretName":"openai-api-key"}}'
+pnpm penclip project update <project-id> --execution-workspace-policy-json '{"enabled":true,"defaultMode":"shared_workspace"}'
+```
+
+## Goal Commands
+
+```sh
+pnpm penclip goal list --company-id <company-id>
+pnpm penclip goal get <goal-id>
+pnpm penclip goal create --company-id <company-id> --title "Grow revenue" [--level company] [--status active]
+pnpm penclip goal update <goal-id> [--title "..."] [--status achieved]
+pnpm penclip goal delete <goal-id> --yes
 ```
 
 ## Agent Commands
@@ -127,7 +255,42 @@ pnpm penclip issue release <issue-id>
 ```sh
 pnpm penclip agent list --company-id <company-id>
 pnpm penclip agent get <agent-id>
+pnpm penclip agent create --company-id <company-id> --payload-json '{"name":"Builder","adapterType":"codex_local"}'
+pnpm penclip agent hire --company-id <company-id> --payload-json '{...}'
+pnpm penclip agent update <agent-id> --payload-json '{"title":"Senior Builder"}'
+pnpm penclip agent delete <agent-id> --yes
+pnpm penclip agent me
+pnpm penclip agent inbox
+pnpm penclip agent inbox-mine --user-id <board-user-id>
+pnpm penclip agent wake <agent-id-or-shortname> [--company-id <company-id>] [--reason "..."] [--payload '{"issueId":"..."}']
+pnpm penclip agent pause <agent-id>
+pnpm penclip agent resume <agent-id>
+pnpm penclip agent approve <agent-id>
+pnpm penclip agent terminate <agent-id>
+pnpm penclip agent heartbeat:invoke <agent-id>
+pnpm penclip agent claude-login <agent-id>
 pnpm penclip agent local-cli <agent-id-or-shortname> --company-id <company-id>
+```
+
+Agent configuration and runtime endpoints:
+
+```sh
+pnpm penclip agent permissions:update <agent-id> --payload-json '{"canCreateAgents":true,"canAssignTasks":true}'
+pnpm penclip agent configuration <agent-id>
+pnpm penclip agent config-revisions <agent-id>
+pnpm penclip agent config-revision:get <agent-id> <revision-id>
+pnpm penclip agent config-revision:rollback <agent-id> <revision-id>
+pnpm penclip agent runtime-state <agent-id>
+pnpm penclip agent runtime-state:reset-session <agent-id> [--task-key <key>]
+pnpm penclip agent task-sessions <agent-id>
+pnpm penclip agent skills <agent-id>
+pnpm penclip agent skills:sync <agent-id> --desired-skills paperclip,github
+pnpm penclip agent instructions-path:update <agent-id> --payload-json '{"path":"/path/to/AGENTS.md"}'
+pnpm penclip agent instructions-bundle <agent-id>
+pnpm penclip agent instructions-bundle:update <agent-id> --payload-json '{"mode":"managed"}'
+pnpm penclip agent instructions-file:get <agent-id> --path AGENTS.md
+pnpm penclip agent instructions-file:put <agent-id> --path AGENTS.md --content-file ./AGENTS.md
+pnpm penclip agent instructions-file:delete <agent-id> --path AGENTS.md
 ```
 
 `agent local-cli` is the quickest way to run local Claude/Codex manually as a Paperclip agent:
@@ -143,9 +306,78 @@ pnpm penclip agent local-cli codexcoder --company-id <company-id>
 pnpm penclip agent local-cli claudecoder --company-id <company-id>
 ```
 
+## Token Commands
+
+Agent API keys are scoped to one company and one agent. Plaintext tokens are printed once at creation.
+
+```sh
+pnpm penclip token agent create --company-id <company-id> --agent <agent-id-or-name> --name external-worker
+pnpm penclip token agent list --company-id <company-id> --agent <agent-id-or-name>
+pnpm penclip token agent revoke --company-id <company-id> --agent <agent-id-or-name> <key-id>
+```
+
+Named board API keys use the board authorization model, support revocation and expiration metadata, and are audited server-side.
+
+```sh
+pnpm penclip token board create --company-id <company-id> --name external-admin
+pnpm penclip token board create --name short-lived --ttl-days 7
+pnpm penclip token board list
+pnpm penclip token board revoke <key-id>
+```
+
+## Run Commands
+
+`penclip run` without a subcommand still bootstraps and starts a local Paperclip instance. The subcommands below inspect and control API heartbeat runs.
+
+```sh
+pnpm penclip run list --company-id <company-id> [--agent-id <agent-id>] [--limit 50]
+pnpm penclip run live --company-id <company-id> [--limit 50] [--min-count 0]
+pnpm penclip run get <run-id>
+pnpm penclip run events <run-id> [--after-seq 0] [--limit 200]
+pnpm penclip run log <run-id> [--offset 0] [--limit-bytes 16384] [--text]
+pnpm penclip run cancel <run-id>
+pnpm penclip run issues <run-id>
+pnpm penclip run workspace-operations <run-id>
+pnpm penclip run workspace-log <operation-id> [--offset 0] [--limit-bytes 16384] [--text]
+pnpm penclip run watchdog-decision <run-id> --decision continue [--reason "..."]
+```
+
+## Routine Commands
+
+`penclip routines disable-all` remains the local maintenance command. The singular `routine` group maps to the REST API.
+
+```sh
+pnpm penclip routine list --company-id <company-id> [--project-id <project-id>]
+pnpm penclip routine create --company-id <company-id> --payload-json '{...}'
+pnpm penclip routine get <routine-id>
+pnpm penclip routine update <routine-id> --payload-json '{...}'
+pnpm penclip routine revisions <routine-id>
+pnpm penclip routine revision:restore <routine-id> <revision-id>
+pnpm penclip routine runs <routine-id> [--limit 50]
+pnpm penclip routine run <routine-id> [--payload-json '{...}']
+pnpm penclip routine trigger:create <routine-id> --payload-json '{...}'
+pnpm penclip routine trigger:update <trigger-id> --payload-json '{...}'
+pnpm penclip routine trigger:delete <trigger-id>
+pnpm penclip routine trigger:rotate-secret <trigger-id>
+pnpm penclip routine trigger:fire <public-id> [--payload-json '{...}']
+```
+
+## Prompt Handoff
+
+Prompt handoff creates Paperclip work. It does not create a chat session.
+
+```sh
+pnpm penclip agent-prompt <agent-name-or-id> <agent-api-key> "Prompt here"
+pnpm penclip agent prompt --agent <agent-name-or-id> --api-key-env PAPERCLIP_API_KEY "Prompt here"
+pnpm penclip agent prompt --profile my-agent "Prompt here"
+pnpm penclip board prompt --company-id <company-id> --agent <agent-name-or-id> "Prompt here"
+```
+
+By default the command creates a `todo` issue assigned to the target agent and wakes the agent. Use `--issue <issue-id>` to add a comment to existing work, and `--no-wake` to skip the wakeup.
+
 ## Skills Commands
 
-`paperclipai skills` covers three distinct operations:
+`penclip skills` covers three distinct operations:
 
 1. **Company install** — adds or updates a row in `company_skills` for the
    whole company. This is what `skills install`, `skills import`, `skills create`,
@@ -162,15 +394,15 @@ are added on top of whatever the desired set names.
 
 ### Catalog (app-shipped skills)
 
-The Paperclip app ships a curated catalog under `@penclipai/skills-catalog`.
+The Paperclip app ships a curated catalog under `@paperclipai/skills-catalog`.
 Browse and inspect commands never mutate company state; `install` adds a catalog
 skill to the company library.
 
 ```sh
-pnpm paperclipai skills browse [--kind bundled|optional] [--category <slug>] [--query <text>]
-pnpm paperclipai skills search "<text>" [--kind bundled|optional] [--category <slug>]
-pnpm paperclipai skills inspect <catalog-id-or-key-or-slug>
-pnpm paperclipai skills install <catalog-id-or-key-or-slug> [--as <slug>] [--force] --company-id <company-id>
+pnpm penclip skills browse [--kind bundled|optional] [--category <slug>] [--query <text>]
+pnpm penclip skills search "<text>" [--kind bundled|optional] [--category <slug>]
+pnpm penclip skills inspect <catalog-id-or-key-or-slug>
+pnpm penclip skills install <catalog-id-or-key-or-slug> [--as <slug>] [--force] --company-id <company-id>
 ```
 
 Catalog semantics:
@@ -191,11 +423,11 @@ Catalog semantics:
 Examples:
 
 ```sh
-pnpm paperclipai skills browse --kind bundled --company-id <company-id>
-pnpm paperclipai skills search "pull request" --kind bundled
-pnpm paperclipai skills inspect github-pr-workflow
-pnpm paperclipai skills install github-pr-workflow --company-id <company-id>
-pnpm paperclipai skills install paperclipai:optional:browser:agent-browser --company-id <company-id>
+pnpm penclip skills browse --kind bundled --company-id <company-id>
+pnpm penclip skills search "pull request" --kind bundled
+pnpm penclip skills inspect github-pr-workflow
+pnpm penclip skills install github-pr-workflow --company-id <company-id>
+pnpm penclip skills install paperclipai:optional:browser:agent-browser --company-id <company-id>
 ```
 
 External GitHub, skills.sh, local-path, and URL sources still go through
@@ -204,18 +436,18 @@ External GitHub, skills.sh, local-path, and URL sources still go through
 ### Company library
 
 ```sh
-pnpm paperclipai skills list --company-id <company-id>
-pnpm paperclipai skills show <skill-id-or-key-or-slug> --company-id <company-id>
-pnpm paperclipai skills file <skill-id-or-key-or-slug> [--path SKILL.md] --company-id <company-id>
-pnpm paperclipai skills import <source> --company-id <company-id>
-pnpm paperclipai skills create --name "Review PRs" [--slug review-prs] [--description "..."] [--body-file SKILL.md] --company-id <company-id>
-pnpm paperclipai skills scan-projects [--project-id <id>...] [--workspace-id <id>...] --company-id <company-id>
-pnpm paperclipai skills check [skill-id-or-key-or-slug] --company-id <company-id>
-pnpm paperclipai skills update <skill-id-or-key-or-slug> [--force] --company-id <company-id>
-pnpm paperclipai skills update --all [--force] --company-id <company-id>
-pnpm paperclipai skills audit [skill-id-or-key-or-slug] --company-id <company-id>
-pnpm paperclipai skills reset <skill-id-or-key-or-slug> [--yes] [--force] --company-id <company-id>
-pnpm paperclipai skills remove <skill-id-or-key-or-slug> --yes --company-id <company-id>
+pnpm penclip skills list --company-id <company-id>
+pnpm penclip skills show <skill-id-or-key-or-slug> --company-id <company-id>
+pnpm penclip skills file <skill-id-or-key-or-slug> [--path SKILL.md] --company-id <company-id>
+pnpm penclip skills import <source> --company-id <company-id>
+pnpm penclip skills create --name "Review PRs" [--slug review-prs] [--description "..."] [--body-file SKILL.md] --company-id <company-id>
+pnpm penclip skills scan-projects [--project-id <id>...] [--workspace-id <id>...] --company-id <company-id>
+pnpm penclip skills check [skill-id-or-key-or-slug] --company-id <company-id>
+pnpm penclip skills update <skill-id-or-key-or-slug> [--force] --company-id <company-id>
+pnpm penclip skills update --all [--force] --company-id <company-id>
+pnpm penclip skills audit [skill-id-or-key-or-slug] --company-id <company-id>
+pnpm penclip skills reset <skill-id-or-key-or-slug> [--yes] [--force] --company-id <company-id>
+pnpm penclip skills remove <skill-id-or-key-or-slug> --yes --company-id <company-id>
 ```
 
 `skills import <source>` accepts a skills.sh URL, the equivalent
@@ -241,9 +473,9 @@ maintenance loop for catalog-installed skills:
 ### Agent attach
 
 ```sh
-pnpm paperclipai skills agent list <agent-id-or-shortname> --company-id <company-id>
-pnpm paperclipai skills agent sync <agent-id-or-shortname> --skill <skill-id-or-key-or-slug> [--skill <skill-id-or-key-or-slug>...] --company-id <company-id>
-pnpm paperclipai skills agent clear <agent-id-or-shortname> --yes --company-id <company-id>
+pnpm penclip skills agent list <agent-id-or-shortname> --company-id <company-id>
+pnpm penclip skills agent sync <agent-id-or-shortname> --skill <skill-id-or-key-or-slug> [--skill <skill-id-or-key-or-slug>...] --company-id <company-id>
+pnpm penclip skills agent clear <agent-id-or-shortname> --yes --company-id <company-id>
 ```
 
 `skills agent sync` replaces the agent's non-required desired skill set (it is
@@ -269,6 +501,16 @@ pnpm penclip secrets declarations --company-id <company-id> [--include agents,pr
 pnpm penclip secrets create --company-id <company-id> --name anthropic-api-key --value-env ANTHROPIC_API_KEY
 pnpm penclip secrets link --company-id <company-id> --name prod-stripe-key --provider aws_secrets_manager --external-ref <provider-ref>
 pnpm penclip secrets doctor --company-id <company-id>
+pnpm penclip secrets provider-configs --company-id <company-id>
+pnpm penclip secrets provider-config:create --company-id <company-id> --payload-json '{...}'
+pnpm penclip secrets provider-config:discovery-preview --company-id <company-id> --payload-json '{...}'
+pnpm penclip secrets provider-config:get <config-id>
+pnpm penclip secrets provider-config:update <config-id> --payload-json '{...}'
+pnpm penclip secrets provider-config:default <config-id>
+pnpm penclip secrets provider-config:health <config-id>
+pnpm penclip secrets provider-config:delete <config-id>
+pnpm penclip secrets remote-import:preview --company-id <company-id> --payload-json '{...}'
+pnpm penclip secrets remote-import --company-id <company-id> --payload-json '{...}'
 pnpm penclip secrets migrate-inline-env --company-id <company-id> [--apply]
 ```
 
@@ -280,10 +522,9 @@ env and the expected AWS SDK runtime credential source; do not store AWS
 bootstrap credentials in Paperclip secrets.
 
 Per-company provider vaults (multiple vault instances per provider, default
-vault selection, coming-soon GCP/Vault) are configured from the board UI under
-`Company Settings → Secrets → Provider vaults` or through
-`/api/companies/{companyId}/secret-provider-configs`. There is no CLI surface
-for vault management today. See the
+vault selection, coming-soon GCP/Vault) can be configured from the board UI under
+`Company Settings → Secrets → Provider vaults` or through the provider-config CLI
+commands above. See the
 [secrets deploy guide](../docs/deploy/secrets.md#provider-vaults) and
 [API reference](../docs/api/secrets.md#provider-vaults) for the contract.
 
@@ -304,12 +545,228 @@ pnpm penclip approval comment <approval-id> --body "..."
 
 ```sh
 pnpm penclip activity list --company-id <company-id> [--agent-id <agent-id>] [--entity-type issue] [--entity-id <id>]
+pnpm penclip activity create --company-id <company-id> --payload-json '{...}'
+pnpm penclip activity issue <issue-id>
 ```
 
 ## Dashboard Commands
 
 ```sh
 pnpm penclip dashboard get --company-id <company-id>
+```
+
+## Org And Agent Config Commands
+
+```sh
+pnpm penclip whoami
+pnpm penclip openapi
+pnpm penclip org get --company-id <company-id>
+pnpm penclip org svg --company-id <company-id> [--out org.svg]
+pnpm penclip org png --company-id <company-id> [--out org.png]
+pnpm penclip agent-config list --company-id <company-id>
+```
+
+## Access, Profile, And Instance Commands
+
+```sh
+pnpm penclip profile session
+pnpm penclip profile get
+pnpm penclip profile update --payload-json '{...}'
+pnpm penclip profile company-user <user-slug> --company-id <company-id>
+pnpm penclip invite list --company-id <company-id>
+pnpm penclip invite create --company-id <company-id> --payload-json '{...}'
+pnpm penclip invite revoke <invite-id>
+pnpm penclip invite show <token>
+pnpm penclip invite accept <token> [--payload-json '{...}']
+pnpm penclip invite onboarding:text <token>
+pnpm penclip join list --company-id <company-id> [--status pending_approval]
+pnpm penclip join approve <request-id> --company-id <company-id>
+pnpm penclip join reject <request-id> --company-id <company-id>
+pnpm penclip join claim-key <request-id> --claim-secret <secret>
+pnpm penclip member list --company-id <company-id>
+pnpm penclip member update <member-id> --company-id <company-id> --payload-json '{...}'
+pnpm penclip member role-and-grants <member-id> --company-id <company-id> --payload-json '{...}'
+pnpm penclip member permissions <member-id> --company-id <company-id> --payload-json '{...}'
+pnpm penclip member archive <member-id> --company-id <company-id> [--payload-json '{...}']
+pnpm penclip admin user list [--query <text>]
+pnpm penclip admin user promote <user-id>
+pnpm penclip admin user demote <user-id>
+pnpm penclip admin user company-access <user-id>
+pnpm penclip admin user company-access:update <user-id> --payload-json '{...}'
+```
+
+CLI auth challenge endpoints are also exposed for tooling that needs the raw challenge lifecycle:
+
+```sh
+pnpm penclip auth challenge create --payload-json '{...}'
+PAPERCLIP_CHALLENGE_SECRET=<challenge-secret> pnpm penclip auth challenge get <challenge-id> --token-env PAPERCLIP_CHALLENGE_SECRET
+PAPERCLIP_CHALLENGE_SECRET=<challenge-secret> pnpm penclip auth challenge approve <challenge-id> --token-env PAPERCLIP_CHALLENGE_SECRET
+PAPERCLIP_CHALLENGE_SECRET=<challenge-secret> pnpm penclip auth challenge cancel <challenge-id> --token-env PAPERCLIP_CHALLENGE_SECRET
+pnpm penclip auth revoke-current
+```
+
+`--token <challenge-secret>` is still supported for compatibility, but `--token-env` avoids putting challenge secrets in shell history or process arguments.
+
+```sh
+pnpm penclip instance scheduler-heartbeats
+pnpm penclip instance settings:general
+pnpm penclip instance settings:general:update --payload-json '{...}'
+pnpm penclip instance settings:experimental
+pnpm penclip instance settings:experimental:update --payload-json '{...}'
+pnpm penclip instance database-backup
+pnpm penclip sidebar preferences
+pnpm penclip sidebar preferences:update --payload-json '{...}'
+pnpm penclip sidebar project-preferences --company-id <company-id>
+pnpm penclip sidebar project-preferences:update --company-id <company-id> --payload-json '{...}'
+pnpm penclip sidebar badges --company-id <company-id>
+pnpm penclip inbox dismissals --company-id <company-id>
+pnpm penclip inbox dismiss --company-id <company-id> --payload-json '{"itemKey":"run:<run-id>"}'
+pnpm penclip board-claim show <token>
+pnpm penclip board-claim claim <token> [--payload-json '{...}']
+pnpm penclip openclaw invite-prompt --company-id <company-id> --payload-json '{...}'
+pnpm penclip available-skill list
+pnpm penclip available-skill index
+pnpm penclip available-skill get <skill-name>
+pnpm penclip llm agent-configuration
+pnpm penclip llm agent-configuration:adapter <adapter-type>
+pnpm penclip llm agent-icons
+```
+
+## Adapter, Asset, And Skill Commands
+
+```sh
+pnpm penclip adapter list
+pnpm penclip adapter install --payload-json '{"packageName":"@scope/adapter","version":"1.2.3"}'
+pnpm penclip adapter get <adapter-type>
+pnpm penclip adapter update <adapter-type> --payload-json '{"disabled":true}'
+pnpm penclip adapter override <adapter-type> --payload-json '{"paused":true}'
+pnpm penclip adapter reload <adapter-type>
+pnpm penclip adapter reinstall <adapter-type>
+pnpm penclip adapter delete <adapter-type>
+pnpm penclip adapter config-schema <adapter-type>
+pnpm penclip adapter ui-parser <adapter-type>
+pnpm penclip adapter models <adapter-type> --company-id <company-id> [--refresh] [--environment-id <id>]
+pnpm penclip adapter model-profiles <adapter-type> --company-id <company-id>
+pnpm penclip adapter detect-model <adapter-type> --company-id <company-id>
+pnpm penclip adapter test-environment <adapter-type> --company-id <company-id> --payload-json '{...}'
+```
+
+```sh
+pnpm penclip asset image:upload --company-id <company-id> --file ./image.png [--namespace docs] [--alt "..."]
+pnpm penclip asset logo:upload --company-id <company-id> --file ./logo.svg
+pnpm penclip asset content <asset-id> --out ./asset.bin
+```
+
+```sh
+pnpm penclip skill list --company-id <company-id>
+pnpm penclip skill get <skill-id> --company-id <company-id>
+pnpm penclip skill file <skill-id> --company-id <company-id> [--path SKILL.md]
+pnpm penclip skill create --company-id <company-id> --payload-json '{...}'
+pnpm penclip skill file:update <skill-id> --company-id <company-id> --payload-json '{...}'
+pnpm penclip skill import --company-id <company-id> --payload-json '{"source":"github:owner/repo/path"}'
+pnpm penclip skill scan-projects --company-id <company-id> --payload-json '{...}'
+pnpm penclip skill update-status <skill-id> --company-id <company-id>
+pnpm penclip skill install-update <skill-id> --company-id <company-id>
+pnpm penclip skill delete <skill-id> --company-id <company-id>
+```
+
+## Cost, Finance, And Budget Commands
+
+```sh
+pnpm penclip cost summary --company-id <company-id>
+pnpm penclip cost by-agent --company-id <company-id>
+pnpm penclip cost by-agent-model --company-id <company-id>
+pnpm penclip cost by-provider --company-id <company-id>
+pnpm penclip cost by-biller --company-id <company-id>
+pnpm penclip cost by-project --company-id <company-id>
+pnpm penclip cost window-spend --company-id <company-id>
+pnpm penclip cost quota-windows --company-id <company-id>
+pnpm penclip cost issue <issue-id>
+pnpm penclip cost event:create --company-id <company-id> --payload-json '{...}'
+```
+
+```sh
+pnpm penclip finance event:create --company-id <company-id> --payload-json '{...}'
+pnpm penclip finance events --company-id <company-id>
+pnpm penclip finance summary --company-id <company-id>
+pnpm penclip finance by-biller --company-id <company-id>
+pnpm penclip finance by-kind --company-id <company-id>
+pnpm penclip budget overview --company-id <company-id>
+pnpm penclip budget policy:upsert --company-id <company-id> --payload-json '{...}'
+pnpm penclip budget company:update --company-id <company-id> --payload-json '{...}'
+pnpm penclip budget agent:update <agent-id> --payload-json '{...}'
+pnpm penclip budget incident:resolve <incident-id> --company-id <company-id> [--payload-json '{...}']
+```
+
+## Workspace And Environment Commands
+
+```sh
+pnpm penclip workspace list --company-id <company-id>
+pnpm penclip workspace get <execution-workspace-id>
+pnpm penclip workspace close-readiness <execution-workspace-id>
+pnpm penclip workspace operations <execution-workspace-id>
+pnpm penclip workspace update <execution-workspace-id> --payload-json '{...}'
+pnpm penclip workspace runtime-service <execution-workspace-id> start --payload-json '{...}'
+pnpm penclip workspace runtime-command <execution-workspace-id> run --payload-json '{...}'
+```
+
+```sh
+pnpm penclip environment list --company-id <company-id>
+pnpm penclip environment capabilities --company-id <company-id>
+pnpm penclip environment create --company-id <company-id> --payload-json '{...}'
+pnpm penclip environment get <environment-id>
+pnpm penclip environment leases <environment-id>
+pnpm penclip environment lease <lease-id>
+pnpm penclip environment update <environment-id> --payload-json '{...}'
+pnpm penclip environment delete <environment-id>
+pnpm penclip environment probe <environment-id>
+pnpm penclip environment probe-config --company-id <company-id> --payload-json '{...}'
+```
+
+```sh
+pnpm penclip project-workspace list <project-id>
+pnpm penclip project-workspace create <project-id> --payload-json '{...}'
+pnpm penclip project-workspace update <project-id> <workspace-id> --payload-json '{...}'
+pnpm penclip project-workspace delete <project-id> <workspace-id>
+pnpm penclip project-workspace runtime-service <project-id> <workspace-id> restart --payload-json '{...}'
+pnpm penclip project-workspace runtime-command <project-id> <workspace-id> run --payload-json '{...}'
+```
+
+## Plugin Commands
+
+Existing plugin lifecycle commands remain available: `plugin init`, `list`, `install`, `uninstall`, `enable`, `disable`, `inspect`, and `examples`.
+
+```sh
+pnpm penclip plugin ui-contributions
+pnpm penclip plugin tools
+pnpm penclip plugin tool:execute --payload-json '{...}'
+pnpm penclip plugin health <plugin-id>
+pnpm penclip plugin logs <plugin-id>
+pnpm penclip plugin upgrade <plugin-id>
+pnpm penclip plugin config <plugin-id>
+pnpm penclip plugin config:set <plugin-id> --payload-json '{"configJson":{...}}'
+pnpm penclip plugin config:test <plugin-id> --payload-json '{"configJson":{...}}'
+pnpm penclip plugin jobs <plugin-id>
+pnpm penclip plugin job:runs <plugin-id> <job-id>
+pnpm penclip plugin job:trigger <plugin-id> <job-id> [--payload-json '{...}']
+pnpm penclip plugin webhook <plugin-id> <endpoint-key> [--payload-json '{...}']
+pnpm penclip plugin dashboard <plugin-id>
+pnpm penclip plugin bridge:data <plugin-id> --payload-json '{...}'
+pnpm penclip plugin bridge:action <plugin-id> --payload-json '{...}'
+pnpm penclip plugin bridge:stream <plugin-id> <channel> [--duration-ms 10000]
+pnpm penclip plugin data <plugin-id> <key> --payload-json '{...}'
+pnpm penclip plugin action <plugin-id> <key> --payload-json '{...}'
+pnpm penclip plugin local-folders <plugin-id> --company-id <company-id>
+pnpm penclip plugin local-folder:status <plugin-id> <folder-key> --company-id <company-id>
+pnpm penclip plugin local-folder:validate <plugin-id> <folder-key> --company-id <company-id> [--payload-json '{...}']
+pnpm penclip plugin local-folder:set <plugin-id> <folder-key> --company-id <company-id> --payload-json '{...}'
+```
+
+Feedback traces can be fetched directly by ID when automating export workflows:
+
+```sh
+pnpm penclip feedback trace <trace-id>
+pnpm penclip feedback bundle <trace-id>
 ```
 
 ## Heartbeat Command

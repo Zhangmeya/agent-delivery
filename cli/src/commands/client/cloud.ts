@@ -12,6 +12,7 @@ import { openUrl } from "../../client/board-auth.js";
 import { resolvePaperclipInstanceId } from "../../config/home.js";
 import {
   addCommonClientOptions,
+  apiPath,
   handleCommandError,
   printOutput,
   resolveCommandContext,
@@ -188,7 +189,7 @@ export async function pushCloud(opts: CloudPushOptions): Promise<unknown> {
   await assertCloudSyncEnabled(ctx.api.get<InstanceExperimentalSettings>("/api/instance/settings/experimental"));
   const connection = getCloudConnection(opts.remoteUrl);
   if (!connection) {
-    throw new Error("No cloud connection found. Run `paperclipai cloud connect <remote-url>` first.");
+    throw new Error("No cloud connection found. Run `penclip cloud connect <remote-url>` first.");
   }
 
   const discovery = await discoverUpstream(connection.targetOrigin);
@@ -270,7 +271,7 @@ export async function buildBundleFromLocalCompany(input: {
   mode: "preview" | "apply";
 }): Promise<LocalUpstreamExportBundle> {
   const exported = await input.localApi.post<CompanyPortabilityExportResult>(
-    `/api/companies/${input.localCompanyId}/export`,
+    apiPath`/api/companies/${input.localCompanyId}/export`,
     {
       include: {
         company: true,
@@ -492,7 +493,7 @@ async function assertCloudSyncEnabled(settingsPromise: Promise<InstanceExperimen
   const settings = await settingsPromise;
   if (settings?.enableCloudSync !== true) {
     throw new Error(
-      "Cloud sync is disabled. Enable the cloud sync experimental setting before running `paperclipai cloud push`.",
+      "Cloud sync is disabled. Enable the cloud sync experimental setting before running `penclip cloud push`.",
     );
   }
 }
