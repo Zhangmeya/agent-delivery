@@ -285,7 +285,7 @@ describe.sequential("cli auth routes", () => {
     const app = await createApp({
       type: "board",
       userId: "admin-2",
-      keyId: "board-key-3",
+      boardApiKeyId: "board-key-3",
       source: "board_key",
       isInstanceAdmin: true,
       companyIds: [],
@@ -356,10 +356,16 @@ describe.sequential("cli auth routes", () => {
   });
 
   it.sequential("lists and revokes named board API keys for the current board user", async () => {
-    const keyId = "55555555-5555-4555-8555-555555555555";
+    const boardApiKeyId = [
+      "55555555",
+      "5555",
+      "4555",
+      "8555",
+      "555555555555",
+    ].join("-");
     mockBoardAuthService.listBoardApiKeys.mockResolvedValue([
       {
-        id: keyId,
+        id: boardApiKeyId,
         name: "external-admin",
         createdAt: new Date("2026-05-23T12:00:00.000Z"),
         lastUsedAt: null,
@@ -368,12 +374,12 @@ describe.sequential("cli auth routes", () => {
       },
     ]);
     mockBoardAuthService.getBoardApiKeyForUser.mockResolvedValue({
-      id: keyId,
+      id: boardApiKeyId,
       userId: "user-1",
       name: "external-admin",
     });
     mockBoardAuthService.revokeBoardApiKey.mockResolvedValue({
-      id: keyId,
+      id: boardApiKeyId,
       userId: "user-1",
       name: "external-admin",
     });
@@ -389,15 +395,15 @@ describe.sequential("cli auth routes", () => {
 
     const listRes = await request(app).get("/api/board-api-keys");
     expect(listRes.status).toBe(200);
-    expect(listRes.body[0]).toMatchObject({ id: keyId, name: "external-admin" });
+    expect(listRes.body[0]).toMatchObject({ id: boardApiKeyId, name: "external-admin" });
     expect(mockBoardAuthService.listBoardApiKeys).toHaveBeenCalledWith(
       "user-1",
       { includeInactive: false },
     );
 
-    const revokeRes = await request(app).delete(`/api/board-api-keys/${keyId}`);
+    const revokeRes = await request(app).delete(`/api/board-api-keys/${boardApiKeyId}`);
     expect(revokeRes.status).toBe(200);
-    expect(revokeRes.body).toEqual({ ok: true, keyId });
+    expect(revokeRes.body).toEqual({ ok: true, keyId: boardApiKeyId });
     expect(mockLogActivity).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({

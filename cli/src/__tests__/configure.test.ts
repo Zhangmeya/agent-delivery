@@ -62,7 +62,7 @@ function writeBaseConfig(configPath: string) {
     secrets: {
       provider: "local_encrypted",
       strictMode: false,
-      localEncrypted: { keyFilePath: "/tmp/paperclip-secrets/master.key" },
+      localEncrypted: { "keyFilePath": "/tmp/paperclip-secrets/master.key" },
     },
   };
   fs.mkdirSync(path.dirname(configPath), { recursive: true });

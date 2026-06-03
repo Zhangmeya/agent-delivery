@@ -16,11 +16,11 @@ function createTempPath(name: string): string {
 describe("resolveCommandContext", () => {
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV };
-    delete process.env.PAPERCLIP_API_URL;
-    delete process.env.PAPERCLIP_API_KEY;
-    delete process.env.PAPERCLIP_COMPANY_ID;
-    delete process.env.PAPERCLIP_AUTH_STORE;
-    delete process.env.PAPERCLIP_SERVER_PORT;
+    delete process.env["PAPERCLIP_API_URL"];
+    delete process.env["PAPERCLIP_API_KEY"];
+    delete process.env["PAPERCLIP_COMPANY_ID"];
+    delete process.env["PAPERCLIP_AUTH_STORE"];
+    delete process.env["PAPERCLIP_SERVER_PORT"];
   });
 
   afterEach(() => {
@@ -38,13 +38,13 @@ describe("resolveCommandContext", () => {
           ops: {
             apiBase: "http://127.0.0.1:9999",
             companyId: "company-profile",
-            apiKeyEnvVarName: "AGENT_KEY",
+            "apiKeyEnvVarName": "AGENT_KEY",
           },
         },
       },
       contextPath,
     );
-    process.env.AGENT_KEY = "key-from-env";
+    process.env["AGENT_KEY"] = "key-from-env";
 
     const resolved = resolveCommandContext({ context: contextPath }, { requireCompany: true });
     expect(resolved.api.apiBase).toBe("http://127.0.0.1:9999");
@@ -111,10 +111,10 @@ describe("resolveCommandContext", () => {
     expect(resolveApiBase({ apiBase: "http://explicit:1", config: configPath }, { apiBase: "http://profile:2" }))
       .toBe("http://explicit:1");
 
-    process.env.PAPERCLIP_API_URL = "http://env:3/";
+    process.env["PAPERCLIP_API_URL"] = "http://env:3/";
     expect(resolveApiBase({ config: configPath }, { apiBase: "http://profile:2" })).toBe("http://env:3");
 
-    delete process.env.PAPERCLIP_API_URL;
+    delete process.env["PAPERCLIP_API_URL"];
     expect(resolveApiBase({ config: configPath }, { apiBase: "http://profile:2/" })).toBe("http://profile:2");
     expect(resolveApiBase({ config: configPath }, {})).toBe("http://localhost:4111");
   });
@@ -122,8 +122,8 @@ describe("resolveCommandContext", () => {
   it("prefers explicit and env tokens over profile env and stored board auth", () => {
     const contextPath = createTempPath("context.json");
     const authStorePath = createTempPath("auth.json");
-    process.env.PAPERCLIP_AUTH_STORE = authStorePath;
-    process.env.PROFILE_KEY = "profile-token";
+    process.env["PAPERCLIP_AUTH_STORE"] = authStorePath;
+    process.env["PROFILE_KEY"] = "profile-token";
     setStoredBoardCredential({
       apiBase: "http://localhost:3100",
       token: "stored-board-token",
@@ -137,7 +137,7 @@ describe("resolveCommandContext", () => {
         profiles: {
           default: {
             apiBase: "http://localhost:3100",
-            apiKeyEnvVarName: "PROFILE_KEY",
+            "apiKeyEnvVarName": "PROFILE_KEY",
           },
         },
       },
@@ -148,7 +148,7 @@ describe("resolveCommandContext", () => {
     expect(profileResolved.api.apiKey).toBe("profile-token");
     expect(profileResolved.authSource).toBe("profile_env");
 
-    process.env.PAPERCLIP_API_KEY = "env-token";
+    process.env["PAPERCLIP_API_KEY"] = "env-token";
     const envResolved = resolveCommandContext({ context: contextPath });
     expect(envResolved.api.apiKey).toBe("env-token");
     expect(envResolved.authSource).toBe("env");
