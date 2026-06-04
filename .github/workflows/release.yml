@@ -29,15 +29,20 @@ jobs:
   verify_canary:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 30
     permissions:
       contents: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -45,11 +50,6 @@ jobs:
           node-version: 24
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@9.15.4 --activate
 
       - name: Validate release package manifest
         run: node ./scripts/release-package-map.mjs check
@@ -74,12 +74,18 @@ jobs:
     environment: npm-canary
     permissions:
       contents: write
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -88,11 +94,6 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
           always-auth: true
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@9.15.4 --activate
 
       - name: Validate release package manifest
         run: node ./scripts/release-package-map.mjs check
@@ -108,21 +109,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Verify npm auth
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cat <<EOF > "$HOME/.npmrc"
-          registry=https://registry.npmjs.org/
-          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
-          always-auth=true
-          EOF
-          npm whoami
-
       - name: Publish canary
         env:
           GITHUB_ACTIONS: "true"
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: ./scripts/release.sh canary --skip-verify
 
       - name: Push canary tag
@@ -134,28 +123,24 @@ jobs:
           fi
           git push origin "refs/tags/${tag}"
 
-  smoke_canary:
-    if: github.event_name == 'push'
-    needs: publish_canary
-    uses: ./.github/workflows/release-smoke.yml
-    with:
-      paperclip_version: canary
-      artifact_name: release-smoke-canary
-    secrets: inherit
-
   verify_stable:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 30
     permissions:
       contents: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ inputs.source_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -163,11 +148,6 @@ jobs:
           node-version: 24
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@9.15.4 --activate
 
       - name: Validate release package manifest
         run: node ./scripts/release-package-map.mjs check
@@ -194,21 +174,22 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ inputs.source_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 24
           package-manager-cache: false
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@9.15.4 --activate
+          registry-url: https://registry.npmjs.org
 
       - name: Validate release package manifest
         run: node ./scripts/release-package-map.mjs check
@@ -224,26 +205,29 @@ jobs:
           if [ -n "${{ inputs.stable_date }}" ]; then
             args+=(--date "${{ inputs.stable_date }}")
           fi
-          bash ./scripts/release.sh "${args[@]}"
+          ./scripts/release.sh "${args[@]}"
 
   publish_stable:
     if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
     needs: verify_stable
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    outputs:
-      version: ${{ steps.release_meta.outputs.version }}
-      tag: ${{ steps.release_meta.outputs.tag }}
     environment: npm-stable
     permissions:
       contents: write
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ inputs.source_ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.4
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -252,11 +236,6 @@ jobs:
           package-manager-cache: false
           registry-url: https://registry.npmjs.org
           always-auth: true
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@9.15.4 --activate
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
@@ -269,21 +248,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Verify npm auth
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cat <<EOF > "$HOME/.npmrc"
-          registry=https://registry.npmjs.org/
-          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
-          always-auth=true
-          EOF
-          npm whoami
-
       - name: Publish stable
         env:
           GITHUB_ACTIONS: "true"
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           args=(stable --skip-verify)
           if [ -n "${{ inputs.stable_date }}" ]; then
@@ -311,37 +278,3 @@ jobs:
             exit 1
           fi
           ./scripts/create-github-release.sh "$version"
-
-      - name: Capture stable release metadata
-        id: release_meta
-        run: |
-          tag="$(git tag --points-at HEAD | grep '^v' | head -1)"
-          if [ -z "$tag" ]; then
-            echo "Error: no v* tag points at HEAD after stable release." >&2
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
-
-  desktop_stable:
-    if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
-    needs: publish_stable
-    permissions:
-      contents: write
-    uses: ./.github/workflows/desktop-release.yml
-    with:
-      source_ref: ${{ needs.publish_stable.outputs.tag }}
-      release_version: ${{ needs.publish_stable.outputs.version }}
-      artifact_name: desktop-release-stable
-      upload_to_release: true
-      github_release_tag: ${{ needs.publish_stable.outputs.tag }}
-    secrets: inherit
-
-  smoke_stable:
-    if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
-    needs: publish_stable
-    uses: ./.github/workflows/release-smoke.yml
-    with:
-      paperclip_version: latest
-      artifact_name: release-smoke-stable
-    secrets: inherit
