@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildAdvisoryPayload,
   findExistingDraftAdvisory,
+  isAdvisoryPermissionError,
   postSecurityCheckRun,
   scanSecrets,
   scanCITampering,
@@ -202,6 +203,33 @@ test('postSecurityCheckRun: uses the injected fetch implementation', async () =>
       summary: 'This PR has been flagged for manual security review by a maintainer. No action needed from you.',
     },
   });
+});
+
+test('postSecurityCheckRun: completes successfully when advisory creation is unavailable', async () => {
+  const calls = [];
+
+  await postSecurityCheckRun(async (path, token, options) => {
+    calls.push({ path, token, options });
+    return { ok: true };
+  }, 'token', 'paperclipai/paperclip', 'deadbeef', true, { advisoryUnavailable: true });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    name: 'security-review',
+    head_sha: 'deadbeef',
+    status: 'completed',
+    conclusion: 'success',
+    output: {
+      title: 'Security Review Advisory Unavailable',
+      summary: 'Security flags were detected, but this workflow token cannot create repository security advisories. Review job is non-blocking; inspect workflow logs for details.',
+    },
+  });
+});
+
+test('isAdvisoryPermissionError: recognizes repository advisory permission failures', () => {
+  const error = new Error('GitHub API POST /repos/penclipai/paperclip-cn/security-advisories → 403: {"message":"Resource not accessible by integration"}');
+  assert.equal(isAdvisoryPermissionError(error), true);
+  assert.equal(isAdvisoryPermissionError(new Error('GitHub API POST /repos/x/y/issues → 403: denied')), false);
 });
 
 test('validateSensitivePaths: checks paths against the resolved base ref instead of master', async () => {

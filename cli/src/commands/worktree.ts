@@ -1503,13 +1503,13 @@ async function runWorktreeInit(opts: WorktreeInitOptions): Promise<void> {
 
 export async function worktreeInitCommand(opts: WorktreeInitOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree init ")));
+  p.intro(pc.bgCyan(pc.black(" penclip worktree init ")));
   await runWorktreeInit(opts);
 }
 
 export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree:make ")));
+  p.intro(pc.bgCyan(pc.black(" penclip worktree:make ")));
 
   const name = resolveWorktreeMakeName(nameArg);
   const startPoint = resolveWorktreeStartPoint(opts.startPoint);
@@ -1572,11 +1572,31 @@ export async function worktreeMakeCommand(nameArg: string, opts: WorktreeMakeOpt
   }
 }
 
+type PnpmInstallInvocation = {
+  command: string;
+  argsPrefix: string[];
+};
+
+export function resolvePnpmInstallInvocation(
+  env: NodeJS.ProcessEnv = process.env,
+  nodeExecPath = process.execPath,
+): PnpmInstallInvocation {
+  const npmExecPath = nonEmpty(env.npm_execpath);
+  if (npmExecPath && npmExecPath.toLowerCase().includes("pnpm")) {
+    if (/\.(cjs|mjs|js)$/i.test(npmExecPath)) {
+      return { command: nodeExecPath, argsPrefix: [npmExecPath] };
+    }
+    return { command: npmExecPath, argsPrefix: [] };
+  }
+  return { command: "pnpm", argsPrefix: [] };
+}
+
 function installDependenciesBestEffort(targetPath: string): void {
   const installSpinner = p.spinner();
   installSpinner.start("Installing dependencies...");
+  const pnpm = resolvePnpmInstallInvocation();
   try {
-    execFileSync("pnpm", ["install"], {
+    execFileSync(pnpm.command, [...pnpm.argsPrefix, "install"], {
       cwd: targetPath,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -1722,7 +1742,7 @@ function worktreePathHasUncommittedChanges(worktreePath: string): boolean {
 
 export async function worktreeCleanupCommand(nameArg: string, opts: WorktreeCleanupOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree:cleanup ")));
+  p.intro(pc.bgCyan(pc.black(" penclip worktree:cleanup ")));
 
   const name = resolveWorktreeMakeName(nameArg);
   const sourceCwd = process.cwd();
@@ -2553,7 +2573,7 @@ async function promptForSourceEndpoint(excludeWorktreePath?: string): Promise<Re
       hint: `${choice.worktree}${choice.isCurrent ? " (current)" : ""}`,
     }));
   if (choices.length === 0) {
-    throw new Error("No Paperclip worktrees were found. Run `paperclipai worktree:list` to inspect the repo worktrees.");
+    throw new Error("No Paperclip worktrees were found. Run `penclip worktree:list` to inspect the repo worktrees.");
   }
   const selection = await p.select<string>({
     message: "Choose the source worktree to import from",
@@ -3160,13 +3180,13 @@ async function runWorktreeReseed(opts: WorktreeReseedOptions): Promise<void> {
 
 export async function worktreeReseedCommand(opts: WorktreeReseedOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree reseed ")));
+  p.intro(pc.bgCyan(pc.black(" penclip worktree reseed ")));
   await runWorktreeReseed(opts);
 }
 
 export async function worktreeRepairCommand(opts: WorktreeRepairOptions): Promise<void> {
   printPaperclipCliBanner();
-  p.intro(pc.bgCyan(pc.black(" paperclipai worktree repair ")));
+  p.intro(pc.bgCyan(pc.black(" penclip worktree repair ")));
 
   const seedMode = opts.seedMode ?? "minimal";
   if (!isWorktreeSeedMode(seedMode)) {

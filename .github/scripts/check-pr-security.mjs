@@ -239,6 +239,13 @@ export async function syncDraftAdvisory(fetchImpl, token, repo, prNumber, prTitl
   });
 }
 
+export function isAdvisoryPermissionError(error) {
+  const message = String(error?.message ?? error);
+  return message.includes('/security-advisories') &&
+    message.includes('403') &&
+    message.includes('Resource not accessible by integration');
+}
+
 export async function findExistingDraftAdvisory(fetchImpl, token, repo, prNumber) {
   const prMarker = `PR #${prNumber}`;
 
@@ -259,11 +266,12 @@ export async function findExistingDraftAdvisory(fetchImpl, token, repo, prNumber
   }
 }
 
-export async function postSecurityCheckRun(fetchImpl, token, repo, headSha, hasFlags) {
+export async function postSecurityCheckRun(fetchImpl, token, repo, headSha, hasFlags, options = {}) {
+  const advisoryUnavailable = Boolean(options.advisoryUnavailable);
   await fetchImpl(`/repos/${repo}/check-runs`, token, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(hasFlags ? {
+    body: JSON.stringify(hasFlags && !advisoryUnavailable ? {
       name: 'security-review',
       head_sha: headSha,
       status: 'in_progress',
@@ -277,8 +285,10 @@ export async function postSecurityCheckRun(fetchImpl, token, repo, headSha, hasF
       status: 'completed',
       conclusion: 'success',
       output: {
-        title: 'Security Review Passed',
-        summary: 'No security concerns detected.',
+        title: advisoryUnavailable ? 'Security Review Advisory Unavailable' : 'Security Review Passed',
+        summary: advisoryUnavailable
+          ? 'Security flags were detected, but this workflow token cannot create repository security advisories. Review job is non-blocking; inspect workflow logs for details.'
+          : 'No security concerns detected.',
       },
     }),
   });
@@ -332,10 +342,14 @@ async function main() {
 
   if (allFlags.length > 0) {
     console.error(`[security] ${allFlags.length} flag(s) detected — creating draft advisory and pending check run`);
-    await Promise.all([
-      syncDraftAdvisory(ghFetch, GH_TOKEN, GH_REPO, prNumber, pr.title, allFlags),
-      postSecurityCheckRun(ghFetch, GH_TOKEN, GH_REPO, pr.head.sha, true),
-    ]);
+    try {
+      await syncDraftAdvisory(ghFetch, GH_TOKEN, GH_REPO, prNumber, pr.title, allFlags);
+      await postSecurityCheckRun(ghFetch, GH_TOKEN, GH_REPO, pr.head.sha, true);
+    } catch (error) {
+      if (!isAdvisoryPermissionError(error)) throw error;
+      console.error(`[security] unable to create draft advisory with this token: ${error.message}`);
+      await postSecurityCheckRun(ghFetch, GH_TOKEN, GH_REPO, pr.head.sha, true, { advisoryUnavailable: true });
+    }
   } else {
     console.log('[security] all clear');
     await postSecurityCheckRun(ghFetch, GH_TOKEN, GH_REPO, pr.head.sha, false);
