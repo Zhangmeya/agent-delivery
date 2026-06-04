@@ -45,3 +45,15 @@ test("release publish jobs configure npm token auth before publishing", () => {
   assert.equal(nodeAuthTokenCount, 4);
   assert.match(releaseWorkflow, /npm whoami/);
 });
+
+test("release publish jobs trigger smoke and desktop follow-ups", () => {
+  for (const job of ["smoke_canary", "desktop_stable", "smoke_stable"]) {
+    assert.match(releaseWorkflow, new RegExp(`^  ${job}:`, "m"));
+  }
+
+  assert.match(releaseWorkflow, /uses: \.\/\.github\/workflows\/release-smoke\.yml/);
+  assert.match(releaseWorkflow, /paperclip_version: canary/);
+  assert.match(releaseWorkflow, /paperclip_version: latest/);
+  assert.match(releaseWorkflow, /uses: \.\/\.github\/workflows\/desktop-release\.yml/);
+  assert.match(releaseWorkflow, /source_ref: \$\{\{ needs\.publish_stable\.outputs\.tag \}\}/);
+});
