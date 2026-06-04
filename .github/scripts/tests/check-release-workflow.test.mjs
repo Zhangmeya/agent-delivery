@@ -36,3 +36,12 @@ test("release publish jobs wait for every split verification lane", () => {
     assert.match(releaseWorkflow, new RegExp(`^      - ${requiredNeed}$`, "m"));
   }
 });
+
+test("release publish jobs configure npm token auth before publishing", () => {
+  const verifyAuthStepCount = releaseWorkflow.match(/- name: Verify npm auth/g)?.length ?? 0;
+  assert.equal(verifyAuthStepCount, 2);
+
+  const nodeAuthTokenCount = releaseWorkflow.match(/NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}/g)?.length ?? 0;
+  assert.equal(nodeAuthTokenCount, 4);
+  assert.match(releaseWorkflow, /npm whoami/);
+});
