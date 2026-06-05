@@ -9,7 +9,7 @@ const PAPERCLIP_ART = [
   "╚═╝     ╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝╚═╝     ",
 ] as const;
 
-const TAGLINE = "Open-source orchestration for zero-human companies";
+const TAGLINE = "The app people use to manage AI agents for work";
 
 function shouldPrintPaperclipCliBanner(): boolean {
   if (process.env.PAPERCLIP_NO_CLI_BANNER === "1") {
