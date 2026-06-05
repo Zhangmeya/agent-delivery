@@ -135,6 +135,66 @@ describe("skills catalog manifest", () => {
     expect(result.manifest.skills[0]!.contentHash).toMatch(/^sha256:[a-f0-9]{64}$/);
   });
 
+  it("authenticates pinned GitHub reference fetches when a token is available", async () => {
+    const packageDir = await createCatalogPackage();
+    await writeReference(packageDir, "optional", "research", "remote-research", {
+      source: {
+        type: "github",
+        hostname: "github.com",
+        owner: "example",
+        repo: "remote-skill",
+        ref: "v1.0.0",
+        commit: "0123456789abcdef0123456789abcdef01234567",
+        path: "skills/remote-research",
+      },
+      files: ["SKILL.md"],
+    });
+    const skillMarkdown = [
+      "---",
+      "name: Remote Research",
+      "description: Research recent discussion from a pinned upstream skill.",
+      "---",
+      "",
+    ].join("\n");
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/git/trees/")) {
+        return new Response(JSON.stringify({
+          tree: [
+            { path: "skills/remote-research/SKILL.md", type: "blob", size: Buffer.byteLength(skillMarkdown) },
+          ],
+        }), { status: 200 });
+      }
+      if (url.endsWith("/skills/remote-research/SKILL.md")) {
+        return new Response(skillMarkdown, { status: 200 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const previousToken = process.env.GITHUB_TOKEN;
+    process.env.GITHUB_TOKEN = "ghs_test_token";
+
+    try {
+      const result = await buildCatalogManifest({
+        packageDir,
+        generatedAt: "2026-05-26T00:00:00.000Z",
+      });
+
+      expect(result.errors).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      for (const [, init] of fetchMock.mock.calls) {
+        expect(init?.headers).toMatchObject({
+          authorization: "Bearer ghs_test_token",
+        });
+      }
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.GITHUB_TOKEN;
+      } else {
+        process.env.GITHUB_TOKEN = previousToken;
+      }
+    }
+  });
+
   it("reports frontmatter, directory, uniqueness, and inventory errors together", async () => {
     const packageDir = await createCatalogPackage();
     await writeSkill(packageDir, "bundled", "Bad_Category", "duplicate", {
