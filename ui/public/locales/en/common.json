@@ -2187,6 +2187,7 @@
   "issueChat.agentPaused.budgetDetail": "It was paused by a budget hard stop.",
   "issueChat.agentPaused.manualDetail": "It was paused manually.",
   "issueChat.agentPaused.systemDetail": "It was paused by the system.",
+  "issueChat.deletedComment": "{{authorName}} deleted this comment",
   "issueChat.attachedToIssue": "Attached to issue",
   "issueChat.copySystemNoticeLink": "Copy link",
   "issueChat.copySystemNoticeLinkAria": "Copy link to system notice",

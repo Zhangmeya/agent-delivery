@@ -31,11 +31,11 @@ Mode taxonomy and design intent are documented in `doc/DEPLOYMENT-MODES.md`.
 
 Current CLI behavior:
 
-- `penclip onboard` and `penclip configure --section server` set deployment mode in config
+- `paperclipai onboard` and `paperclipai configure --section server` set deployment mode in config
 - server onboarding/configure ask for reachability intent and write `server.bind`
-- `penclip run --bind <loopback|lan|tailnet>` passes a quickstart bind preset into first-run onboarding when config is missing
+- `paperclipai run --bind <loopback|lan|tailnet>` passes a quickstart bind preset into first-run onboarding when config is missing
 - runtime can override mode with `PAPERCLIP_DEPLOYMENT_MODE`
-- `penclip run` and `penclip doctor` still do not expose a direct low-level `--mode` flag
+- `paperclipai run` and `paperclipai doctor` still do not expose a direct low-level `--mode` flag
 
 Canonical behavior is documented in `doc/DEPLOYMENT-MODES.md`.
 
@@ -119,6 +119,7 @@ export PAPERCLIP_API_KEY=...
 ```sh
 pnpm penclip company list
 pnpm penclip company get <company-id>
+pnpm penclip company current [--company-id <company-id>]
 pnpm penclip company stats
 pnpm penclip company create --payload-json '{...}'
 pnpm penclip company update <company-id> --payload-json '{...}'
@@ -142,6 +143,12 @@ pnpm penclip company delete 5cbe79ee-acb3-4597-896e-7662742593cd --yes --confirm
 
 Notes:
 
+- With agent authentication, `company list` and `company current` are
+  agent-safe company selectors. `company list` first tries the board-wide list;
+  if that is forbidden, it uses `--company-id`, `PAPERCLIP_COMPANY_ID`, context,
+  or `/api/agents/me` and then reads only that scoped company.
+- `company create` requires board/instance-admin authentication because it is
+  an instance-wide setup command.
 - Deletion is server-gated by `PAPERCLIP_ENABLE_COMPANY_DELETION`.
 - With agent authentication, company deletion is company-scoped. Use the current company ID/prefix (for example via `--company-id` or `PAPERCLIP_COMPANY_ID`), not another company.
 
@@ -327,7 +334,7 @@ pnpm penclip token board revoke <key-id>
 
 ## Run Commands
 
-`penclip run` without a subcommand still bootstraps and starts a local Paperclip instance. The subcommands below inspect and control API heartbeat runs.
+`paperclipai run` without a subcommand still bootstraps and starts a local Paperclip instance. The subcommands below inspect and control API heartbeat runs.
 
 ```sh
 pnpm penclip run list --company-id <company-id> [--agent-id <agent-id>] [--limit 50]
@@ -344,7 +351,7 @@ pnpm penclip run watchdog-decision <run-id> --decision continue [--reason "..."]
 
 ## Routine Commands
 
-`penclip routines disable-all` remains the local maintenance command. The singular `routine` group maps to the REST API.
+`paperclipai routines disable-all` remains the local maintenance command. The singular `routine` group maps to the REST API.
 
 ```sh
 pnpm penclip routine list --company-id <company-id> [--project-id <project-id>]
@@ -377,7 +384,7 @@ By default the command creates a `todo` issue assigned to the target agent and w
 
 ## Skills Commands
 
-`penclip skills` covers three distinct operations:
+`paperclipai skills` covers three distinct operations:
 
 1. **Company install** — adds or updates a row in `company_skills` for the
    whole company. This is what `skills install`, `skills import`, `skills create`,
@@ -492,6 +499,43 @@ still enforced by the server in both cases.
 - `skills remove`, `skills reset`, and `skills agent clear` prompt in a TTY and
   require `--yes` in non-interactive use.
 - `--json` prints the raw API result for each command.
+
+## Teams Commands
+
+`paperclipai teams` works with the app-shipped team catalog in
+`@penclipai/teams-catalog`. Browse, search, inspect, and file reads do not
+change company state. `preview` runs the company import planner, and `install`
+imports the catalog team into an existing company.
+
+```sh
+pnpm penclip teams browse [--kind bundled|optional] [--category <slug>] [--query <text>]
+pnpm penclip teams search "<text>" [--kind bundled|optional] [--category <slug>]
+pnpm penclip teams inspect <catalog-id-or-key-or-slug> [--file TEAM.md]
+pnpm penclip teams preview <catalog-id-or-key-or-slug> --company-id <company-id>
+pnpm penclip teams install <catalog-id-or-key-or-slug> --company-id <company-id>
+```
+
+Preview/install options:
+
+- Under agent authentication, use `paperclipai company list --json`,
+  `paperclipai company current --json`, or `PAPERCLIP_COMPANY_ID` to select the
+  target company. `company list` falls back to the scoped current company when
+  board-wide listing is forbidden. `teams install` creates agents and therefore
+  requires board authentication, an `agents:create` grant, or an agent with
+  explicit `canCreateAgents` permission.
+- `--request-approval-on-forbidden` turns a 403 install denial into a linked
+  board approval request instead of a raw failed command; use
+  `--approval-issue-id <id>` to attach it to a specific issue. During Paperclip
+  task runs with `PAPERCLIP_TASK_ID` set, this fallback is automatic so
+  agent-run walkthroughs leave a pending approval path instead of a raw 403.
+- `--target-manager-agent-id <id>` or `--target-manager-slug <slug>` reparents
+  catalog root agents under an existing manager.
+- `--agent <slug>` and `--selected-file <path>` narrow the import.
+- `--collision-strategy rename|skip|replace` controls name/key collisions.
+- `--allow-external-sources`, `--allow-unpinned-optional-sources`, and
+  `--allow-local-path-sources` explicitly opt into higher-trust source policy.
+  Local-path sources are development-only and stay blocked unless that flag is
+  passed.
 
 ## Secrets Commands
 

@@ -382,7 +382,7 @@ describe("IssueRunLedger", () => {
     });
 
     expect(container.textContent).toContain("timeout (30s timeout)");
-    expect(container.textContent).toContain("cancelled");
+    expect(container.textContent).toContain("Cancelled");
     expect(container.textContent).toContain("budget paused");
     expect(container.textContent).toContain("paused by board");
   });

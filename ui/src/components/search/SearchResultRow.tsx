@@ -1,7 +1,5 @@
 import { memo, type ComponentType, type SVGProps } from "react";
-import { Bot, FileText, Hexagon, MessageSquare, Quote } from "lucide-react";
-import type { TFunction } from "i18next";
-import { useTranslation } from "react-i18next";
+import { Bot, FileText, Hexagon, MessageSquare, Paperclip, Quote } from "lucide-react";
 import type { Agent, CompanySearchResult } from "@penclipai/shared";
 import { Link } from "@/lib/router";
 import { cn } from "@/lib/utils";
@@ -17,6 +15,7 @@ type SnippetStyle = {
 const SNIPPET_STYLES: Record<string, SnippetStyle> = {
   comment: { Icon: MessageSquare, label: "Comment" },
   document: { Icon: FileText, label: "Doc" },
+  artifact: { Icon: Paperclip, label: "Artifact" },
   description: { Icon: Quote, label: "Description" },
 };
 
@@ -24,13 +23,13 @@ function snippetStyle(field: string, fallbackLabel: string): SnippetStyle {
   return SNIPPET_STYLES[field] ?? { Icon: Quote, label: fallbackLabel };
 }
 
-function formatRelativeTime(input: string | null, t: TFunction): string {
+function formatRelativeTime(input: string | null): string {
   if (!input) return "";
   const value = new Date(input);
   if (Number.isNaN(value.getTime())) return "";
   const diffMs = Date.now() - value.getTime();
   const seconds = Math.round(diffMs / 1000);
-  if (seconds < 60) return t("common.justNow", { defaultValue: "just now" });
+  if (seconds < 60) return "just now";
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.round(minutes / 60);
@@ -61,8 +60,6 @@ function SearchResultRowImpl({
   isActive,
   className,
 }: SearchResultRowProps) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
-
   if (result.type === "agent") {
     return (
       <Link
@@ -82,7 +79,7 @@ function SearchResultRowImpl({
               text={result.snippets[0]?.text ?? result.snippet}
               highlights={result.snippets[0]?.highlights}
               field="agent"
-              fallbackLabel={result.sourceLabel ?? t("Agent", { defaultValue: "Agent" })}
+              fallbackLabel={result.sourceLabel ?? "Agent"}
             />
           ) : null}
         </div>
@@ -105,7 +102,56 @@ function SearchResultRowImpl({
               text={result.snippets[0]?.text ?? result.snippet}
               highlights={result.snippets[0]?.highlights}
               field="project"
-              fallbackLabel={result.sourceLabel ?? t("Project", { defaultValue: "Project" })}
+              fallbackLabel={result.sourceLabel ?? "Project"}
+            />
+          ) : null}
+        </div>
+      </Link>
+    );
+  }
+
+  if (result.type === "artifact") {
+    const artifact = result.artifact;
+    if (!artifact) return null;
+    const updated = formatRelativeTime(result.updatedAt ?? artifact.updatedAt);
+    return (
+      <Link
+        to={result.href}
+        disableIssueQuicklook
+        className={cn(ROW_BASE, "py-4", isActive && "bg-muted/40", className)}
+        data-result-type="artifact"
+      >
+        <Paperclip className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <span className="truncate text-sm font-medium text-foreground">{result.title}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {artifact.issueIdentifier}
+            </span>
+          </div>
+          {result.snippet ? (
+            <SnippetLine
+              text={result.snippets[0]?.text ?? result.snippet}
+              highlights={result.snippets[0]?.highlights}
+              field="artifact"
+              fallbackLabel={result.sourceLabel ?? "Artifact"}
+              multiline
+            />
+          ) : null}
+          <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground sm:hidden">
+            <span className="truncate">{artifact.issueTitle}</span>
+            {updated ? <span className="ml-auto shrink-0 tabular-nums">{updated}</span> : null}
+          </div>
+        </div>
+        <div className="ml-2 hidden shrink-0 flex-col items-end gap-2 sm:flex">
+          {updated ? <span className="text-xs tabular-nums text-muted-foreground">{updated}</span> : null}
+          {result.previewImageUrl ? (
+            <img
+              src={result.previewImageUrl}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-[88px] w-[88px] shrink-0 rounded-md border border-border bg-muted object-cover"
             />
           ) : null}
         </div>
@@ -118,7 +164,7 @@ function SearchResultRowImpl({
   const assigneeName = issue.assigneeAgentId
     ? agentsById?.get(issue.assigneeAgentId)?.name ?? null
     : null;
-  const updated = formatRelativeTime(result.updatedAt ?? issue.updatedAt, t);
+  const updated = formatRelativeTime(result.updatedAt ?? issue.updatedAt);
   const titleHighlights = result.snippets.find((snippet) => snippet.field === "title")?.highlights;
   const bodySnippets = result.snippets.filter((snippet) => snippet.field !== "title").slice(0, 2);
   const previewImageUrl = result.previewImageUrl;
@@ -198,9 +244,7 @@ interface SnippetLineProps {
 }
 
 function SnippetLine({ text, highlights, field, fallbackLabel, multiline = false }: SnippetLineProps) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const { Icon, label } = snippetStyle(field, fallbackLabel);
-  const translatedLabel = t(label, { defaultValue: label });
   return (
     <div
       className={cn(
@@ -212,7 +256,7 @@ function SnippetLine({ text, highlights, field, fallbackLabel, multiline = false
         className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground/60", multiline && "mt-0.5")}
         aria-hidden
       />
-      <span className="sr-only">{translatedLabel}: </span>
+      <span className="sr-only">{label}: </span>
       <HighlightedText
         text={text}
         highlights={highlights}

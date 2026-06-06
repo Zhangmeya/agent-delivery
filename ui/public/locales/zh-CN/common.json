@@ -2187,6 +2187,7 @@
   "issueChat.agentPaused.budgetDetail": "该智能体因预算硬停止而暂停。",
   "issueChat.agentPaused.manualDetail": "该智能体已手动暂停。",
   "issueChat.agentPaused.systemDetail": "该智能体已由系统暂停。",
+  "issueChat.deletedComment": "{{authorName}} 删除了这条评论",
   "issueChat.attachedToIssue": "已附加到任务",
   "issueChat.copySystemNoticeLink": "复制链接",
   "issueChat.copySystemNoticeLinkAria": "复制系统通知链接",

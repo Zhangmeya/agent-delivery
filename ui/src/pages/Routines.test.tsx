@@ -6,7 +6,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Issue, RoutineListItem } from "@penclipai/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Routines, buildRoutineGroups, sortRoutines } from "./Routines";
-import { queryKeys } from "../lib/queryKeys";
 
 let currentSearch = "";
 
@@ -17,16 +16,6 @@ const markdownEditorRenderMock = vi.fn((props: { mentions?: Array<{ id: string; 
 const issuesListRenderMock = vi.fn(({ issues }: { issues: Issue[] }) => (
   <div data-testid="issues-list">{issues.map((issue) => issue.title).join(", ")}</div>
 ));
-
-vi.mock("react-i18next", async () => {
-  const actual = await vi.importActual<typeof import("react-i18next")>("react-i18next");
-  return {
-    ...actual,
-    useTranslation: () => ({
-      t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
-    }),
-  };
-});
 
 vi.mock("@/lib/router", () => ({
   Link: ({ to, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { to: string; children: ReactNode }) => (
@@ -467,6 +456,86 @@ describe("Routines page", () => {
     });
   });
 
+  it("defaults the routines list to project groups sorted by title", async () => {
+    routinesListMock.mockResolvedValue([
+      createRoutine({ id: "routine-1", title: "Weekly digest", projectId: "project-1" }),
+      createRoutine({ id: "routine-2", title: "Morning sync", projectId: "project-1" }),
+      createRoutine({ id: "routine-3", title: "Agent review", projectId: "project-2" }),
+    ]);
+    issuesListMock.mockResolvedValue([]);
+
+    const root = createRoot(container);
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Routines />
+        </QueryClientProvider>,
+      );
+      await flush();
+    });
+
+    for (let attempts = 0; attempts < 5 && !container.textContent?.includes("Project Alpha"); attempts += 1) {
+      await act(async () => {
+        await flush();
+      });
+    }
+
+    const text = container.textContent ?? "";
+    expect(text.indexOf("Project Alpha")).toBeLessThan(text.indexOf("Project Beta"));
+    expect(text.indexOf("Morning sync")).toBeLessThan(text.indexOf("Weekly digest"));
+    expect(text.indexOf("Project Alpha")).toBeLessThan(text.indexOf("Morning sync"));
+    expect(text.indexOf("Weekly digest")).toBeLessThan(text.indexOf("Project Beta"));
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("hides archived routines from the routines list", async () => {
+    routinesListMock.mockResolvedValue([
+      createRoutine({ id: "routine-1", title: "Morning sync", status: "active" }),
+      createRoutine({ id: "routine-2", title: "Archived cleanup", status: "archived" }),
+    ]);
+    issuesListMock.mockResolvedValue([]);
+
+    const root = createRoot(container);
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Routines />
+        </QueryClientProvider>,
+      );
+      await flush();
+    });
+
+    for (let attempts = 0; attempts < 5 && !container.textContent?.includes("Morning sync"); attempts += 1) {
+      await act(async () => {
+        await flush();
+      });
+    }
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("1 routine");
+    expect(text).toContain("Morning sync");
+    expect(text).not.toContain("Archived cleanup");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("shows an outlined row-level run now button on the routines table", async () => {
     routinesListMock.mockResolvedValue([createRoutine({ id: "routine-1", title: "Morning sync" })]);
     issuesListMock.mockResolvedValue([]);
@@ -573,13 +642,11 @@ describe("Routines page", () => {
 
   it("shows recent runs through the issues list scoped to routine execution issues", async () => {
     currentSearch = "tab=runs";
-    const routines = [createRoutine({ id: "routine-1" })];
-    const issues = [
+    routinesListMock.mockResolvedValue([createRoutine({ id: "routine-1" })]);
+    issuesListMock.mockResolvedValue([
       createIssue({ id: "issue-1", title: "Routine execution A" }),
       createIssue({ id: "issue-2", title: "Routine execution B", identifier: "PAP-1001", issueNumber: 1001 }),
-    ];
-    routinesListMock.mockResolvedValue(routines);
-    issuesListMock.mockResolvedValue(issues);
+    ]);
 
     const root = createRoot(container);
     const queryClient = new QueryClient({
@@ -587,12 +654,6 @@ describe("Routines page", () => {
         queries: { retry: false },
       },
     });
-    queryClient.setQueryData(queryKeys.routines.list("company-1"), routines);
-    queryClient.setQueryData([...queryKeys.issues.list("company-1"), "routine-executions"], issues);
-    queryClient.setQueryData(queryKeys.agents.list("company-1"), []);
-    queryClient.setQueryData(queryKeys.projects.list("company-1"), []);
-    queryClient.setQueryData(queryKeys.instance.experimentalSettings, { enableIsolatedWorkspaces: false });
-    queryClient.setQueryData(queryKeys.liveRuns("company-1"), []);
 
     await act(async () => {
       root.render(
@@ -603,11 +664,13 @@ describe("Routines page", () => {
       await flush();
     });
 
-    await vi.waitFor(() => {
-      expect(issuesListRenderMock).toHaveBeenCalled();
-    });
-    expect(container.textContent).toContain("Routine execution A");
-    expect(container.textContent).toContain("Routine execution B");
+    for (let attempts = 0; attempts < 5 && issuesListMock.mock.calls.length === 0; attempts += 1) {
+      await act(async () => {
+        await flush();
+      });
+    }
+
+    expect(issuesListMock).toHaveBeenCalledWith("company-1", { originKind: "routine_execution" });
 
     await act(async () => {
       root.unmount();

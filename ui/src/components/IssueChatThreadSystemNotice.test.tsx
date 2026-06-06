@@ -3,6 +3,7 @@
 import { act } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import i18n from "i18next";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IssueChatThread } from "./IssueChatThread";
@@ -163,6 +164,7 @@ function renderThread(
     successfulRunHandoff?: SuccessfulRunHandoffState | null;
   } = {},
 ) {
+  void i18n.changeLanguage(i18nLanguageRef.current);
   act(() => {
     root.render(
       <MemoryRouter>

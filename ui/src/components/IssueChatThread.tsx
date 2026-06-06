@@ -2,7 +2,6 @@ import {
   AssistantRuntimeProvider,
   useAui,
 } from "@assistant-ui/react";
-import type { TFunction } from "i18next";
 import type {
   ReasoningMessagePart,
   TextMessagePart,
@@ -72,7 +71,6 @@ import {
   type IssueTimelineEvent,
   type IssueTimelineWorkspace,
 } from "../lib/issue-timeline-events";
-import { translateStatusLabel } from "../lib/i18n-labels";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -103,6 +101,7 @@ import {
   shouldPreserveComposerViewport,
 } from "../lib/issue-chat-scroll";
 import { formatAssigneeUserLabel } from "../lib/assignees";
+import { translateStatusLabel } from "../lib/i18n-labels";
 import { useOptionalToastActions } from "../context/ToastContext";
 import type { CompanyUserProfile } from "../lib/company-members";
 import { timeAgo } from "../lib/timeAgo";
@@ -118,11 +117,12 @@ import {
 import {
   buildSystemNoticeProps,
   mapCommentMetadataToSystemNoticeSections,
+  translateSystemNoticeBodyText,
 } from "../lib/system-notice-comment";
-import { translateSystemGeneratedMarkdownText } from "../lib/system-generated-message-i18n";
 import type {
   IssueCommentMetadata,
   IssueCommentPresentation,
+  SourceTrustMetadata,
 } from "@penclipai/shared";
 import {
   describeToolInput,
@@ -137,10 +137,12 @@ import { cn, formatDateTime, formatShortDate } from "../lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertTriangle, ArrowRight, Brain, Check, ChevronDown, ClipboardList, Copy, Hammer, Loader2, MoreHorizontal, Paperclip, PauseCircle, Search, Square, ThumbsDown, ThumbsUp } from "lucide-react";
+import { AlertTriangle, ArrowRight, Brain, Check, ChevronDown, ClipboardList, Copy, Hammer, Loader2, MoreHorizontal, Paperclip, PauseCircle, Search, Square, ThumbsDown, ThumbsUp, Trash2 } from "lucide-react";
 import { IssueBlockedNotice } from "./IssueBlockedNotice";
 import { IssueAssignedBacklogNotice } from "./IssueAssignedBacklogNotice";
 import { IssueRecoveryActionCard, type RecoveryResolveOutcome } from "./IssueRecoveryActionCard";
+import { SourceTrustBadge } from "./SourceTrustBadge";
+import { translateSystemGeneratedMarkdownText } from "../lib/system-generated-message-i18n";
 
 interface IssueChatMessageContext {
   feedbackDataSharingPreference: FeedbackDataSharingPreference;
@@ -160,6 +162,7 @@ interface IssueChatMessageContext {
   stopRunVariant?: "stop" | "pause";
   onInterruptQueued?: (runId: string) => Promise<void>;
   onCancelQueued?: (commentId: string) => void;
+  onDeleteComment?: (commentId: string) => Promise<void> | void;
   onImageClick?: (src: string) => void;
   onAcceptInteraction?: (
     interaction: SuggestTasksInteraction | RequestConfirmationInteraction,
@@ -357,6 +360,7 @@ interface IssueChatThreadProps {
   includeSucceededRunsWithoutOutput?: boolean;
   onInterruptQueued?: (runId: string) => Promise<void>;
   onCancelQueued?: (commentId: string) => void;
+  onDeleteComment?: (commentId: string) => Promise<void> | void;
   interruptingQueuedRunId?: string | null;
   stoppingRunId?: string | null;
   onImageClick?: (src: string) => void;
@@ -432,15 +436,22 @@ class IssueChatErrorBoundary extends Component<IssueChatErrorBoundaryProps, Issu
 }
 
 function IssueAssigneePausedNotice({ agent }: { agent: Agent | null }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
+  const { t } = useTranslation();
+
   if (!agent || agent.status !== "paused") return null;
 
   const pauseDetail =
     agent.pauseReason === "budget"
-      ? t("issueChat.agentPaused.budgetDetail", { defaultValue: "It was paused by a budget hard stop." })
+      ? t("issueChat.agentPaused.budgetDetail", {
+        defaultValue: "It was paused by a budget hard stop.",
+      })
       : agent.pauseReason === "system"
-        ? t("issueChat.agentPaused.systemDetail", { defaultValue: "It was paused by the system." })
-        : t("issueChat.agentPaused.manualDetail", { defaultValue: "It was paused manually." });
+        ? t("issueChat.agentPaused.systemDetail", {
+          defaultValue: "It was paused by the system.",
+        })
+        : t("issueChat.agentPaused.manualDetail", {
+          defaultValue: "It was paused manually.",
+        });
 
   return (
     <div className="mb-3 rounded-md border border-orange-300/70 bg-orange-50/90 px-3 py-2.5 text-sm text-orange-950 shadow-sm dark:border-orange-500/40 dark:bg-orange-500/10 dark:text-orange-100">
@@ -498,21 +509,15 @@ function IssueChatFallbackThread({
   emptyMessage: string;
   variant: "full" | "embedded";
 }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
-
   return (
     <div className={cn(variant === "embedded" ? "space-y-3" : "space-y-4")}>
       <div className="rounded-xl border border-amber-300/60 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/20 dark:text-amber-200">
         <div className="flex items-start gap-2">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="space-y-1">
-            <p className="font-medium">
-              {t("issueChat.fallbackErrorTitle", { defaultValue: "Chat renderer hit an internal state error." })}
-            </p>
+            <p className="font-medium">Chat renderer hit an internal state error.</p>
             <p className="text-xs opacity-80">
-              {t("issueChat.fallbackErrorBody", {
-                defaultValue: "Showing a safe fallback transcript instead of crashing the issues page.",
-              })}
+              Showing a safe fallback transcript instead of crashing the issues page.
             </p>
           </div>
         </div>
@@ -545,9 +550,7 @@ function IssueChatFallbackThread({
                   {lines.length > 0 ? lines.map((line, index) => (
                     <MarkdownBody key={`${message.id}:fallback:${index}`}>{line}</MarkdownBody>
                   )) : (
-                    <p className="text-sm text-muted-foreground">
-                      {t("No message content.", { defaultValue: "No message content." })}
-                    </p>
+                    <p className="text-sm text-muted-foreground">No message content.</p>
                   )}
                 </div>
               </div>
@@ -702,11 +705,6 @@ export function SuccessfulRunHandoffCommentCallout({
   );
 }
 
-function formatTimelineStatusValue(value: string | null, t: TFunction) {
-  if (!value) return t("None", { defaultValue: "None" });
-  return translateStatusLabel(t, value);
-}
-
 function formatTimelineAssigneeLabel(
   assignee: IssueTimelineAssignee,
   agentMap?: Map<string, Agent>,
@@ -797,7 +795,7 @@ function runStatusClass(status: string) {
   }
 }
 
-function toolCountSummary(toolParts: ToolCallMessagePart[], t: TFunction): string | null {
+function toolCountSummary(toolParts: ToolCallMessagePart[]): string | null {
   if (toolParts.length === 0) return null;
   let commands = 0;
   let other = 0;
@@ -806,27 +804,9 @@ function toolCountSummary(toolParts: ToolCallMessagePart[], t: TFunction): strin
     else other++;
   }
   const parts: string[] = [];
-  if (commands > 0) {
-    parts.push(t(commands === 1 ? "ran {{count}} command" : "ran {{count}} commands", { count: commands }));
-  }
-  if (other > 0) {
-    parts.push(t(other === 1 ? "called {{count}} tool" : "called {{count}} tools", { count: other }));
-  }
+  if (commands > 0) parts.push(`ran ${commands} command${commands === 1 ? "" : "s"}`);
+  if (other > 0) parts.push(`called ${other} tool${other === 1 ? "" : "s"}`);
   return parts.join(", ");
-}
-
-function formatChainOfThoughtLabel(label: string | null, t: TFunction) {
-  if (!label) return null;
-  if (label === "tool-calls") {
-    return t("issueChat.toolCalls", { defaultValue: "Tool calls" });
-  }
-  return label.toLowerCase();
-}
-
-function formatReasoningLine(line: string, t: TFunction) {
-  return line.trim() === "tool-calls"
-    ? t("issueChat.toolCalls", { defaultValue: "Tool calls" })
-    : line;
 }
 
 function cleanToolDisplayText(tool: ToolCallMessagePart): string {
@@ -847,7 +827,6 @@ function IssueChatChainOfThought({
   message: ThreadMessage;
   cotParts: readonly IssueChatCoTPart[];
 }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const { agentMap } = useContext(IssueChatCtx);
   const custom = message.metadata.custom as Record<string, unknown>;
   const runAgentId = typeof custom.runAgentId === "string" ? custom.runAgentId : null;
@@ -885,22 +864,18 @@ function IssueChatChainOfThought({
   let headerVerb: string;
   let headerSuffix: string | null = null;
   if (isActive) {
-    headerVerb = t("issueChat.working", { defaultValue: "Working" });
-    if (liveElapsed) {
-      headerSuffix = t("issueChat.forDuration", { duration: liveElapsed, defaultValue: "for {{duration}}" });
-    }
+    headerVerb = "Working";
+    if (liveElapsed) headerSuffix = `for ${liveElapsed}`;
   } else if (segmentTiming) {
     const durationMs = segmentTiming.endMs - segmentTiming.startMs;
     const durationText = formatDurationWords(durationMs);
-    headerVerb = t("issueChat.worked", { defaultValue: "Worked" });
-    if (durationText) {
-      headerSuffix = t("issueChat.forDuration", { duration: durationText, defaultValue: "for {{duration}}" });
-    }
+    headerVerb = "Worked";
+    if (durationText) headerSuffix = `for ${durationText}`;
   } else {
-    headerVerb = t("issueChat.worked", { defaultValue: "Worked" });
+    headerVerb = "Worked";
   }
 
-  const toolSummary = toolCountSummary(toolParts, t);
+  const toolSummary = toolCountSummary(toolParts);
   const hasContent = allReasoningText.trim().length > 0 || toolParts.length > 0;
 
   return (
@@ -965,8 +940,7 @@ function IssueChatChainOfThought({
 }
 
 function IssueChatReasoningPart({ text }: { text: string }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
-  const lines = text.split("\n").filter((l) => l.trim()).map((line) => formatReasoningLine(line, t));
+  const lines = text.split("\n").filter((l) => l.trim());
   const lastLine = lines[lines.length - 1] ?? text.slice(-200);
   const prevRef = useRef(lastLine);
   const [ticker, setTicker] = useState<{
@@ -1071,7 +1045,6 @@ function IssueChatRollingToolPart({ toolParts }: { toolParts: ToolCallMessagePar
 
 function CopyablePreBlock({ children, className }: { children: string; className?: string }) {
   const [copied, setCopied] = useState(false);
-  const { t } = useTranslation(undefined, { useSuspense: false });
   return (
     <div className="group/pre relative">
       <pre className={className}>{children}</pre>
@@ -1081,8 +1054,8 @@ function CopyablePreBlock({ children, className }: { children: string; className
           "absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-md bg-background/80 text-muted-foreground opacity-0 backdrop-blur-sm transition-opacity hover:text-foreground group-hover/pre:opacity-100",
           copied && "opacity-100",
         )}
-        title={t("Copy", { defaultValue: "Copy" })}
-        aria-label={t("Copy", { defaultValue: "Copy" })}
+        title="Copy"
+        aria-label="Copy"
         onClick={() => {
           void navigator.clipboard.writeText(children).then(() => {
             setCopied(true);
@@ -1310,10 +1283,10 @@ function IssueChatUserMessage({
   message: ThreadMessage;
   isInterruptingQueuedRun: boolean;
 }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const {
     onInterruptQueued,
     onCancelQueued,
+    onDeleteComment,
     currentUserId,
     userProfileMap,
   } = useContext(IssueChatCtx);
@@ -1323,14 +1296,15 @@ function IssueChatUserMessage({
   const authorName = typeof custom.authorName === "string" ? custom.authorName : null;
   const authorUserId = typeof custom.authorUserId === "string" ? custom.authorUserId : null;
   const queued = custom.queueState === "queued" || custom.clientStatus === "queued";
+  const sourceTrust = isSourceTrustMetadata(custom.sourceTrust) ? custom.sourceTrust : null;
   const followUpRequested = custom.followUpRequested === true;
   const queueReason = typeof custom.queueReason === "string" ? custom.queueReason : null;
-  const queueBadgeLabel = queueReason === "hold"
-    ? t("issueChat.deferredWake", { defaultValue: "\u23f8 Deferred wake" })
-    : t("Queued", { defaultValue: "Queued" });
+  const queueBadgeLabel = queueReason === "hold" ? "\u23f8 Deferred wake" : "Queued";
   const pending = custom.clientStatus === "pending";
+  const deleted = Boolean(custom.deletedAt);
   const queueTargetRunId = typeof custom.queueTargetRunId === "string" ? custom.queueTargetRunId : null;
   const [copied, setCopied] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const {
     isCurrentUser,
     authorName: resolvedAuthorName,
@@ -1347,13 +1321,24 @@ function IssueChatUserMessage({
       <AvatarFallback>{initialsForName(resolvedAuthorName)}</AvatarFallback>
     </Avatar>
   );
+  const canDeleteComment = Boolean(onDeleteComment && isCurrentUser && !queued && !pending && !deleted);
+  const handleDeleteComment = () => {
+    if (!canDeleteComment) return;
+    setDeleteDialogOpen(true);
+  };
+  const confirmDeleteComment = () => {
+    if (!canDeleteComment) return;
+    setDeleteDialogOpen(false);
+    void onDeleteComment?.(commentId);
+  };
   const messageBody = (
     <div className={cn("flex min-w-0 max-w-[85%] flex-col", isCurrentUser && "items-end")}>
       <div className={cn("mb-1 flex items-center gap-2 px-1", isCurrentUser ? "justify-end" : "justify-start")}>
         <span className="text-sm font-medium text-foreground">{resolvedAuthorName}</span>
+        <SourceTrustBadge sourceTrust={sourceTrust} artifactLabel="comment" />
         {followUpRequested ? (
           <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
-            {t("Follow-up", { defaultValue: "Follow-up" })}
+            Follow-up
           </Badge>
         ) : null}
       </div>
@@ -1362,6 +1347,8 @@ function IssueChatUserMessage({
           "min-w-0 max-w-full overflow-hidden break-all rounded-2xl px-4 py-2.5",
           queued
             ? "bg-amber-50/80 dark:bg-amber-500/10"
+            : deleted
+              ? "bg-muted/50 text-muted-foreground"
             : "bg-muted",
           pending && "opacity-80",
         )}
@@ -1379,9 +1366,7 @@ function IssueChatUserMessage({
                 disabled={isInterruptingQueuedRun}
                 onClick={() => void onInterruptQueued(queueTargetRunId)}
               >
-                {isInterruptingQueuedRun
-                  ? t("Interrupting...", { defaultValue: "Interrupting..." })
-                  : t("Interrupt", { defaultValue: "Interrupt" })}
+                {isInterruptingQueuedRun ? "Interrupting..." : "Interrupt"}
               </Button>
             ) : null}
             {onCancelQueued ? (
@@ -1391,19 +1376,23 @@ function IssueChatUserMessage({
                 className="h-6 border-amber-300 px-2 text-[11px] text-amber-900 hover:bg-amber-100/80 hover:text-amber-950 dark:border-amber-500/40 dark:text-amber-100 dark:hover:bg-amber-500/10"
                 onClick={() => onCancelQueued(commentId)}
               >
-                {t("Cancel", { defaultValue: "Cancel" })}
+                Cancel
               </Button>
             ) : null}
           </div>
         ) : null}
-        <div className="min-w-0 max-w-full space-y-3">
-          <IssueChatTextParts message={message} />
-        </div>
+        {deleted ? (
+          <div className="text-sm italic text-muted-foreground">Comment deleted</div>
+        ) : (
+          <div className="min-w-0 max-w-full space-y-3">
+            <IssueChatTextParts message={message} />
+          </div>
+        )}
       </div>
 
       {pending ? (
         <div className={cn("mt-1 flex px-1 text-[11px] text-muted-foreground", isCurrentUser ? "justify-end" : "justify-start")}>
-          {t("Sending...", { defaultValue: "Sending..." })}
+          Sending...
         </div>
       ) : (
         <div
@@ -1425,45 +1414,78 @@ function IssueChatUserMessage({
               {message.createdAt ? formatDateTime(message.createdAt) : ""}
             </TooltipContent>
           </Tooltip>
-          <button
-            type="button"
-            className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-            title={t("Copy message", { defaultValue: "Copy message" })}
-            aria-label={t("Copy message", { defaultValue: "Copy message" })}
-            onClick={() => {
-              const text = message.content
-                .filter((p): p is { type: "text"; text: string } => p.type === "text")
-                .map((p) => p.text)
-                .join("\n\n");
-              void navigator.clipboard.writeText(text).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              });
-            }}
-          >
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          </button>
+          {!deleted ? (
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+              title="Copy message"
+              aria-label="Copy message"
+              onClick={() => {
+                const text = message.content
+                  .filter((p): p is { type: "text"; text: string } => p.type === "text")
+                  .map((p) => p.text)
+                  .join("\n\n");
+                void navigator.clipboard.writeText(text).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                });
+              }}
+            >
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          ) : null}
+          {canDeleteComment ? (
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground transition-colors hover:text-destructive"
+              title="Delete comment"
+              aria-label="Delete comment"
+              onClick={handleDeleteComment}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
         </div>
       )}
     </div>
   );
 
   return (
-    <div id={anchorId}>
-      <div className={cn("group flex items-start gap-2.5", isCurrentUser && "justify-end")}>
-        {isCurrentUser ? (
-          <>
-            {messageBody}
-            {authorAvatar}
-          </>
-        ) : (
-          <>
-            {authorAvatar}
-            {messageBody}
-          </>
-        )}
+    <>
+      <div id={anchorId}>
+        <div className={cn("group flex items-start gap-2.5", isCurrentUser && "justify-end")}>
+          {isCurrentUser ? (
+            <>
+              {messageBody}
+              {authorAvatar}
+            </>
+          ) : (
+            <>
+              {authorAvatar}
+              {messageBody}
+            </>
+          )}
+        </div>
       </div>
-    </div>
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete comment?</DialogTitle>
+            <DialogDescription>
+              This will replace the comment with a deleted-comment marker.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteComment}>
+              Delete comment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -1478,7 +1500,6 @@ function IssueChatAssistantMessage({
   isRunActive: boolean;
   isStoppingRun: boolean;
 }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const {
     feedbackDataSharingPreference,
     feedbackTermsUrl,
@@ -1503,6 +1524,7 @@ function IssueChatAssistantMessage({
   const agentId = authorAgentId ?? runAgentId;
   const agentIcon = agentId ? agentMap?.get(agentId)?.icon : undefined;
   const commentId = typeof custom.commentId === "string" ? custom.commentId : null;
+  const sourceTrust = isSourceTrustMetadata(custom.sourceTrust) ? custom.sourceTrust : null;
   const notices = Array.isArray(custom.notices)
     ? custom.notices.filter((notice): notice is string => typeof notice === "string" && notice.length > 0)
     : [];
@@ -1511,13 +1533,13 @@ function IssueChatAssistantMessage({
   const runHref = runId && runAgentId ? `/agents/${runAgentId}/runs/${runId}` : null;
   const canStopRun = Boolean(runId) && (isRunActive || runStatus === "queued" || runStatus === "running");
   const chainOfThoughtLabel = typeof custom.chainOfThoughtLabel === "string" ? custom.chainOfThoughtLabel : null;
-  const displayedChainOfThoughtLabel = formatChainOfThoughtLabel(chainOfThoughtLabel, t);
   const hasCoT = message.content.some((p) => p.type === "reasoning" || p.type === "tool-call");
+  const deleted = Boolean(custom.deletedAt);
   const isFoldable = !isRunning && !!chainOfThoughtLabel;
   const [folded, setFolded] = useState(isFoldable);
   const [prevFoldKey, setPrevFoldKey] = useState({ messageId: message.id, isFoldable });
   const [copied, setCopied] = useState(false);
-  const copyText = getThreadMessageCopyText(message);
+  const copyText = deleted ? "" : getThreadMessageCopyText(message);
 
   // Derive fold state synchronously during render (not in useEffect) so the
   // browser never paints the un-folded intermediate state — prevents the
@@ -1565,7 +1587,8 @@ function IssueChatAssistantMessage({
               onClick={() => setFolded((v) => !v)}
             >
               <span className="text-sm font-medium text-foreground">{authorName}</span>
-              <span className="text-xs text-muted-foreground/60">{displayedChainOfThoughtLabel}</span>
+              <SourceTrustBadge sourceTrust={sourceTrust} artifactLabel="comment" />
+              <span className="text-xs text-muted-foreground/60">{chainOfThoughtLabel?.toLowerCase()}</span>
               <span className="ml-auto flex items-center gap-1.5">
                 {message.createdAt ? (
                   <span className="text-[11px] text-muted-foreground/50">
@@ -1578,21 +1601,26 @@ function IssueChatAssistantMessage({
           ) : (
             <div className="mb-1.5 flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">{authorName}</span>
+              <SourceTrustBadge sourceTrust={sourceTrust} artifactLabel="comment" />
               {followUpRequested ? (
                 <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
-                  {t("Follow-up", { defaultValue: "Follow-up" })}
+                  Follow-up
                 </Badge>
               ) : null}
               {isRunning ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-200">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  {t("Running", { defaultValue: "Running" })}
+                  Running
                 </span>
               ) : null}
             </div>
           )}
 
-          {!folded ? (
+          {deleted ? (
+            <div className="rounded-sm bg-muted/40 px-3 py-2 text-sm italic text-muted-foreground">
+              Comment deleted
+            </div>
+          ) : !folded ? (
             <>
               <div className="space-y-3">
                 <IssueChatAssistantParts message={message} hasCoT={hasCoT} />
@@ -1626,8 +1654,8 @@ function IssueChatAssistantMessage({
                 <button
                   type="button"
                   className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  title={t("Copy message", { defaultValue: "Copy message" })}
-                  aria-label={t("Copy message", { defaultValue: "Copy message" })}
+                  title="Copy message"
+                  aria-label="Copy message"
                   onClick={() => {
                     void navigator.clipboard.writeText(copyText).then(() => {
                       setCopied(true);
@@ -1664,8 +1692,8 @@ function IssueChatAssistantMessage({
                       variant="ghost"
                       size="icon-xs"
                       className="text-muted-foreground hover:text-foreground"
-                      title={t("More actions", { defaultValue: "More actions" })}
-                      aria-label={t("More actions", { defaultValue: "More actions" })}
+                      title="More actions"
+                      aria-label="More actions"
                     >
                       <MoreHorizontal className="h-3.5 w-3.5" />
                     </Button>
@@ -1677,7 +1705,7 @@ function IssueChatAssistantMessage({
                       }}
                     >
                       <Copy className="mr-2 h-3.5 w-3.5" />
-                      {t("Copy message", { defaultValue: "Copy message" })}
+                      Copy message
                     </DropdownMenuItem>
                     {canStopRun && onStopRun && runId ? (
                       <DropdownMenuItem
@@ -1703,7 +1731,7 @@ function IssueChatAssistantMessage({
                       <DropdownMenuItem asChild>
                         <Link to={runHref} target="_blank" rel="noreferrer noopener">
                           <Search className="mr-2 h-3.5 w-3.5" />
-                          {t("View run", { defaultValue: "View run" })}
+                          View run
                         </Link>
                       </DropdownMenuItem>
                     ) : null}
@@ -1729,7 +1757,6 @@ function IssueChatFeedbackButtons({
   termsUrl: string | null;
   onVote: (vote: FeedbackVoteValue, options?: { allowSharing?: boolean; reason?: string }) => Promise<void>;
 }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const [isSaving, setIsSaving] = useState(false);
   const [optimisticVote, setOptimisticVote] = useState<FeedbackVoteValue | null>(null);
   const [reasonOpen, setReasonOpen] = useState(false);
@@ -1809,8 +1836,8 @@ function IssueChatFeedbackButtons({
             ? "text-green-600 dark:text-green-400"
             : "text-muted-foreground hover:bg-accent hover:text-foreground",
         )}
-        title={t("Helpful", { defaultValue: "Helpful" })}
-        aria-label={t("Helpful", { defaultValue: "Helpful" })}
+        title="Helpful"
+        aria-label="Helpful"
         onClick={handleThumbsUp}
       >
         <ThumbsUp className="h-3.5 w-3.5" />
@@ -1826,21 +1853,19 @@ function IssueChatFeedbackButtons({
                 ? "text-amber-600 dark:text-amber-400"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",
             )}
-            title={t("issueFeedback.needsWork", { defaultValue: "Needs work" })}
-            aria-label={t("issueFeedback.needsWork", { defaultValue: "Needs work" })}
+            title="Needs work"
+            aria-label="Needs work"
             onClick={handleThumbsDown}
           >
             <ThumbsDown className="h-3.5 w-3.5" />
           </button>
         </PopoverTrigger>
         <PopoverContent side="top" align="start" className="w-80 p-3">
-          <div className="mb-2 text-sm font-medium">
-            {t("issueFeedback.reasonPrompt", { defaultValue: "What could have been better?" })}
-          </div>
+          <div className="mb-2 text-sm font-medium">What could have been better?</div>
           <Textarea
             value={downvoteReason}
             onChange={(event) => setDownvoteReason(event.target.value)}
-            placeholder={t("issueFeedback.reasonPlaceholder", { defaultValue: "Add a short note" })}
+            placeholder="Add a short note"
             className="min-h-20 resize-y bg-background text-sm"
             disabled={isSaving}
           />
@@ -1855,7 +1880,7 @@ function IssueChatFeedbackButtons({
                 setDownvoteReason("");
               }}
             >
-              {t("Dismiss", { defaultValue: "Dismiss" })}
+              Dismiss
             </Button>
             <Button
               type="button"
@@ -1863,7 +1888,7 @@ function IssueChatFeedbackButtons({
               disabled={isSaving || !downvoteReason.trim()}
               onClick={handleSubmitReason}
             >
-              {isSaving ? t("Saving...", { defaultValue: "Saving..." }) : t("issueFeedback.saveNote", { defaultValue: "Save note" })}
+              {isSaving ? "Saving..." : "Save note"}
             </Button>
           </div>
         </PopoverContent>
@@ -1880,23 +1905,21 @@ function IssueChatFeedbackButtons({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("issueFeedback.sharingPreferenceTitle", { defaultValue: "Save your feedback sharing preference" })}</DialogTitle>
+            <DialogTitle>Save your feedback sharing preference</DialogTitle>
             <DialogDescription>
-              {t("issueFeedback.sharingPreferenceDescription", {
-                defaultValue: "Choose whether voted AI outputs can be shared with Paperclip Labs. This answer becomes the default for future thumbs up and thumbs down votes.",
-              })}
+              Choose whether voted AI outputs can be shared with Paperclip Labs. This
+              answer becomes the default for future thumbs up and thumbs down votes.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 text-sm text-muted-foreground">
-            <p>{t("issueFeedback.localVoteNote", { defaultValue: "This vote is always saved locally." })}</p>
+            <p>This vote is always saved locally.</p>
             <p>
-              {t("issueFeedback.allowSharingPrefix", { defaultValue: "Choose" })}{" "}
-              <span className="font-medium text-foreground">{t("issueFeedback.alwaysAllow", { defaultValue: "Always allow" })}</span>{" "}
-              {t("issueFeedback.allowSharingMiddle", { defaultValue: "to share this vote and future voted AI outputs. Choose" })}{" "}
-              <span className="font-medium text-foreground">{t("issueFeedback.dontAllow", { defaultValue: "Don't allow" })}</span>{" "}
-              {t("issueFeedback.allowSharingSuffix", { defaultValue: "to keep this vote and future votes local." })}
+              Choose <span className="font-medium text-foreground">Always allow</span> to share
+              this vote and future voted AI outputs. Choose{" "}
+              <span className="font-medium text-foreground">Don't allow</span> to keep this vote
+              and future votes local.
             </p>
-            <p>{t("issueFeedback.changeLater", { defaultValue: "You can change this later in Instance Settings > General." })}</p>
+            <p>You can change this later in Instance Settings &gt; General.</p>
             {termsUrl ? (
               <a
                 href={termsUrl}
@@ -1904,7 +1927,7 @@ function IssueChatFeedbackButtons({
                 rel="noreferrer"
                 className="inline-flex text-sm text-foreground underline underline-offset-4"
               >
-                {t("issueFeedback.readTerms", { defaultValue: "Read our terms of service" })}
+                Read our terms of service
               </a>
             ) : null}
           </div>
@@ -1921,7 +1944,7 @@ function IssueChatFeedbackButtons({
                 ).then(() => setPendingSharingDialog(null));
               }}
             >
-              {isSaving ? t("Saving...", { defaultValue: "Saving..." }) : t("issueFeedback.dontAllow", { defaultValue: "Don't allow" })}
+              {isSaving ? "Saving..." : "Don't allow"}
             </Button>
             <Button
               type="button"
@@ -1934,7 +1957,7 @@ function IssueChatFeedbackButtons({
                 }).then(() => setPendingSharingDialog(null));
               }}
             >
-              {isSaving ? t("Saving...", { defaultValue: "Saving..." }) : t("issueFeedback.alwaysAllow", { defaultValue: "Always allow" })}
+              {isSaving ? "Saving..." : "Always allow"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2057,6 +2080,15 @@ function isIssueCommentMetadata(value: unknown): value is IssueCommentMetadata {
   return v.version === 1 && Array.isArray(v.sections);
 }
 
+function isSourceTrustMetadata(value: unknown): value is SourceTrustMetadata {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return v.preset === "low_trust_review" && (
+    v.disposition === "quarantined" ||
+    v.disposition === "promoted"
+  );
+}
+
 function issueStatusIsTerminalDisposition(issueStatus: string | undefined) {
   return issueStatus === "done" || issueStatus === "cancelled";
 }
@@ -2095,290 +2127,6 @@ function isStaleSuccessfulRunHandoffNotice(input: {
   }
 
   return false;
-}
-
-const KNOWN_SYSTEM_NOTICE_TEXT_KEYS: Record<string, { key: string; defaultValue: string }> = {
-  "Missing issue disposition": {
-    key: "systemNotice.successfulRunHandoff.missingDispositionTitle",
-    defaultValue: "Missing issue disposition",
-  },
-  "Paperclip needs a disposition before this issue can continue.": {
-    key: "systemNotice.successfulRunHandoff.missingDispositionBody",
-    defaultValue: "Paperclip needs a disposition before this issue can continue.",
-  },
-  "Missing disposition recovery blocked": {
-    key: "systemNotice.successfulRunHandoff.recoveryBlockedTitle",
-    defaultValue: "Missing disposition recovery blocked",
-  },
-  "Paperclip could not resolve this issue's missing disposition automatically. The issue is blocked on a recovery owner.": {
-    key: "systemNotice.successfulRunHandoff.recoveryBlockedBody",
-    defaultValue: "Paperclip could not resolve this issue's missing disposition automatically. The issue is blocked on a recovery owner.",
-  },
-  "Required action": {
-    key: "systemNotice.successfulRunHandoff.requiredAction",
-    defaultValue: "Required action",
-  },
-  "Run evidence": {
-    key: "systemNotice.successfulRunHandoff.runEvidence",
-    defaultValue: "Run evidence",
-  },
-  "Recovery owner": {
-    key: "systemNotice.successfulRunHandoff.recoveryOwner",
-    defaultValue: "Recovery owner",
-  },
-  "Source issue": {
-    key: "systemNotice.successfulRunHandoff.sourceIssue",
-    defaultValue: "Source issue",
-  },
-  "Assignee": {
-    key: "systemNotice.successfulRunHandoff.assignee",
-    defaultValue: "Assignee",
-  },
-  "Missing disposition": {
-    key: "systemNotice.successfulRunHandoff.missingDisposition",
-    defaultValue: "Missing disposition",
-  },
-  "Valid dispositions": {
-    key: "systemNotice.successfulRunHandoff.validDispositions",
-    defaultValue: "Valid dispositions",
-  },
-  "Successful run": {
-    key: "systemNotice.successfulRunHandoff.successfulRun",
-    defaultValue: "Successful run",
-  },
-  "Run status": {
-    key: "systemNotice.successfulRunHandoff.runStatus",
-    defaultValue: "Run status",
-  },
-  "Normalized cause": {
-    key: "systemNotice.successfulRunHandoff.normalizedCause",
-    defaultValue: "Normalized cause",
-  },
-  "Detected progress": {
-    key: "systemNotice.successfulRunHandoff.detectedProgress",
-    defaultValue: "Detected progress",
-  },
-  "Automatic retry": {
-    key: "systemNotice.successfulRunHandoff.automaticRetry",
-    defaultValue: "Automatic retry",
-  },
-  "Recovery issue": {
-    key: "systemNotice.successfulRunHandoff.recoveryIssue",
-    defaultValue: "Recovery issue",
-  },
-  "Source assignee": {
-    key: "systemNotice.successfulRunHandoff.sourceAssignee",
-    defaultValue: "Source assignee",
-  },
-  "Suggested action": {
-    key: "systemNotice.successfulRunHandoff.suggestedAction",
-    defaultValue: "Suggested action",
-  },
-  "Source run": {
-    key: "systemNotice.successfulRunHandoff.sourceRun",
-    defaultValue: "Source run",
-  },
-  "Corrective handoff run": {
-    key: "systemNotice.successfulRunHandoff.correctiveHandoffRun",
-    defaultValue: "Corrective handoff run",
-  },
-  "Latest issue status": {
-    key: "systemNotice.successfulRunHandoff.latestIssueStatus",
-    defaultValue: "Latest issue status",
-  },
-  "Latest handoff run status": {
-    key: "systemNotice.successfulRunHandoff.latestHandoffRunStatus",
-    defaultValue: "Latest handoff run status",
-  },
-  "Status before": {
-    key: "systemNotice.metadata.statusBefore",
-    defaultValue: "Status before",
-  },
-  "Status": {
-    key: "Status",
-    defaultValue: "Status",
-  },
-  "Cause": {
-    key: "systemNotice.metadata.cause",
-    defaultValue: "Cause",
-  },
-  "Completed run": {
-    key: "systemNotice.metadata.completedRun",
-    defaultValue: "Completed run",
-  },
-  "Recovery run": {
-    key: "systemNotice.metadata.recoveryRun",
-    defaultValue: "Recovery run",
-  },
-  "Run context": {
-    key: "systemNotice.metadata.runContext",
-    defaultValue: "Run context",
-  },
-  "Next step": {
-    key: "systemNotice.metadata.nextStep",
-    defaultValue: "Next step",
-  },
-  "Owner": {
-    key: "systemNotice.metadata.owner",
-    defaultValue: "Owner",
-  },
-  "Reason": {
-    key: "systemNotice.metadata.reason",
-    defaultValue: "Reason",
-  },
-  "Notes": {
-    key: "systemNotice.metadata.notes",
-    defaultValue: "Notes",
-  },
-  "Cause code": {
-    key: "systemNotice.metadata.causeCode",
-    defaultValue: "Cause code",
-  },
-};
-
-const KNOWN_SYSTEM_NOTICE_METADATA_VALUE_KEYS: Record<string, { key: string; defaultValue: string }> = {
-  unknown: {
-    key: "unknown",
-    defaultValue: "unknown",
-  },
-  clear_next_step: {
-    key: "systemNotice.successfulRunHandoff.value.clearNextStep",
-    defaultValue: "Clear next step",
-  },
-  "done, cancelled, in_review with an owner, blocked with blockers, delegated follow-up, or explicit continuation": {
-    key: "systemNotice.successfulRunHandoff.value.validDispositions",
-    defaultValue: "Done, cancelled, in review with an owner, blocked with blockers, delegated follow-up, or explicit continuation",
-  },
-  successful_run_missing_state: {
-    key: "systemNotice.successfulRunHandoff.value.successfulRunMissingState",
-    defaultValue: "Successful run missing issue state",
-  },
-  "Run produced useful output but no concrete action evidence": {
-    key: "systemNotice.successfulRunHandoff.value.usefulOutputNoActionEvidence",
-    defaultValue: "Run produced useful output but no concrete action evidence",
-  },
-  "one corrective handoff wake queued": {
-    key: "systemNotice.successfulRunHandoff.value.correctiveHandoffQueued",
-    defaultValue: "One corrective handoff wake queued",
-  },
-  "choose and record a valid issue disposition without copying transcript content": {
-    key: "systemNotice.successfulRunHandoff.value.chooseValidDisposition",
-    defaultValue: "Choose and record a valid issue disposition without copying transcript content",
-  },
-};
-
-const SYSTEM_NOTICE_STATUS_VALUE_LABELS = new Set([
-  "Status",
-  "Status before",
-  "Run status",
-  "Latest issue status",
-  "Latest handoff run status",
-]);
-
-const SYSTEM_NOTICE_STATUS_VALUES = new Set([
-  "active",
-  "approved",
-  "archived",
-  "backlog",
-  "blocked",
-  "cancelled",
-  "coming_soon",
-  "done",
-  "deleted",
-  "disabled",
-  "error",
-  "failed",
-  "queued",
-  "ready",
-  "idle",
-  "in_progress",
-  "in_review",
-  "paused",
-  "pending",
-  "pending_approval",
-  "rejected",
-  "revision_requested",
-  "running",
-  "skipped",
-  "starting",
-  "succeeded",
-  "timed_out",
-  "terminated",
-  "todo",
-  "warning",
-]);
-
-function translateKnownSystemNoticeText<T extends string | null | undefined>(text: T, t: TFunction): T | string {
-  const trimmed = typeof text === "string" ? text.trim() : "";
-  if (!trimmed) return text;
-  const entry = KNOWN_SYSTEM_NOTICE_TEXT_KEYS[trimmed];
-  return entry ? t(entry.key, { defaultValue: entry.defaultValue }) : text;
-}
-
-function translateKnownSystemNoticeMetadataValue(
-  value: string,
-  label: string | undefined,
-  t: TFunction,
-  options: { statusValue?: boolean } = {},
-) {
-  const trimmed = value.trim();
-  const entry = KNOWN_SYSTEM_NOTICE_METADATA_VALUE_KEYS[trimmed];
-  if (entry) return t(entry.key, { defaultValue: entry.defaultValue });
-  const shouldTranslateStatus = options.statusValue
-    || Boolean(label && SYSTEM_NOTICE_STATUS_VALUE_LABELS.has(label));
-  if (shouldTranslateStatus && SYSTEM_NOTICE_STATUS_VALUES.has(trimmed)) {
-    return translateStatusLabel(t, trimmed);
-  }
-  return value;
-}
-
-function translateSystemNoticeDefaultLabel(label: string | undefined, t: TFunction) {
-  switch (label) {
-    case "System notice":
-      return t("systemNotice.notice", { defaultValue: "System notice" });
-    case "System warning":
-      return t("systemNotice.warning", { defaultValue: "System warning" });
-    case "System alert":
-      return t("systemNotice.alert", { defaultValue: "System alert" });
-    default:
-      return label;
-  }
-}
-
-function translateSystemNoticeMetadata(
-  sections: SystemNoticeMetadataSection[] | undefined,
-  t: TFunction,
-): SystemNoticeMetadataSection[] | undefined {
-  if (!sections) return undefined;
-  return sections.map((section) => {
-    const translated: SystemNoticeMetadataSection = {
-      rows: section.rows.map((row) => {
-        const translatedLabel = translateKnownSystemNoticeText(row.label, t) ?? row.label;
-        if (row.kind === "text") {
-          return {
-            ...row,
-            label: translatedLabel,
-            value: translateKnownSystemNoticeMetadataValue(row.value, row.label, t),
-          };
-        }
-        if (row.kind === "run" && row.status) {
-          return {
-            ...row,
-            label: translatedLabel,
-            status: translateKnownSystemNoticeMetadataValue(row.status, row.label, t, { statusValue: true }),
-          };
-        }
-        return {
-          ...row,
-          label: translatedLabel,
-        };
-      }),
-    };
-    if (section.title) {
-      translated.title = translateKnownSystemNoticeText(section.title, t) ?? section.title;
-    }
-    return translated;
-  });
 }
 
 function StaleDispositionWarningMetadataRow({ row }: { row: SystemNoticeMetadataRow }) {
@@ -2485,41 +2233,13 @@ function isTimelineWorkspaceChange(value: unknown): value is NonNullable<IssueTi
   return isTimelineWorkspace(change.from) && isTimelineWorkspace(change.to);
 }
 
-function formatLocalizedTimelineWorkspaceLabel(
-  workspace: IssueTimelineWorkspace,
-  t: (key: string, options?: Record<string, unknown>) => string,
-) {
-  if (workspace.executionWorkspaceId || workspace.projectWorkspaceId) {
-    return formatTimelineWorkspaceLabel(workspace);
-  }
-
-  switch (workspace.mode) {
-    case "shared_workspace":
-      return t("issueWorkspace.projectDefault", { defaultValue: "Project default" });
-    case "isolated_workspace":
-      return t("issueWorkspace.newIsolatedWorkspace", { defaultValue: "New isolated workspace" });
-    case "operator_branch":
-      return t("issueWorkspace.operatorBranch", { defaultValue: "Operator branch" });
-    case "reuse_existing":
-      return t("issueWorkspace.reuseExistingWorkspace", { defaultValue: "Reuse existing workspace" });
-    case "agent_default":
-      return t("executionWorkspace.mode.agent_default", { defaultValue: "Agent default" });
-    case "inherit":
-      return t("executionWorkspace.mode.inherit", { defaultValue: "Inherit" });
-    default:
-      return t("None", { defaultValue: "None" });
-  }
-}
-
 function StaleDispositionWarningDetails({
-  emptyLabel,
   sections,
 }: {
-  emptyLabel: string;
   sections: SystemNoticeMetadataSection[];
 }) {
   if (sections.length === 0) {
-    return <div className="text-xs leading-5 text-muted-foreground">{emptyLabel}</div>;
+    return <div className="text-xs leading-5 text-muted-foreground">No additional details.</div>;
   }
 
   return (
@@ -2555,11 +2275,7 @@ function StaleDispositionWarningRow({
 }) {
   const [open, setOpen] = useState(false);
   const detailsId = useId();
-  const { t } = useTranslation(undefined, { useSuspense: false });
-  const sections = translateSystemNoticeMetadata(
-    mapCommentMetadataToSystemNoticeSections(metadata, { runAgentId }),
-    t,
-  ) ?? [];
+  const sections = mapCommentMetadataToSystemNoticeSections(metadata, { runAgentId });
 
   return (
     <div id={anchorId} data-testid="stale-disposition-warning">
@@ -2574,7 +2290,7 @@ function StaleDispositionWarningRow({
             onClick={() => setOpen((value) => !value)}
           >
             <span className="text-sm font-medium text-foreground/80">
-              {t("issueChat.staleDispositionWarning", { defaultValue: "Stale disposition warning" })}
+              Stale disposition warning
             </span>
             <span className="ml-auto flex items-center gap-1.5">
               {message.createdAt ? (
@@ -2586,10 +2302,7 @@ function StaleDispositionWarningRow({
             </span>
           </button>
           <div id={detailsId} hidden={!open} className="space-y-1 py-1">
-            <StaleDispositionWarningDetails
-              emptyLabel={t("execCloseDialog.noAdditionalDetails", { defaultValue: "No additional details" })}
-              sections={sections}
-            />
+            <StaleDispositionWarningDetails sections={sections} />
           </div>
         </div>
       </div>
@@ -2604,8 +2317,8 @@ function SystemNoticeCommentRow({
   message: ThreadMessage;
   anchorId?: string;
 }) {
-  const { onImageClick, agentMap, issueStatus, successfulRunHandoff } = useContext(IssueChatCtx);
   const { t } = useTranslation(undefined, { useSuspense: false });
+  const { onImageClick, agentMap, issueStatus, successfulRunHandoff } = useContext(IssueChatCtx);
   const custom = message.metadata.custom as Record<string, unknown>;
   const presentation = isIssueCommentPresentation(custom.presentation) ? custom.presentation : null;
   const commentMetadata = isIssueCommentMetadata(custom.commentMetadata) ? custom.commentMetadata : null;
@@ -2617,10 +2330,6 @@ function SystemNoticeCommentRow({
     .filter((p): p is { type: "text"; text: string } => p.type === "text")
     .map((p) => p.text)
     .join("\n\n");
-  const visibleBodyText = translateKnownSystemNoticeText(
-    translateSystemGeneratedMarkdownText(bodyText, t),
-    t,
-  );
   const staleSuccessfulRunHandoffNotice = isStaleSuccessfulRunHandoffNotice({
     bodyText,
     issueStatus,
@@ -2650,21 +2359,17 @@ function SystemNoticeCommentRow({
     metadata: commentMetadata,
     body: (
       <MarkdownBody className="text-sm leading-6" softBreaks onImageClick={onImageClick}>
-        {visibleBodyText}
+        {translateSystemGeneratedMarkdownText(translateSystemNoticeBodyText(bodyText, t), t)}
       </MarkdownBody>
     ),
     timestamp: message.createdAt ? new Date(message.createdAt).toISOString() : undefined,
     source,
     runAgentId,
-  });
-  props.label = translateKnownSystemNoticeText(
-    translateSystemNoticeDefaultLabel(props.label, t),
     t,
-  );
-  props.metadata = translateSystemNoticeMetadata(props.metadata, t);
+  });
 
   const handleCopy = () => {
-    void navigator.clipboard.writeText(visibleBodyText).then(() => {
+    void navigator.clipboard.writeText(bodyText).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -2712,8 +2417,8 @@ function SystemNoticeCommentRow({
             <button
               type="button"
               className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-              title={t("issueChat.copySystemNoticeLink", { defaultValue: "Copy link" })}
-              aria-label={t("issueChat.copySystemNoticeLinkAria", { defaultValue: "Copy link to system notice" })}
+              title="Copy link"
+              aria-label="Copy link to system notice"
               onClick={handleCopyLink}
             >
               {copiedLink ? <Check className="h-3.5 w-3.5" /> : <Paperclip className="h-3.5 w-3.5" />}
@@ -2722,8 +2427,8 @@ function SystemNoticeCommentRow({
           <button
             type="button"
             className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-            title={t("issueChat.copySystemNoticeText", { defaultValue: "Copy notice text" })}
-            aria-label={t("issueChat.copySystemNoticeTextAria", { defaultValue: "Copy system notice" })}
+            title="Copy notice text"
+            aria-label="Copy system notice"
             onClick={handleCopy}
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -2735,7 +2440,7 @@ function SystemNoticeCommentRow({
 }
 
 function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
+  const { t } = useTranslation();
   const {
     agentMap,
     currentUserId,
@@ -2816,9 +2521,7 @@ function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
         <div className={cn("flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-xs", isCurrentUser && "justify-end")}>
           <span className="font-medium text-foreground">{actorName}</span>
           <span className="text-muted-foreground">
-            {custom.followUpRequested === true
-              ? t("requested follow-up", { defaultValue: "requested follow-up" })
-              : t("updated this task", { defaultValue: "updated this task" })}
+            {custom.followUpRequested === true ? "requested follow-up" : "updated this task"}
           </span>
           <a
             href={anchorId ? `#${anchorId}` : undefined}
@@ -2831,18 +2534,22 @@ function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
         {statusChange ? (
           <div className={cn("flex flex-wrap items-center gap-1.5 text-xs", isCurrentUser && "justify-end")}>
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t("Status", { defaultValue: "Status" })}
+              {t("Status")}
             </span>
-            <span className="text-muted-foreground">{formatTimelineStatusValue(statusChange.from, t)}</span>
+            <span className="text-muted-foreground">
+              {statusChange.from ? translateStatusLabel(t, statusChange.from) : t("None")}
+            </span>
             <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <span className="font-medium text-foreground">{formatTimelineStatusValue(statusChange.to, t)}</span>
+            <span className="font-medium text-foreground">
+              {statusChange.to ? translateStatusLabel(t, statusChange.to) : t("None")}
+            </span>
           </div>
         ) : null}
 
         {assigneeChange ? (
           <div className={cn("flex flex-wrap items-center gap-1.5 text-xs", isCurrentUser && "justify-end")}>
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t("Assignee", { defaultValue: "Assignee" })}
+              Assignee
             </span>
             <span className="text-muted-foreground">
               {formatTimelineAssigneeLabel(assigneeChange.from, agentMap, currentUserId, userLabelMap)}
@@ -2857,14 +2564,14 @@ function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
         {workspaceChange ? (
           <div className={cn("flex flex-wrap items-center gap-1.5 text-xs", isCurrentUser && "justify-end")}>
             <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t("Workspace", { defaultValue: "Workspace" })}
+              Workspace
             </span>
             <span className="text-muted-foreground">
-              {formatLocalizedTimelineWorkspaceLabel(workspaceChange.from, t)}
+              {formatTimelineWorkspaceLabel(workspaceChange.from)}
             </span>
             <ArrowRight className="h-3 w-3 text-muted-foreground" />
             <span className="font-medium text-foreground">
-              {formatLocalizedTimelineWorkspaceLabel(workspaceChange.to, t)}
+              {formatTimelineWorkspaceLabel(workspaceChange.to)}
             </span>
           </div>
         ) : null}
@@ -2918,7 +2625,7 @@ function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
               <Link to={`/agents/${runAgentId}`} className="font-medium text-foreground transition-colors hover:underline">
                 {displayedRunAgentName}
               </Link>
-              <span className="text-muted-foreground">{t("run", { defaultValue: "run" })}</span>
+              <span className="text-muted-foreground">run</span>
               <Link
                 to={`/agents/${runAgentId}/runs/${runId}`}
                 className="inline-flex items-center rounded-md border border-border bg-accent/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
@@ -2998,6 +2705,16 @@ function issueChatMessageQueuedRunIsInterrupting(
 ): boolean {
   const queueTargetRunId = issueChatMessageQueueTargetRunId(message);
   return Boolean(queueTargetRunId && interruptingQueuedRunId === queueTargetRunId);
+}
+
+function issueChatMessageIsDeleted(message: ThreadMessage): boolean {
+  const custom = issueChatMessageCustom(message);
+  return Boolean(custom.deletedAt);
+}
+
+function issueChatMessageDeletedAt(message: ThreadMessage): string | null {
+  const custom = issueChatMessageCustom(message);
+  return typeof custom.deletedAt === "string" ? custom.deletedAt : null;
 }
 
 // Above ~150 merged rows the direct render path forces React to mount and
@@ -3431,6 +3148,38 @@ interface IssueChatMessageRowProps {
   interruptingQueuedRunId?: string | null;
 }
 
+function IssueChatDeletedComment({
+  message,
+  deletedAt,
+}: {
+  message: ThreadMessage;
+  deletedAt: string;
+}) {
+  const { t } = useTranslation();
+  const custom = issueChatMessageCustom(message);
+  const anchorId = typeof custom.anchorId === "string" ? custom.anchorId : undefined;
+  const authorName = typeof custom.authorName === "string" ? custom.authorName : "Comment";
+  const deletedDate = new Date(deletedAt);
+  const deletedDateLabel = Number.isNaN(deletedDate.getTime()) ? "" : formatDateTime(deletedDate);
+
+  return (
+    <div id={anchorId} className="flex items-start gap-2.5 py-1.5">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground">
+        <Trash2 className="h-3.5 w-3.5" />
+      </div>
+      <div className="min-w-0 rounded-md border border-dashed border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground/80">
+          {t("issueChat.deletedComment", {
+            authorName,
+            defaultValue: "{{authorName}} deleted this comment",
+          })}
+        </span>
+        {deletedDateLabel ? <span className="text-xs"> · {deletedDateLabel}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 const IssueChatMessageRow = memo(function IssueChatMessageRow({
   message,
   feedbackVoteByTargetId,
@@ -3439,11 +3188,14 @@ const IssueChatMessageRow = memo(function IssueChatMessageRow({
   interruptingQueuedRunId,
 }: IssueChatMessageRowProps) {
   const kind = issueChatMessageKind(message);
+  const deletedAt = issueChatMessageDeletedAt(message);
   const activeVote = issueChatMessageActiveVote(message, feedbackVoteByTargetId);
   const isRunActive = issueChatMessageRunIsActive(message, activeRunIds);
   const isStoppingRun = issueChatMessageRunIsStopping(message, stoppingRunId);
   const isInterruptingQueuedRun = issueChatMessageQueuedRunIsInterrupting(message, interruptingQueuedRunId);
-  const renderedMessage = message.role === "user"
+  const renderedMessage = deletedAt
+    ? <IssueChatDeletedComment message={message} deletedAt={deletedAt} />
+    : message.role === "user"
     ? (
       <IssueChatUserMessage
         message={message}
@@ -3500,7 +3252,6 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
   issueWorkMode,
   onWorkModeChange,
 }, forwardedRef) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const api = useAui();
   const toastActions = useOptionalToastActions();
   const [body, setBody] = useState("");
@@ -3594,10 +3345,8 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
       && !unassignedConfirmed
     ) {
       toastActions?.pushToast({
-        title: t("issueChat.noAssigneeSelected", { defaultValue: "No assignee selected" }),
-        body: t("issueChat.noAssigneeSelectedBody", {
-          defaultValue: "Pick an assignee or click Send again to post without one.",
-        }),
+        title: "No assignee selected",
+        body: "Pick an assignee or click Send again to post without one.",
         tone: "warn",
         dedupeKey: `issue-chat-no-assignee:${draftKey ?? ""}`,
       });
@@ -3692,11 +3441,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
       } else {
         setComposerAttachments((prev) => prev.map((item) =>
           item.id === attachmentId
-            ? {
-                ...item,
-                status: "error",
-                error: t("issueChat.fileTypeCannotAttach", { defaultValue: "This file type cannot be attached here" }),
-              }
+            ? { ...item, status: "error", error: "This file type cannot be attached here" }
             : item,
         ));
       }
@@ -3706,7 +3451,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
           ? {
               ...item,
               status: "error",
-              error: err instanceof Error ? err.message : t("Upload failed", { defaultValue: "Upload failed" }),
+              error: err instanceof Error ? err.message : "Upload failed",
             }
           : item,
       ));
@@ -3810,13 +3555,9 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
               <Paperclip className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <div className="text-sm font-medium text-foreground">
-                {t("issueChat.dropToUpload", { defaultValue: "Drop to upload" })}
-              </div>
+              <div className="text-sm font-medium text-foreground">Drop to upload</div>
               <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                {t("issueChat.dropToUploadDescription", {
-                  defaultValue: "Images insert into the reply. Other files are added to this issue.",
-                })}
+                Images insert into the reply. Other files are added to this issue.
               </div>
             </div>
           </div>
@@ -3827,7 +3568,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
         ref={editorRef}
         value={body}
         onChange={setBody}
-        placeholder={t("Reply", { defaultValue: "Reply" })}
+        placeholder="Reply"
         mentions={mentions}
         onSubmit={handleSubmit}
         imageUploadHandler={onImageUpload}
@@ -3851,12 +3592,12 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
             const sizeLabel = formatAttachmentSize(attachment.size);
             const statusLabel =
               attachment.status === "uploading"
-                ? t("issueChat.uploadingToIssue", { defaultValue: "Uploading to issue" })
+                ? "Uploading to issue"
                 : attachment.status === "error"
-                  ? attachment.error ?? t("Upload failed", { defaultValue: "Upload failed" })
+                  ? attachment.error ?? "Upload failed"
                   : attachment.inline
-                    ? t("issueChat.insertedInline", { defaultValue: "Inserted inline" })
-                    : t("issueChat.attachedToIssue", { defaultValue: "Attached to issue" });
+                    ? "Inserted inline"
+                    : "Attached to issue";
             return (
               <div
                 key={attachment.id}
@@ -3902,7 +3643,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
                 size="icon-sm"
                 onClick={() => attachInputRef.current?.click()}
                 disabled={attaching}
-                title={t("Attach file", { defaultValue: "Attach file" })}
+                title="Attach file"
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
@@ -3915,7 +3656,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
                   variant="ghost"
                   size="icon-sm"
                   data-testid="issue-chat-composer-work-mode-menu"
-                  title={t("More composer options", { defaultValue: "More composer options" })}
+                  title="More composer options"
                 >
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
@@ -3939,11 +3680,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
                   ) : (
                     <ClipboardList className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300" aria-hidden />
                   )}
-                  <span>
-                    {isPlanning
-                      ? t("issueChat.switchToStandard", { defaultValue: "Switch to standard" })
-                      : t("issueChat.switchToPlanning", { defaultValue: "Switch to planning" })}
-                  </span>
+                  <span>{isPlanning ? "Switch to standard" : "Switch to planning"}</span>
                 </button>
               </PopoverContent>
             </Popover>
@@ -3954,14 +3691,12 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
               data-testid="issue-chat-composer-work-mode-toggle"
               data-pending-work-mode={pendingWorkMode}
               aria-pressed
-              title={t("issueChat.planningModeOn", {
-                defaultValue: "Planning mode is on for this submission. Click to switch to Standard.",
-              })}
+              title="Planning mode is on for this submission. Click to switch to Standard."
               onClick={() => setPendingWorkMode("standard")}
               className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/60 bg-amber-500/15 px-2 py-1 text-xs text-amber-800 transition-colors hover:bg-amber-500/25 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-200 dark:hover:bg-amber-500/25"
             >
               <ClipboardList className="h-3.5 w-3.5" aria-hidden />
-              <span>{t("newIssue.workMode.planning", { defaultValue: "Planning" })}</span>
+              <span>Planning</span>
             </button>
           ) : null}
         </div>
@@ -3970,14 +3705,14 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
           <InlineEntitySelector
             value={reassignTarget}
             options={reassignOptions}
-            placeholder={t("Assignee", { defaultValue: "Assignee" })}
-            noneLabel={t("No assignee", { defaultValue: "No assignee" })}
-            searchPlaceholder={t("Search assignees...", { defaultValue: "Search assignees..." })}
-            emptyMessage={t("No assignees found.", { defaultValue: "No assignees found." })}
+            placeholder="Assignee"
+            noneLabel="No assignee"
+            searchPlaceholder="Search assignees..."
+            emptyMessage="No assignees found."
             onChange={setReassignTarget}
             className="h-8 text-xs"
             renderTriggerValue={(option) => {
-              if (!option) return <span className="text-muted-foreground">{t("Assignee", { defaultValue: "Assignee" })}</span>;
+              if (!option) return <span className="text-muted-foreground">Assignee</span>;
               const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
               const agent = agentId ? agentMap?.get(agentId) : null;
               return (
@@ -4006,7 +3741,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
         ) : null}
 
         <Button size="sm" disabled={!canSubmit} onClick={() => void handleSubmit()}>
-          {submitting ? t("Posting...", { defaultValue: "Posting..." }) : t("Send", { defaultValue: "Send" })}
+          {submitting ? "Posting..." : "Send"}
         </Button>
       </div>
     </div>
@@ -4067,6 +3802,7 @@ export function IssueChatThread({
   includeSucceededRunsWithoutOutput = false,
   onInterruptQueued,
   onCancelQueued,
+  onDeleteComment,
   interruptingQueuedRunId = null,
   stoppingRunId = null,
   onImageClick,
@@ -4082,7 +3818,6 @@ export function IssueChatThread({
   onResumeFromBacklog,
   resumeFromBacklogPending = false,
 }: IssueChatThreadProps) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const location = useLocation();
   const lastScrolledHashRef = useRef<string | null>(null);
   const virtualizedThreadRef = useRef<VirtualizedIssueChatThreadListHandle | null>(null);
@@ -4341,6 +4076,16 @@ export function IssueChatThread({
     ) return;
     if (messages.length === 0 || lastScrolledHashRef.current === hash) return;
     const targetId = hash.slice(1);
+    if (targetId.startsWith("comment-")) {
+      const targetMessage = messages.find((message) => issueChatMessageAnchorId(message) === targetId);
+      if (targetMessage && issueChatMessageIsDeleted(targetMessage)) {
+        lastScrolledHashRef.current = hash;
+        if (typeof window !== "undefined") {
+          window.history.replaceState(null, "", `${location.pathname}${location.search}`);
+        }
+        return;
+      }
+    }
     let cancelled = false;
     const attemptScroll = (finalAttempt = false) => {
       if (cancelled || lastScrolledHashRef.current === hash) return;
@@ -4533,6 +4278,7 @@ export function IssueChatThread({
   const stableOnStopRun = useStableEvent(onStopRun);
   const stableOnInterruptQueued = useStableEvent(onInterruptQueued);
   const stableOnCancelQueued = useStableEvent(onCancelQueued);
+  const stableOnDeleteComment = useStableEvent(onDeleteComment);
   const stableOnImageClick = useStableEvent(onImageClick);
   const stableOnAcceptInteraction = useStableEvent(onAcceptInteraction);
   const stableOnRejectInteraction = useStableEvent(onRejectInteraction);
@@ -4554,6 +4300,7 @@ export function IssueChatThread({
       stopRunVariant,
       onInterruptQueued: stableOnInterruptQueued,
       onCancelQueued: stableOnCancelQueued,
+      onDeleteComment: stableOnDeleteComment,
       onImageClick: stableOnImageClick,
       onAcceptInteraction: stableOnAcceptInteraction,
       onRejectInteraction: stableOnRejectInteraction,
@@ -4576,6 +4323,7 @@ export function IssueChatThread({
       stopRunVariant,
       stableOnInterruptQueued,
       stableOnCancelQueued,
+      stableOnDeleteComment,
       stableOnImageClick,
       stableOnAcceptInteraction,
       stableOnRejectInteraction,
@@ -4589,8 +4337,8 @@ export function IssueChatThread({
   const resolvedShowJumpToLatest = showJumpToLatest ?? variant === "full";
   const resolvedEmptyMessage = emptyMessage
     ?? (variant === "embedded"
-      ? t("issueChat.noRunOutputYet", { defaultValue: "No run output yet." })
-      : t("issueChat.emptyConversation", { defaultValue: "This issue conversation is empty. Start with a message below." }));
+      ? "No run output yet."
+      : "This issue conversation is empty. Start with a message below.");
   const previousErrorBoundaryMessagesRef = useRef<readonly ThreadMessage[] | null>(null);
   const errorBoundaryResetVersionRef = useRef(0);
   if (previousErrorBoundaryMessagesRef.current !== messages) {
@@ -4610,7 +4358,7 @@ export function IssueChatThread({
               onClick={handleJumpToLatest}
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
-              {t("Jump to latest", { defaultValue: "Jump to latest" })}
+              Jump to latest
             </button>
           </div>
         ) : null}
@@ -4680,12 +4428,10 @@ export function IssueChatThread({
                   {legacyRecoverySourceIssue ? (
                     <SystemNotice
                       tone="info"
-                      label={t("issueChat.legacyRecoveryIssue.label", { defaultValue: "Legacy recovery issue" })}
+                      label="Legacy recovery issue"
                       body={
                         <span>
-                          {t("issueChat.legacyRecoveryIssue.body", {
-                            defaultValue: "Legacy recovery issue. Newer recovery actions live on the source issue",
-                          })}
+                          Legacy recovery issue. Newer recovery actions live on the source issue
                           {legacyRecoverySourceIssue.identifier ? (
                             <>
                               {" — "}

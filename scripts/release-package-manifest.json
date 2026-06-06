@@ -75,6 +75,11 @@
     "publishFromCi": false
   },
   {
+    "dir": "packages/teams-catalog",
+    "name": "@penclipai/teams-catalog",
+    "publishFromCi": false
+  },
+  {
     "dir": "packages/db",
     "name": "@penclipai/db",
     "publishFromCi": true

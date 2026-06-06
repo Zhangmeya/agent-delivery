@@ -14,12 +14,19 @@ const i18nextOptions: InitOptions = {
   initAsync: false,
 };
 
+for (const [locale, resources] of Object.entries(i18nextResources)) {
+  const translation = resources?.translation;
+  if (translation && typeof translation === "object") {
+    i18n.addResourceBundle(locale, "translation", translation, true, true);
+  }
+}
+
 void i18n.use(initReactI18next).init(i18nextOptions).catch((error: unknown) => {
   console.error("Failed to initialize i18next", error);
 });
 
 export function t(key: string, options: TOptions = {}) {
-  return i18n.t(key, options);
+  return i18n.t(key, { ns: "translation", keySeparator: ".", ...options });
 }
 
 export const useTranslation = useReactI18nextTranslation;

@@ -80,7 +80,7 @@ export function DocumentAnnotationPanel(props: AnnotationPanelProps) {
         <SheetContent
           side="bottom"
           showCloseButton={false}
-          className="paperclip-doc-annotation-sheet flex max-h-[88vh] flex-col rounded-none border-t border-border bg-background p-0"
+          className="paperclip-doc-annotation-sheet z-[60] flex max-h-[88vh] flex-col rounded-none border-t border-border bg-popover p-0 text-popover-foreground shadow-2xl"
         >
           <SheetTitle className="sr-only">
             {t("documentAnnotations.commentsOnRevision", {
@@ -108,7 +108,7 @@ export function DocumentAnnotationPanel(props: AnnotationPanelProps) {
       })}
       data-testid="document-annotation-panel"
       className={cn(
-        "flex h-full max-h-[80vh] w-[360px] shrink-0 flex-col overflow-hidden rounded-none border border-border bg-card shadow-md",
+        "isolate flex h-full max-h-[80vh] w-[360px] shrink-0 flex-col overflow-hidden rounded-none border border-border bg-popover text-popover-foreground shadow-xl",
         props.className,
       )}
       style={props.desktopWidth ? { width: props.desktopWidth, maxWidth: props.desktopWidth } : undefined}
@@ -223,7 +223,7 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
     <>
       <header
         data-testid={bodyTestId}
-        className="flex items-start justify-between gap-2 border-b border-border px-3 py-2.5"
+        className="flex items-start justify-between gap-2 border-b border-border bg-popover px-3 py-2.5"
       >
         <div className="min-w-0 leading-tight">
           <p className="text-sm font-medium">{t("Comments", { defaultValue: "Comments" })}</p>
@@ -245,7 +245,7 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
           <X className="h-4 w-4" />
         </Button>
       </header>
-      <div className="flex flex-wrap gap-1 border-b border-border px-3 py-2">
+      <div className="flex flex-wrap gap-1 border-b border-border bg-popover px-3 py-2">
         {FILTERS.map((entry) => {
           const count = counts[entry];
           const isActive = filter === entry;
@@ -273,12 +273,12 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
       {props.newCommentDisabled && props.newCommentDisabledReason ? (
         <p
           data-testid="document-annotation-disabled-reason"
-          className="border-b border-border bg-muted/40 px-3 py-1.5 text-[11px] text-muted-foreground"
+          className="border-b border-border bg-muted px-3 py-1.5 text-[11px] text-muted-foreground"
         >
           {props.newCommentDisabledReason}
         </p>
       ) : null}
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-popover px-3 py-2">
         {filteredThreads.length === 0 ? (
           <p className="py-8 text-center text-xs text-muted-foreground">
             {filter === "open"
@@ -325,8 +325,8 @@ function AnnotationPanelBody(props: AnnotationPanelProps) {
         )}
       </div>
       {props.pendingAnchor ? (
-        <div className="border-t border-border bg-muted/20 px-3 py-2">
-          <blockquote className="mb-2 line-clamp-3 overflow-hidden rounded-none bg-background px-2 py-1 text-xs italic text-muted-foreground">
+        <div className="border-t border-border bg-popover px-3 py-2">
+          <blockquote className="mb-2 line-clamp-3 overflow-hidden rounded-none bg-muted px-2 py-1 text-xs italic text-muted-foreground">
             {truncate(props.pendingAnchor.selectedText, 160)}
           </blockquote>
           <Textarea
@@ -415,9 +415,9 @@ function ThreadCard(props: {
         data-focused={props.expanded || undefined}
         aria-labelledby={`thread-quote-${thread.id}`}
         className={cn(
-          "rounded-none border border-border bg-card transition-colors",
+          "rounded-none border border-border bg-background transition-colors",
           props.expanded && "ring-1 ring-ring/70",
-          thread.status === "resolved" && "bg-muted/30",
+          thread.status === "resolved" && "bg-muted",
         )}
         tabIndex={0}
         onClick={props.onFocus}
@@ -431,8 +431,8 @@ function ThreadCard(props: {
         <blockquote
           id={`thread-quote-${thread.id}`}
           className={cn(
-            "mx-3 mt-1 line-clamp-2 overflow-hidden rounded-none bg-muted/40 px-2 py-1 text-xs italic text-muted-foreground",
-            (thread.anchorState === "stale" || thread.status === "resolved") && "bg-muted/30",
+            "mx-3 mt-1 line-clamp-2 overflow-hidden rounded-none bg-muted px-2 py-1 text-xs italic text-muted-foreground",
+            (thread.anchorState === "stale" || thread.status === "resolved") && "bg-muted",
           )}
         >
           {truncate(thread.selectedText, 120)}

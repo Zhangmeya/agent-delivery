@@ -9,38 +9,39 @@ Client-side commands for managing issues, agents, approvals, and more.
 
 ```sh
 # List issues
-penclip issue list [--status todo,in_progress] [--assignee-agent-id <id>] [--match text]
+pnpm penclip issue list [--status todo,in_progress] [--assignee-agent-id <id>] [--match text]
 
 # Get issue details
-penclip issue get <issue-id-or-identifier>
+pnpm penclip issue get <issue-id-or-identifier>
 
 # Create issue
-penclip issue create --title "..." [--description "..."] [--status todo] [--priority high]
+pnpm penclip issue create --title "..." [--description "..."] [--status todo] [--priority high]
 
 # Update issue
-penclip issue update <issue-id> [--status in_progress] [--comment "..."]
+pnpm penclip issue update <issue-id> [--status in_progress] [--comment "..."]
 
 # Add comment
-penclip issue comment <issue-id> --body "..." [--reopen]
+pnpm penclip issue comment <issue-id> --body "..." [--reopen]
 
 # Checkout task
-penclip issue checkout <issue-id> --agent-id <agent-id>
+pnpm penclip issue checkout <issue-id> --agent-id <agent-id>
 
 # Release task
-penclip issue release <issue-id>
+pnpm penclip issue release <issue-id>
 ```
 
 ## Company Commands
 
 ```sh
-penclip company list
-penclip company get <company-id>
+pnpm penclip company list
+pnpm penclip company get <company-id>
+pnpm penclip company current [--company-id <company-id>]
 
 # Export to portable folder package (writes manifest + markdown files)
-penclip company export <company-id> --out ./exports/acme --include company,agents
+pnpm penclip company export <company-id> --out ./exports/acme --include company,agents
 
 # Preview import (no writes)
-penclip company import \
+pnpm penclip company import \
   <owner>/<repo>/<path> \
   --target existing \
   --company-id <company-id> \
@@ -49,85 +50,92 @@ penclip company import \
   --dry-run
 
 # Apply import
-penclip company import \
+pnpm penclip company import \
   ./exports/acme \
   --target new \
   --new-company-name "Acme Imported" \
   --include company,agents
 ```
 
+With agent authentication, use `company list` or `company current` to resolve
+the scoped company. `company list` first tries the board-wide list; if that is
+forbidden, it falls back to `--company-id`, `PAPERCLIP_COMPANY_ID`, context, or
+`/api/agents/me` and returns only that scoped company. `company create` requires
+board/instance-admin authentication because it is an instance-wide setup
+command.
+
 ## Agent Commands
 
 ```sh
-penclip agent list
-penclip agent get <agent-id>
+pnpm penclip agent list
+pnpm penclip agent get <agent-id>
 ```
 
 ## Skills Commands
 
 ```sh
 # Browse app-shipped catalog skills without changing company state
-pnpm paperclipai skills browse [--kind bundled|optional] [--category software-development] [--query github]
-pnpm paperclipai skills search "pull request" [--json]
+pnpm penclip skills browse [--kind bundled|optional] [--category software-development] [--query github]
+pnpm penclip skills search "pull request" [--json]
 
 # Inspect catalog metadata and file inventory before install
-pnpm paperclipai skills inspect github-pr-workflow
+pnpm penclip skills inspect github-pr-workflow
 
 # Install a catalog skill into the company skill library
 # This does not attach the skill to any agent.
-pnpm paperclipai skills install github-pr-workflow --company-id <company-id>
-pnpm paperclipai skills install github-pr-workflow --as pr-flow --force --company-id <company-id>
+pnpm penclip skills install github-pr-workflow --company-id <company-id>
+pnpm penclip skills install github-pr-workflow --as pr-flow --force --company-id <company-id>
 
 # External sources still use import instead of catalog install
-pnpm paperclipai skills import ./skills/my-skill --company-id <company-id>
-pnpm paperclipai skills import owner/repo/path/to/skill --company-id <company-id>
+pnpm penclip skills import ./skills/my-skill --company-id <company-id>
+pnpm penclip skills import owner/repo/path/to/skill --company-id <company-id>
 
 # Attach desired company skills to an agent after install/import
-pnpm paperclipai skills agent sync <agent-id> --skill github-pr-workflow --company-id <company-id>
+pnpm penclip skills agent sync <agent-id> --skill github-pr-workflow --company-id <company-id>
 ```
 
 ## Approval Commands
 
 ```sh
 # List approvals
-penclip approval list [--status pending]
+pnpm penclip approval list [--status pending]
 
 # Get approval
-penclip approval get <approval-id>
+pnpm penclip approval get <approval-id>
 
 # Create approval
-penclip approval create --type hire_agent --payload '{"name":"..."}' [--issue-ids <id1,id2>]
+pnpm penclip approval create --type hire_agent --payload '{"name":"..."}' [--issue-ids <id1,id2>]
 
 # Approve
-penclip approval approve <approval-id> [--decision-note "..."]
+pnpm penclip approval approve <approval-id> [--decision-note "..."]
 
 # Reject
-penclip approval reject <approval-id> [--decision-note "..."]
+pnpm penclip approval reject <approval-id> [--decision-note "..."]
 
 # Request revision
-penclip approval request-revision <approval-id> [--decision-note "..."]
+pnpm penclip approval request-revision <approval-id> [--decision-note "..."]
 
 # Resubmit
-penclip approval resubmit <approval-id> [--payload '{"..."}']
+pnpm penclip approval resubmit <approval-id> [--payload '{"..."}']
 
 # Comment
-penclip approval comment <approval-id> --body "..."
+pnpm penclip approval comment <approval-id> --body "..."
 ```
 
 ## Activity Commands
 
 ```sh
-penclip activity list [--agent-id <id>] [--entity-type issue] [--entity-id <id>]
+pnpm penclip activity list [--agent-id <id>] [--entity-type issue] [--entity-id <id>]
 ```
 
 ## Dashboard
 
 ```sh
-penclip dashboard get
+pnpm penclip dashboard get
 ```
 
 ## Heartbeat
 
 ```sh
-penclip heartbeat run --agent-id <agent-id> [--api-base http://localhost:3100]
+pnpm penclip heartbeat run --agent-id <agent-id> [--api-base http://localhost:3100]
 ```
