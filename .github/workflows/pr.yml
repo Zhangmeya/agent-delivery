@@ -315,6 +315,7 @@ jobs:
       # build sees a lockfile that matches the manifest.
       - name: Release canary dry run via release.sh internal build
         env:
+          RELEASE_REMOTE: origin
           USED_ARTIFACT_LOCKFILE: ${{ needs.policy.outputs.lockfile_regenerated || '0' }}
         run: |
           git checkout -B master HEAD
