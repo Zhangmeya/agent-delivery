@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "@penclipai/db";
 import { documents, issueDocuments, issues } from "@penclipai/db";
-import { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY } from "@penclipai/shared";
+import { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY, type SourceTrustMetadata } from "@penclipai/shared";
 import { documentService } from "./documents.js";
 
 export { ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY };
@@ -44,6 +44,7 @@ export type IssueContinuationSummaryDocument = {
   body: string;
   latestRevisionId: string | null;
   latestRevisionNumber: number;
+  sourceTrust: SourceTrustMetadata | null;
   updatedAt: Date;
 };
 
@@ -218,6 +219,7 @@ export async function getIssueContinuationSummaryDocument(
       body: documents.latestBody,
       latestRevisionId: documents.latestRevisionId,
       latestRevisionNumber: documents.latestRevisionNumber,
+      sourceTrust: documents.sourceTrust,
       updatedAt: documents.updatedAt,
     })
     .from(issueDocuments)
@@ -232,6 +234,7 @@ export async function getIssueContinuationSummaryDocument(
     body: row.body,
     latestRevisionId: row.latestRevisionId,
     latestRevisionNumber: row.latestRevisionNumber,
+    sourceTrust: row.sourceTrust ?? null,
     updatedAt: row.updatedAt,
   };
 }

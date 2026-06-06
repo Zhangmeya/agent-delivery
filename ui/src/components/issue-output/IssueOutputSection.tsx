@@ -38,7 +38,11 @@ export function IssueOutputSection({ workProducts, resolveCreatorName }: IssueOu
         <span className="text-xs text-muted-foreground">{count}</span>
       </div>
 
-      <OutputPrimaryCard item={primary} creatorName={creatorFor(primary)} />
+      {/* Stable anchor target so company Artifacts cards can deep-link to a
+          specific work product inside its issue context (PAP-10359). */}
+      <div id={`work-product-${primary.id}`} className="scroll-mt-20">
+        <OutputPrimaryCard item={primary} creatorName={creatorFor(primary)} />
+      </div>
 
       {rest.length > 0 && (
         <div className="space-y-2">
@@ -46,7 +50,9 @@ export function IssueOutputSection({ workProducts, resolveCreatorName }: IssueOu
             {t("issueOutput.alsoProduced", { defaultValue: "Also produced" })}
           </p>
           {rest.map((item) => (
-            <OutputRow key={item.id} item={item} creatorName={creatorFor(item)} />
+            <div key={item.id} id={`work-product-${item.id}`} className="scroll-mt-20">
+              <OutputRow item={item} creatorName={creatorFor(item)} />
+            </div>
           ))}
         </div>
       )}

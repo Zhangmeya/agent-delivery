@@ -11,6 +11,7 @@ const mockIssueService = vi.hoisted(() => ({
 vi.mock("../services/index.js", () => ({
   accessService: () => ({
     canUser: vi.fn(),
+    decide: vi.fn(async () => ({ allowed: true })),
     hasPermission: vi.fn(),
   }),
   agentService: () => ({

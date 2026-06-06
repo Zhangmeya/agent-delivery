@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
-import { formatDate } from "../lib/utils";
 import {
   BookOpen,
   Bot,
@@ -128,6 +126,25 @@ import { Identity } from "@/components/Identity";
 import { IssueReferencePill } from "@/components/IssueReferencePill";
 import { MembershipAction } from "@/components/MembershipAction";
 import { IssueOutputSection } from "@/components/issue-output/IssueOutputSection";
+import {
+  EnvInputsList,
+  ExternalSourcesList,
+  RequiredSkillsList,
+  StepSkillPlan,
+  StepSourcePolicy,
+  TeamCard,
+  TeamHierarchyPreview,
+  TeamRow,
+} from "@/pages/TeamCatalog";
+import {
+  currentInstalledState,
+  onboardingTeams,
+  optionalTeam,
+  outOfDateInstalledState,
+  sampleSkillPreparations,
+  sampleTeam,
+  warnTeam,
+} from "@/pages/TeamCatalog.fixtures";
 import type { IssueWorkProduct } from "@penclipai/shared";
 
 /* ------------------------------------------------------------------ */
@@ -223,6 +240,24 @@ function SubSection({ title, children }: { title: string; children: React.ReactN
   );
 }
 
+// Onboarding seam (design §6 + §12.5): the TeamCard tile in its "Pick a starter
+// team" 3-col grid, with the first defaultInstall tile selected.
+function TeamCardShowcase() {
+  const [selectedId, setSelectedId] = useState(onboardingTeams[0]?.id ?? null);
+  return (
+    <div className="grid max-w-2xl gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {onboardingTeams.map((team) => (
+        <TeamCard
+          key={team.id}
+          team={team}
+          selected={team.id === selectedId}
+          onSelect={() => setSelectedId(team.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Color swatch                                                       */
 /* ------------------------------------------------------------------ */
@@ -247,47 +282,44 @@ function Swatch({ name, cssVar }: { name: string; cssVar: string }) {
 /* ------------------------------------------------------------------ */
 
 export function DesignGuide() {
-  const { t } = useTranslation();
-  const td = (value: string, options?: Record<string, string | number>) =>
-    t(value, { defaultValue: value, ...(options ?? {}) });
   const [status, setStatus] = useState("todo");
   const [priority, setPriority] = useState("medium");
   const [selectValue, setSelectValue] = useState("in_progress");
   const [menuChecked, setMenuChecked] = useState(true);
   const [collapsibleOpen, setCollapsibleOpen] = useState(false);
-  const [inlineText, setInlineText] = useState(() => td("Click to edit this text"));
-  const [inlineTitle, setInlineTitle] = useState(() => td("Editable Title"));
+  const [inlineText, setInlineText] = useState("Click to edit this text");
+  const [inlineTitle, setInlineTitle] = useState("Editable Title");
   const [inlineDesc, setInlineDesc] = useState(
-    () =>
-      td(
-        "This is an editable description. Click to edit it so the textarea can auto-size without causing layout shift.",
-      )
+    "This is an editable description. Click to edit it — the textarea auto-sizes to fit the content without layout shift."
   );
   const [filters, setFilters] = useState<FilterValue[]>([
-    { key: "status", label: td("Status"), value: td("Active") },
-    { key: "priority", label: td("Priority"), value: td("High") },
+    { key: "status", label: "Status", value: "Active" },
+    { key: "priority", label: "Priority", value: "High" },
   ]);
+  const [allowExternal, setAllowExternal] = useState(false);
+  const [allowUnpinned, setAllowUnpinned] = useState(false);
+  const [allowLocalPath, setAllowLocalPath] = useState(false);
 
   return (
     <div className="space-y-10 max-w-4xl">
       {/* Page header */}
       <div>
-        <h2 className="text-xl font-bold">{td("Design Guide")}</h2>
+        <h2 className="text-xl font-bold">Design Guide</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          {td("A reference for the components, styles, and interaction patterns used across Paperclip CN.")}
+          Every component, style, and pattern used across Paperclip.
         </p>
       </div>
 
       {/* ============================================================ */}
       {/*  COVERAGE                                                     */}
       {/* ============================================================ */}
-      <Section title={td("Component Coverage")}>
+      <Section title="Component Coverage">
         <p className="text-sm text-muted-foreground">
-          {td("Update this page whenever new UI primitives or app-level patterns ship.")}
+          This page should be updated when new UI primitives or app-level patterns ship.
         </p>
         <div className="grid gap-6 md:grid-cols-2">
-          <SubSection title={td("UI primitives")}>
-            <div className="flex flex-wrap gap-2" data-e2e-ignore-i18n="true">
+          <SubSection title="UI primitives">
+            <div className="flex flex-wrap gap-2">
               {[
                 "avatar", "badge", "breadcrumb", "button", "card", "checkbox", "collapsible",
                 "command", "dialog", "dropdown-menu", "input", "label", "popover", "scroll-area",
@@ -299,8 +331,8 @@ export function DesignGuide() {
               ))}
             </div>
           </SubSection>
-          <SubSection title={td("App components")}>
-            <div className="flex flex-wrap gap-2" data-e2e-ignore-i18n="true">
+          <SubSection title="App components">
+            <div className="flex flex-wrap gap-2">
               {[
                 "StatusBadge", "StatusIcon", "PriorityIcon", "EntityRow", "EmptyState", "MetricCard",
                 "FilterBar", "InlineEditor", "PageSkeleton", "Identity", "CommentThread", "MarkdownEditor",
@@ -318,38 +350,38 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  COLORS                                                       */}
       {/* ============================================================ */}
-      <Section title={td("Colors")}>
-        <SubSection title={td("Core")}>
+      <Section title="Colors">
+        <SubSection title="Core">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <Swatch name={td("Background")} cssVar="--background" />
-            <Swatch name={td("Foreground")} cssVar="--foreground" />
-            <Swatch name={td("Card")} cssVar="--card" />
-            <Swatch name={td("Primary")} cssVar="--primary" />
-            <Swatch name={td("Primary foreground")} cssVar="--primary-foreground" />
-            <Swatch name={td("Secondary")} cssVar="--secondary" />
-            <Swatch name={td("Muted")} cssVar="--muted" />
-            <Swatch name={td("Muted foreground")} cssVar="--muted-foreground" />
-            <Swatch name={td("Accent")} cssVar="--accent" />
-            <Swatch name={td("Destructive")} cssVar="--destructive" />
-            <Swatch name={td("Border")} cssVar="--border" />
-            <Swatch name={td("Ring")} cssVar="--ring" />
+            <Swatch name="Background" cssVar="--background" />
+            <Swatch name="Foreground" cssVar="--foreground" />
+            <Swatch name="Card" cssVar="--card" />
+            <Swatch name="Primary" cssVar="--primary" />
+            <Swatch name="Primary foreground" cssVar="--primary-foreground" />
+            <Swatch name="Secondary" cssVar="--secondary" />
+            <Swatch name="Muted" cssVar="--muted" />
+            <Swatch name="Muted foreground" cssVar="--muted-foreground" />
+            <Swatch name="Accent" cssVar="--accent" />
+            <Swatch name="Destructive" cssVar="--destructive" />
+            <Swatch name="Border" cssVar="--border" />
+            <Swatch name="Ring" cssVar="--ring" />
           </div>
         </SubSection>
 
-        <SubSection title={td("Sidebar")}>
+        <SubSection title="Sidebar">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <Swatch name={td("Sidebar")} cssVar="--sidebar" />
-            <Swatch name={td("Sidebar border")} cssVar="--sidebar-border" />
+            <Swatch name="Sidebar" cssVar="--sidebar" />
+            <Swatch name="Sidebar border" cssVar="--sidebar-border" />
           </div>
         </SubSection>
 
-        <SubSection title={td("Chart")}>
+        <SubSection title="Chart">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <Swatch name={td("Chart 1")} cssVar="--chart-1" />
-            <Swatch name={td("Chart 2")} cssVar="--chart-2" />
-            <Swatch name={td("Chart 3")} cssVar="--chart-3" />
-            <Swatch name={td("Chart 4")} cssVar="--chart-4" />
-            <Swatch name={td("Chart 5")} cssVar="--chart-5" />
+            <Swatch name="Chart 1" cssVar="--chart-1" />
+            <Swatch name="Chart 2" cssVar="--chart-2" />
+            <Swatch name="Chart 3" cssVar="--chart-3" />
+            <Swatch name="Chart 4" cssVar="--chart-4" />
+            <Swatch name="Chart 5" cssVar="--chart-5" />
           </div>
         </SubSection>
       </Section>
@@ -357,34 +389,34 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  TYPOGRAPHY                                                   */}
       {/* ============================================================ */}
-      <Section title={td("Typography")}>
+      <Section title="Typography">
         <div className="space-y-3">
-          <h2 className="text-xl font-bold">{td("Page title example")}</h2>
-          <h2 className="text-lg font-semibold">{td("Section title example")}</h2>
+          <h2 className="text-xl font-bold">Page Title — text-xl font-bold</h2>
+          <h2 className="text-lg font-semibold">Section Title — text-lg font-semibold</h2>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            {td("Section heading example")}
+            Section Heading — text-sm font-semibold uppercase tracking-wide
           </h3>
-          <p className="text-sm font-medium">{td("Card title example")}</p>
-          <p className="text-sm font-semibold">{td("Alternative card title example")}</p>
-          <p className="text-sm">{td("Body text example")}</p>
+          <p className="text-sm font-medium">Card Title — text-sm font-medium</p>
+          <p className="text-sm font-semibold">Card Title Alt — text-sm font-semibold</p>
+          <p className="text-sm">Body text — text-sm</p>
           <p className="text-sm text-muted-foreground">
-            {td("Muted description example")}
+            Muted description — text-sm text-muted-foreground
           </p>
           <p className="text-xs text-muted-foreground">
-            {td("Tiny label example")}
+            Tiny label — text-xs text-muted-foreground
           </p>
           <p className="text-sm font-mono text-muted-foreground">
-            {td("Mono identifier example")}
+            Mono identifier — text-sm font-mono text-muted-foreground
           </p>
-          <p className="text-2xl font-bold">{td("Large stat example")}</p>
-          <p className="font-mono text-xs">{td("Log/code text example")}</p>
+          <p className="text-2xl font-bold">Large stat — text-2xl font-bold</p>
+          <p className="font-mono text-xs">Log/code text — font-mono text-xs</p>
         </div>
       </Section>
 
       {/* ============================================================ */}
       {/*  SPACING & RADIUS                                             */}
       {/* ============================================================ */}
-      <Section title={td("Radius")}>
+      <Section title="Radius">
         <div className="flex items-end gap-4 flex-wrap">
           {[
             ["sm", "var(--radius-sm)"],
@@ -407,28 +439,28 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  BUTTONS                                                      */}
       {/* ============================================================ */}
-      <Section title={td("Buttons")}>
-        <SubSection title={td("Variants")}>
+      <Section title="Buttons">
+        <SubSection title="Variants">
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="default">{td("Default")}</Button>
-            <Button variant="secondary">{td("Secondary")}</Button>
-            <Button variant="outline">{td("Outline")}</Button>
-            <Button variant="ghost">{td("Ghost")}</Button>
-            <Button variant="destructive">{td("Destructive")}</Button>
-            <Button variant="link">{td("Link")}</Button>
+            <Button variant="default">Default</Button>
+            <Button variant="secondary">Secondary</Button>
+            <Button variant="outline">Outline</Button>
+            <Button variant="ghost">Ghost</Button>
+            <Button variant="destructive">Destructive</Button>
+            <Button variant="link">Link</Button>
           </div>
         </SubSection>
 
-        <SubSection title={td("Sizes")}>
+        <SubSection title="Sizes">
           <div className="flex items-center gap-2 flex-wrap">
-            <Button size="xs">{td("Extra Small")}</Button>
-            <Button size="sm">{td("Small")}</Button>
-            <Button size="default">{td("Default")}</Button>
-            <Button size="lg">{td("Large")}</Button>
+            <Button size="xs">Extra Small</Button>
+            <Button size="sm">Small</Button>
+            <Button size="default">Default</Button>
+            <Button size="lg">Large</Button>
           </div>
         </SubSection>
 
-        <SubSection title={td("Icon buttons")}>
+        <SubSection title="Icon buttons">
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="ghost" size="icon-xs"><Search /></Button>
             <Button variant="ghost" size="icon-sm"><Search /></Button>
@@ -437,19 +469,19 @@ export function DesignGuide() {
           </div>
         </SubSection>
 
-        <SubSection title={td("With icons")}>
+        <SubSection title="With icons">
           <div className="flex items-center gap-2 flex-wrap">
-            <Button><Plus /> {td("New Issue")}</Button>
-            <Button variant="outline"><Upload /> {td("Upload")}</Button>
-            <Button variant="destructive"><Trash2 /> {td("Delete")}</Button>
-            <Button size="sm"><Plus /> {td("Add")}</Button>
+            <Button><Plus /> New Issue</Button>
+            <Button variant="outline"><Upload /> Upload</Button>
+            <Button variant="destructive"><Trash2 /> Delete</Button>
+            <Button size="sm"><Plus /> Add</Button>
           </div>
         </SubSection>
 
-        <SubSection title={td("States")}>
+        <SubSection title="States">
           <div className="flex items-center gap-2 flex-wrap">
-            <Button disabled>{td("Disabled")}</Button>
-            <Button variant="outline" disabled>{td("Disabled Outline")}</Button>
+            <Button disabled>Disabled</Button>
+            <Button variant="outline" disabled>Disabled Outline</Button>
           </div>
         </SubSection>
       </Section>
@@ -457,14 +489,14 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  BADGES                                                       */}
       {/* ============================================================ */}
-      <Section title={td("Badges")}>
-        <SubSection title={td("Variants")}>
+      <Section title="Badges">
+        <SubSection title="Variants">
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="default">{td("Default")}</Badge>
-            <Badge variant="secondary">{td("Secondary")}</Badge>
-            <Badge variant="outline">{td("Outline")}</Badge>
-            <Badge variant="destructive">{td("Destructive")}</Badge>
-            <Badge variant="ghost">{td("Ghost")}</Badge>
+            <Badge variant="default">Default</Badge>
+            <Badge variant="secondary">Secondary</Badge>
+            <Badge variant="outline">Outline</Badge>
+            <Badge variant="destructive">Destructive</Badge>
+            <Badge variant="ghost">Ghost</Badge>
           </div>
         </SubSection>
       </Section>
@@ -472,8 +504,8 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  STATUS BADGES & ICONS                                        */}
       {/* ============================================================ */}
-      <Section title={td("Status System")}>
-        <SubSection title={td("StatusBadge (all statuses)")}>
+      <Section title="Status System">
+        <SubSection title="StatusBadge (all statuses)">
           <div className="flex items-center gap-2 flex-wrap">
             {[
               "active", "running", "paused", "idle", "archived", "planned",
@@ -487,7 +519,7 @@ export function DesignGuide() {
           </div>
         </SubSection>
 
-        <SubSection title={td("StatusIcon (interactive)")}>
+        <SubSection title="StatusIcon (interactive)">
           <div className="flex items-center gap-3 flex-wrap">
             {["backlog", "todo", "in_progress", "in_review", "done", "cancelled", "blocked"].map(
               (s) => (
@@ -500,13 +532,11 @@ export function DesignGuide() {
           </div>
           <div className="flex items-center gap-2 mt-2">
             <StatusIcon status={status} onChange={setStatus} />
-            <span className="text-sm">
-              {td("Click the icon to change status (current: {{status}})", { status })}
-            </span>
+            <span className="text-sm">Click the icon to change status (current: {status})</span>
           </div>
         </SubSection>
 
-        <SubSection title={td("PriorityIcon (interactive)")}>
+        <SubSection title="PriorityIcon (interactive)">
           <div className="flex items-center gap-3 flex-wrap">
             {["critical", "high", "medium", "low"].map((p) => (
               <div key={p} className="flex items-center gap-1.5">
@@ -517,14 +547,12 @@ export function DesignGuide() {
           </div>
           <div className="flex items-center gap-2 mt-2">
             <PriorityIcon priority={priority} onChange={setPriority} />
-            <span className="text-sm">
-              {td("Click the icon to change (current: {{priority}})", { priority })}
-            </span>
+            <span className="text-sm">Click the icon to change (current: {priority})</span>
           </div>
         </SubSection>
 
-        <SubSection title={td("Agent status dots")}>
-          <div className="flex items-center gap-4 flex-wrap" data-e2e-ignore-i18n="true">
+        <SubSection title="Agent status dots">
+          <div className="flex items-center gap-4 flex-wrap">
             {(["running", "active", "paused", "error", "archived"] as const).map((label) => (
               <div key={label} className="flex items-center gap-2">
                 <span className="relative flex h-2.5 w-2.5">
@@ -536,8 +564,8 @@ export function DesignGuide() {
           </div>
         </SubSection>
 
-        <SubSection title={td("Run invocation badges")}>
-          <div className="flex items-center gap-2 flex-wrap" data-e2e-ignore-i18n="true">
+        <SubSection title="Run invocation badges">
+          <div className="flex items-center gap-2 flex-wrap">
             {[
               ["timer", "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"],
               ["assignment", "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300"],
@@ -570,38 +598,38 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  FORM ELEMENTS                                                */}
       {/* ============================================================ */}
-      <Section title={td("Form Elements")}>
+      <Section title="Form Elements">
         <div className="grid gap-6 md:grid-cols-2">
-          <SubSection title={td("Input")}>
-            <Input placeholder={td("Default input")} />
-            <Input placeholder={td("Disabled input")} disabled className="mt-2" />
+          <SubSection title="Input">
+            <Input placeholder="Default input" />
+            <Input placeholder="Disabled input" disabled className="mt-2" />
           </SubSection>
 
-          <SubSection title={td("Textarea")}>
-            <Textarea placeholder={td("Write something...")} />
+          <SubSection title="Textarea">
+            <Textarea placeholder="Write something..." />
           </SubSection>
 
-          <SubSection title={td("Checkbox & Label")}>
+          <SubSection title="Checkbox & Label">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Checkbox id="check1" defaultChecked />
-                <Label htmlFor="check1">{td("Checked item")}</Label>
+                <Label htmlFor="check1">Checked item</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="check2" />
-                <Label htmlFor="check2">{td("Unchecked item")}</Label>
+                <Label htmlFor="check2">Unchecked item</Label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox id="check3" disabled />
-                <Label htmlFor="check3">{td("Disabled item")}</Label>
+                <Label htmlFor="check3">Disabled item</Label>
               </div>
             </div>
           </SubSection>
 
-          <SubSection title={td("Inline Editor")}>
+          <SubSection title="Inline Editor">
             <div className="space-y-4">
               <div>
-                <p className="text-xs text-muted-foreground mb-1">{td("Title (single-line)")}</p>
+                <p className="text-xs text-muted-foreground mb-1">Title (single-line)</p>
                 <InlineEditor
                   value={inlineTitle}
                   onSave={setInlineTitle}
@@ -610,7 +638,7 @@ export function DesignGuide() {
                 />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">{td("Body text (single-line)")}</p>
+                <p className="text-xs text-muted-foreground mb-1">Body text (single-line)</p>
                 <InlineEditor
                   value={inlineText}
                   onSave={setInlineText}
@@ -619,13 +647,13 @@ export function DesignGuide() {
                 />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">{td("Description (multiline, auto-sizing)")}</p>
+                <p className="text-xs text-muted-foreground mb-1">Description (multiline, auto-sizing)</p>
                 <InlineEditor
                   value={inlineDesc}
                   onSave={setInlineDesc}
                   as="p"
                   className="text-sm text-muted-foreground"
-                  placeholder={td("Add a description...")}
+                  placeholder="Add a description..."
                   multiline
                 />
               </div>
@@ -637,33 +665,33 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  SELECT                                                       */}
       {/* ============================================================ */}
-      <Section title={td("Select")}>
+      <Section title="Select">
         <div className="grid gap-6 md:grid-cols-2">
-          <SubSection title={td("Default size")}>
+          <SubSection title="Default size">
             <Select value={selectValue} onValueChange={setSelectValue}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder={td("Select status")} />
+                <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="backlog">{td("Backlog")}</SelectItem>
-                <SelectItem value="todo">{td("Todo")}</SelectItem>
-                <SelectItem value="in_progress">{td("In Progress")}</SelectItem>
-                <SelectItem value="in_review">{td("In Review")}</SelectItem>
-                <SelectItem value="done">{td("Done")}</SelectItem>
+                <SelectItem value="backlog">Backlog</SelectItem>
+                <SelectItem value="todo">Todo</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="in_review">In Review</SelectItem>
+                <SelectItem value="done">Done</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{td("Current value: {{value}}", { value: selectValue })}</p>
+            <p className="text-xs text-muted-foreground">Current value: {selectValue}</p>
           </SubSection>
-          <SubSection title={td("Small trigger")}>
+          <SubSection title="Small trigger">
             <Select defaultValue="high">
               <SelectTrigger size="sm" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="critical">{td("Critical")}</SelectItem>
-                <SelectItem value="high">{td("High")}</SelectItem>
-                <SelectItem value="medium">{td("Medium")}</SelectItem>
-                <SelectItem value="low">{td("Low")}</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
           </SubSection>
@@ -673,34 +701,34 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  DROPDOWN MENU                                                */}
       {/* ============================================================ */}
-      <Section title={td("Dropdown Menu")}>
+      <Section title="Dropdown Menu">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
-              {td("Quick Actions")}
+              Quick Actions
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuItem>
               <Check className="h-4 w-4" />
-              {td("Mark as done")}
+              Mark as done
               <DropdownMenuShortcut>⌘D</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem>
               <BookOpen className="h-4 w-4" />
-              {td("Open docs")}
+              Open docs
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
               checked={menuChecked}
               onCheckedChange={(value) => setMenuChecked(value === true)}
             >
-              {td("Watch issue")}
+              Watch issue
             </DropdownMenuCheckboxItem>
             <DropdownMenuItem variant="destructive">
               <Trash2 className="h-4 w-4" />
-              {td("Delete issue")}
+              Delete issue
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -709,17 +737,17 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  POPOVER                                                      */}
       {/* ============================================================ */}
-      <Section title={td("Popover")}>
+      <Section title="Popover">
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm">{td("Open Popover")}</Button>
+            <Button variant="outline" size="sm">Open Popover</Button>
           </PopoverTrigger>
           <PopoverContent className="space-y-2">
-            <p className="text-sm font-medium">{td("Agent heartbeat")}</p>
+            <p className="text-sm font-medium">Agent heartbeat</p>
             <p className="text-xs text-muted-foreground">
-              {td("Last run succeeded 24s ago. Next timer run in 9m.")}
+              Last run succeeded 24s ago. Next timer run in 9m.
             </p>
-            <Button size="xs">{td("Wake now")}</Button>
+            <Button size="xs">Wake now</Button>
           </PopoverContent>
         </Popover>
       </Section>
@@ -727,17 +755,17 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  COLLAPSIBLE                                                  */}
       {/* ============================================================ */}
-      <Section title={td("Collapsible")}>
+      <Section title="Collapsible">
         <Collapsible open={collapsibleOpen} onOpenChange={setCollapsibleOpen} className="space-y-2">
           <CollapsibleTrigger asChild>
             <Button variant="outline" size="sm">
-              {collapsibleOpen ? td("Hide") : td("Show")} {td("advanced filters")}
+              {collapsibleOpen ? "Hide" : "Show"} advanced filters
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="rounded-md border border-border p-3">
             <div className="space-y-2">
-              <Label htmlFor="owner-filter">{td("Owner")}</Label>
-              <Input id="owner-filter" placeholder={td("Filter by agent name")} />
+              <Label htmlFor="owner-filter">Owner</Label>
+              <Input id="owner-filter" placeholder="Filter by agent name" />
             </div>
           </CollapsibleContent>
         </Collapsible>
@@ -746,29 +774,29 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  SHEET                                                        */}
       {/* ============================================================ */}
-      <Section title={td("Sheet")}>
+      <Section title="Sheet">
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="outline" size="sm">{td("Open Side Panel")}</Button>
+            <Button variant="outline" size="sm">Open Side Panel</Button>
           </SheetTrigger>
           <SheetContent side="right">
             <SheetHeader>
-              <SheetTitle>{td("Issue Properties")}</SheetTitle>
-              <SheetDescription>{td("Edit metadata without leaving the current page.")}</SheetDescription>
+              <SheetTitle>Issue Properties</SheetTitle>
+              <SheetDescription>Edit metadata without leaving the current page.</SheetDescription>
             </SheetHeader>
             <div className="space-y-4 px-4">
               <div className="space-y-1">
-                <Label htmlFor="sheet-title">{td("Title")}</Label>
-                <Input id="sheet-title" defaultValue={td("Improve onboarding docs")} />
+                <Label htmlFor="sheet-title">Title</Label>
+                <Input id="sheet-title" defaultValue="Improve onboarding docs" />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="sheet-description">{td("Description")}</Label>
-                <Textarea id="sheet-description" defaultValue={td("Capture setup pitfalls and screenshots.")} />
+                <Label htmlFor="sheet-description">Description</Label>
+                <Textarea id="sheet-description" defaultValue="Capture setup pitfalls and screenshots." />
               </div>
             </div>
             <SheetFooter>
-              <Button variant="outline">{td("Cancel")}</Button>
-              <Button>{td("Save")}</Button>
+              <Button variant="outline">Cancel</Button>
+              <Button>Save</Button>
             </SheetFooter>
           </SheetContent>
         </Sheet>
@@ -777,12 +805,12 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  SCROLL AREA                                                  */}
       {/* ============================================================ */}
-      <Section title={td("Scroll Area")}>
+      <Section title="Scroll Area">
         <ScrollArea className="h-36 rounded-md border border-border">
           <div className="space-y-2 p-3">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="rounded-md border border-border p-2 text-sm">
-                {td("Heartbeat run #{{index}}: completed successfully", { index: i + 1 })}
+                Heartbeat run #{i + 1}: completed successfully
               </div>
             ))}
           </div>
@@ -792,31 +820,31 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  COMMAND                                                      */}
       {/* ============================================================ */}
-      <Section title={td("Command (CMDK)")}>
+      <Section title="Command (CMDK)">
         <div className="rounded-md border border-border">
           <Command>
-            <CommandInput placeholder={td("Type a command or search...")} />
+            <CommandInput placeholder="Type a command or search..." />
             <CommandList>
-              <CommandEmpty>{td("No results found.")}</CommandEmpty>
-              <CommandGroup heading={td("Pages")}>
+              <CommandEmpty>No results found.</CommandEmpty>
+              <CommandGroup heading="Pages">
                 <CommandItem>
                   <LayoutDashboard className="h-4 w-4" />
-                  {td("Dashboard")}
+                  Dashboard
                 </CommandItem>
                 <CommandItem>
                   <CircleDot className="h-4 w-4" />
-                  {td("Issues")}
+                  Issues
                 </CommandItem>
               </CommandGroup>
               <CommandSeparator />
-              <CommandGroup heading={td("Actions")}>
+              <CommandGroup heading="Actions">
                 <CommandItem>
                   <CommandIcon className="h-4 w-4" />
-                  {td("Open command palette")}
+                  Open command palette
                 </CommandItem>
                 <CommandItem>
                   <Plus className="h-4 w-4" />
-                  {td("Create new issue")}
+                  Create new issue
                 </CommandItem>
               </CommandGroup>
             </CommandList>
@@ -827,19 +855,19 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  BREADCRUMB                                                   */}
       {/* ============================================================ */}
-      <Section title={td("Breadcrumb")}>
+      <Section title="Breadcrumb">
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href="#">{td("Projects")}</BreadcrumbLink>
+              <BreadcrumbLink href="#">Projects</BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbLink href="#">{td("Paperclip CN App")}</BreadcrumbLink>
+              <BreadcrumbLink href="#">Paperclip App</BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbPage>{td("Issue List")}</BreadcrumbPage>
+              <BreadcrumbPage>Issue List</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
@@ -848,29 +876,29 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  CARDS                                                        */}
       {/* ============================================================ */}
-      <Section title={td("Cards")}>
-        <SubSection title={td("Standard Card")}>
+      <Section title="Cards">
+        <SubSection title="Standard Card">
           <Card>
             <CardHeader>
-              <CardTitle>{td("Card Title")}</CardTitle>
-              <CardDescription>{td("Card description with supporting text.")}</CardDescription>
+              <CardTitle>Card Title</CardTitle>
+              <CardDescription>Card description with supporting text.</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm">{td("Card content goes here. This is the main body area.")}</p>
+              <p className="text-sm">Card content goes here. This is the main body area.</p>
             </CardContent>
             <CardFooter className="gap-2">
-              <Button size="sm">{td("Action")}</Button>
-              <Button variant="outline" size="sm">{td("Cancel")}</Button>
+              <Button size="sm">Action</Button>
+              <Button variant="outline" size="sm">Cancel</Button>
             </CardFooter>
           </Card>
         </SubSection>
 
-        <SubSection title={td("Metric Cards")}>
+        <SubSection title="Metric Cards">
           <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-            <MetricCard icon={Bot} value={12} label={td("Active Agents")} description={td("+3 this week")} />
-            <MetricCard icon={CircleDot} value={48} label={td("Open Issues")} />
-            <MetricCard icon={DollarSign} value="$1,234" label={td("Monthly Cost")} description={td("Under budget")} />
-            <MetricCard icon={Zap} value="99.9%" label={td("Uptime")} />
+            <MetricCard icon={Bot} value={12} label="Active Agents" description="+3 this week" />
+            <MetricCard icon={CircleDot} value={48} label="Open Issues" />
+            <MetricCard icon={DollarSign} value="$1,234" label="Monthly Cost" description="Under budget" />
+            <MetricCard icon={Zap} value="99.9%" label="Uptime" />
           </div>
         </SubSection>
       </Section>
@@ -878,45 +906,45 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  TABS                                                         */}
       {/* ============================================================ */}
-      <Section title={td("Tabs")}>
-        <SubSection title={td("Default (pill) variant")}>
+      <Section title="Tabs">
+        <SubSection title="Default (pill) variant">
           <Tabs defaultValue="overview">
             <TabsList>
-              <TabsTrigger value="overview">{td("Overview")}</TabsTrigger>
-              <TabsTrigger value="runs">{td("Runs")}</TabsTrigger>
-              <TabsTrigger value="config">{td("Config")}</TabsTrigger>
-              <TabsTrigger value="costs">{td("Costs")}</TabsTrigger>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="runs">Runs</TabsTrigger>
+              <TabsTrigger value="config">Config</TabsTrigger>
+              <TabsTrigger value="costs">Costs</TabsTrigger>
             </TabsList>
             <TabsContent value="overview">
-              <p className="text-sm text-muted-foreground py-4">{td("Overview tab content.")}</p>
+              <p className="text-sm text-muted-foreground py-4">Overview tab content.</p>
             </TabsContent>
             <TabsContent value="runs">
-              <p className="text-sm text-muted-foreground py-4">{td("Runs tab content.")}</p>
+              <p className="text-sm text-muted-foreground py-4">Runs tab content.</p>
             </TabsContent>
             <TabsContent value="config">
-              <p className="text-sm text-muted-foreground py-4">{td("Config tab content.")}</p>
+              <p className="text-sm text-muted-foreground py-4">Config tab content.</p>
             </TabsContent>
             <TabsContent value="costs">
-              <p className="text-sm text-muted-foreground py-4">{td("Costs tab content.")}</p>
+              <p className="text-sm text-muted-foreground py-4">Costs tab content.</p>
             </TabsContent>
           </Tabs>
         </SubSection>
 
-        <SubSection title={td("Line variant")}>
+        <SubSection title="Line variant">
           <Tabs defaultValue="summary">
             <TabsList variant="line">
-              <TabsTrigger value="summary">{td("Summary")}</TabsTrigger>
-              <TabsTrigger value="details">{td("Details")}</TabsTrigger>
-              <TabsTrigger value="comments">{td("Comments")}</TabsTrigger>
+              <TabsTrigger value="summary">Summary</TabsTrigger>
+              <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="comments">Comments</TabsTrigger>
             </TabsList>
             <TabsContent value="summary">
-              <p className="text-sm text-muted-foreground py-4">{td("Summary content with underline tabs.")}</p>
+              <p className="text-sm text-muted-foreground py-4">Summary content with underline tabs.</p>
             </TabsContent>
             <TabsContent value="details">
-              <p className="text-sm text-muted-foreground py-4">{td("Details content.")}</p>
+              <p className="text-sm text-muted-foreground py-4">Details content.</p>
             </TabsContent>
             <TabsContent value="comments">
-              <p className="text-sm text-muted-foreground py-4">{td("Comments content.")}</p>
+              <p className="text-sm text-muted-foreground py-4">Comments content.</p>
             </TabsContent>
           </Tabs>
         </SubSection>
@@ -925,7 +953,7 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  ENTITY ROWS                                                  */}
       {/* ============================================================ */}
-      <Section title={td("Entity Rows")}>
+      <Section title="Entity Rows">
         <div className="border border-border rounded-md">
           <EntityRow
             leading={
@@ -935,8 +963,8 @@ export function DesignGuide() {
               </>
             }
             identifier="PAP-001"
-            title={td("Implement authentication flow")}
-            subtitle={td("Assigned to Agent Alpha")}
+            title="Implement authentication flow"
+            subtitle="Assigned to Agent Alpha"
             trailing={<StatusBadge status="in_progress" />}
             onClick={() => {}}
           />
@@ -948,8 +976,8 @@ export function DesignGuide() {
               </>
             }
             identifier="PAP-002"
-            title={td("Set up CI/CD pipeline")}
-            subtitle={td("Completed 2 days ago")}
+            title="Set up CI/CD pipeline"
+            subtitle="Completed 2 days ago"
             trailing={<StatusBadge status="done" />}
             onClick={() => {}}
           />
@@ -961,7 +989,7 @@ export function DesignGuide() {
               </>
             }
             identifier="PAP-003"
-            title={td("Write API documentation")}
+            title="Write API documentation"
             trailing={<StatusBadge status="todo" />}
             onClick={() => {}}
           />
@@ -973,8 +1001,8 @@ export function DesignGuide() {
               </>
             }
             identifier="PAP-004"
-            title={td("Deploy to production")}
-            subtitle={td("Blocked by PAP-001")}
+            title="Deploy to production"
+            subtitle="Blocked by PAP-001"
             trailing={<StatusBadge status="blocked" />}
             selected
           />
@@ -1044,7 +1072,7 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  FILTER BAR                                                   */}
       {/* ============================================================ */}
-      <Section title={td("Filter Bar")}>
+      <Section title="Filter Bar">
         <FilterBar
           filters={filters}
           onRemove={(key) => setFilters((f) => f.filter((x) => x.key !== key))}
@@ -1057,11 +1085,11 @@ export function DesignGuide() {
             onClick={() =>
               setFilters([
                 { key: "status", label: "Status", value: "Active" },
-                { key: "priority", label: td("Priority"), value: td("High") },
+                { key: "priority", label: "Priority", value: "High" },
               ])
             }
           >
-            {td("Reset filters")}
+            Reset filters
           </Button>
         )}
       </Section>
@@ -1069,8 +1097,8 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  AVATARS                                                      */}
       {/* ============================================================ */}
-      <Section title={td("Avatars")}>
-        <SubSection title={td("Sizes")}>
+      <Section title="Avatars">
+        <SubSection title="Sizes">
           <div className="flex items-center gap-3">
             <Avatar size="sm"><AvatarFallback>SM</AvatarFallback></Avatar>
             <Avatar><AvatarFallback>DF</AvatarFallback></Avatar>
@@ -1078,7 +1106,7 @@ export function DesignGuide() {
           </div>
         </SubSection>
 
-        <SubSection title={td("Group")}>
+        <SubSection title="Group">
           <AvatarGroup>
             <Avatar><AvatarFallback>A1</AvatarFallback></Avatar>
             <Avatar><AvatarFallback>A2</AvatarFallback></Avatar>
@@ -1091,46 +1119,44 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  IDENTITY                                                     */}
       {/* ============================================================ */}
-      <Section title={td("Identity")}>
-        <SubSection title={td("Sizes")}>
-          <div className="flex items-center gap-6" data-e2e-ignore-i18n="true">
+      <Section title="Identity">
+        <SubSection title="Sizes">
+          <div className="flex items-center gap-6">
             <Identity name="Agent Alpha" size="sm" />
             <Identity name="Agent Alpha" />
             <Identity name="Agent Alpha" size="lg" />
           </div>
         </SubSection>
 
-        <SubSection title={td("Initials derivation")}>
-          <div className="flex flex-col gap-2" data-e2e-ignore-i18n="true">
+        <SubSection title="Initials derivation">
+          <div className="flex flex-col gap-2">
             <Identity name="CEO Agent" size="sm" />
             <Identity name="Alpha" size="sm" />
             <Identity name="Quality Assurance Lead" size="sm" />
           </div>
         </SubSection>
 
-        <SubSection title={td("Custom initials")}>
-          <div data-e2e-ignore-i18n="true">
-            <Identity name="Backend Service" initials="BS" size="sm" />
-          </div>
+        <SubSection title="Custom initials">
+          <Identity name="Backend Service" initials="BS" size="sm" />
         </SubSection>
       </Section>
 
       {/* ============================================================ */}
       {/*  TOOLTIPS                                                     */}
       {/* ============================================================ */}
-      <Section title={td("Tooltips")}>
+      <Section title="Tooltips">
         <div className="flex items-center gap-4">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" size="sm">{td("Hover me")}</Button>
+              <Button variant="outline" size="sm">Hover me</Button>
             </TooltipTrigger>
-            <TooltipContent>{td("This is a tooltip")}</TooltipContent>
+            <TooltipContent>This is a tooltip</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon-sm"><Settings /></Button>
             </TooltipTrigger>
-            <TooltipContent>{td("Settings")}</TooltipContent>
+            <TooltipContent>Settings</TooltipContent>
           </Tooltip>
         </div>
       </Section>
@@ -1138,31 +1164,31 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  DIALOG                                                       */}
       {/* ============================================================ */}
-      <Section title={td("Dialog")}>
+      <Section title="Dialog">
         <Dialog>
           <DialogTrigger asChild>
-            <Button variant="outline">{td("Open Dialog")}</Button>
+            <Button variant="outline">Open Dialog</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{td("Dialog Title")}</DialogTitle>
+              <DialogTitle>Dialog Title</DialogTitle>
               <DialogDescription>
-                {td("This is a sample dialog showing the standard layout with header, content, and footer.")}
+                This is a sample dialog showing the standard layout with header, content, and footer.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div>
-                <Label>{td("Name")}</Label>
-                <Input placeholder={td("Enter a name")} className="mt-1.5" />
+                <Label>Name</Label>
+                <Input placeholder="Enter a name" className="mt-1.5" />
               </div>
               <div>
-                <Label>{td("Description")}</Label>
-                <Textarea placeholder={td("Describe...")} className="mt-1.5" />
+                <Label>Description</Label>
+                <Textarea placeholder="Describe..." className="mt-1.5" />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline">{td("Cancel")}</Button>
-              <Button>{td("Save")}</Button>
+              <Button variant="outline">Cancel</Button>
+              <Button>Save</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1171,12 +1197,12 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  EMPTY STATE                                                  */}
       {/* ============================================================ */}
-      <Section title={td("Empty State")}>
+      <Section title="Empty State">
         <div className="border border-border rounded-md">
           <EmptyState
             icon={Inbox}
-            message={td("No items to show. Create your first one to get started.")}
-            action={td("Create Item")}
+            message="No items to show. Create your first one to get started."
+            action="Create Item"
             onAction={() => {}}
           />
         </div>
@@ -1185,12 +1211,12 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  PROGRESS BARS                                                */}
       {/* ============================================================ */}
-      <Section title={td("Progress Bars (Budget)")}>
+      <Section title="Progress Bars (Budget)">
         <div className="space-y-3">
           {[
-            { label: td("Under budget (40%)"), pct: 40, color: "bg-green-400" },
-            { label: td("Warning (75%)"), pct: 75, color: "bg-yellow-400" },
-            { label: td("Over budget (95%)"), pct: 95, color: "bg-red-400" },
+            { label: "Under budget (40%)", pct: 40, color: "bg-green-400" },
+            { label: "Warning (75%)", pct: 75, color: "bg-yellow-400" },
+            { label: "Over budget (95%)", pct: 95, color: "bg-red-400" },
           ].map(({ label, pct, color }) => (
             <div key={label} className="space-y-1">
               <div className="flex items-center justify-between">
@@ -1211,8 +1237,8 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  LOG VIEWER                                                   */}
       {/* ============================================================ */}
-      <Section title={td("Log Viewer")}>
-        <div className="bg-neutral-950 rounded-lg p-3 font-mono text-xs max-h-80 overflow-y-auto" data-e2e-ignore-i18n="true">
+      <Section title="Log Viewer">
+        <div className="bg-neutral-950 rounded-lg p-3 font-mono text-xs max-h-80 overflow-y-auto">
           <div className="text-foreground">[12:00:01] INFO  Agent started successfully</div>
           <div className="text-foreground">[12:00:02] INFO  Processing task PAP-001</div>
           <div className="text-yellow-400">[12:00:05] WARN  Rate limit approaching (80%)</div>
@@ -1233,26 +1259,26 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  PROPERTY ROW PATTERN                                         */}
       {/* ============================================================ */}
-      <Section title={td("Property Row Pattern")}>
+      <Section title="Property Row Pattern">
         <div className="border border-border rounded-md p-4 space-y-1 max-w-sm">
           <div className="flex items-center justify-between py-1.5">
-            <span className="text-xs text-muted-foreground">{td("Status")}</span>
+            <span className="text-xs text-muted-foreground">Status</span>
             <StatusBadge status="active" />
           </div>
           <div className="flex items-center justify-between py-1.5">
-            <span className="text-xs text-muted-foreground">{td("Priority")}</span>
+            <span className="text-xs text-muted-foreground">Priority</span>
             <PriorityIcon priority="high" />
           </div>
           <div className="flex items-center justify-between py-1.5">
-            <span className="text-xs text-muted-foreground">{td("Assignee")}</span>
+            <span className="text-xs text-muted-foreground">Assignee</span>
             <div className="flex items-center gap-1.5">
               <Avatar size="sm"><AvatarFallback>A</AvatarFallback></Avatar>
               <span className="text-xs">Agent Alpha</span>
             </div>
           </div>
           <div className="flex items-center justify-between py-1.5">
-            <span className="text-xs text-muted-foreground">{td("Created")}</span>
-            <span className="text-xs">{formatDate("2025-01-15")}</span>
+            <span className="text-xs text-muted-foreground">Created</span>
+            <span className="text-xs">Jan 15, 2025</span>
           </div>
         </div>
       </Section>
@@ -1260,40 +1286,40 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  NAVIGATION PATTERNS                                          */}
       {/* ============================================================ */}
-      <Section title={td("Navigation Patterns")}>
-        <SubSection title={td("Sidebar nav items")}>
+      <Section title="Navigation Patterns">
+        <SubSection title="Sidebar nav items">
           <div className="w-60 border border-border rounded-md p-3 space-y-0.5 bg-card">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium bg-accent text-accent-foreground">
               <LayoutDashboard className="h-4 w-4" />
-              {td("Dashboard")}
+              Dashboard
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground cursor-pointer">
               <CircleDot className="h-4 w-4" />
-              {td("Issues")}
+              Issues
               <span className="ml-auto text-xs bg-primary text-primary-foreground rounded-full px-1.5 py-0.5">
                 12
               </span>
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground cursor-pointer">
               <Bot className="h-4 w-4" />
-              {td("Agents")}
+              Agents
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground cursor-pointer">
               <Hexagon className="h-4 w-4" />
-              {td("Projects")}
+              Projects
             </div>
           </div>
         </SubSection>
 
-        <SubSection title={td("View toggle")}>
+        <SubSection title="View toggle">
           <div className="flex items-center border border-border rounded-md w-fit">
             <button className="px-3 py-1.5 text-xs font-medium bg-accent text-foreground rounded-l-md">
               <ListTodo className="h-3.5 w-3.5 inline mr-1" />
-              {td("List")}
+              List
             </button>
             <button className="px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent/50 rounded-r-md">
               <Target className="h-3.5 w-3.5 inline mr-1" />
-              {td("Org")}
+              Org
             </button>
           </div>
         </SubSection>
@@ -1302,24 +1328,24 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  GROUPED LIST (Issues pattern)                                */}
       {/* ============================================================ */}
-      <Section title={td("Grouped List (Issues pattern)")}>
+      <Section title="Grouped List (Issues pattern)">
         <div>
           <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-t-md">
             <StatusIcon status="in_progress" />
-            <span className="text-sm font-medium">{td("In Progress")}</span>
+            <span className="text-sm font-medium">In Progress</span>
             <span className="text-xs text-muted-foreground ml-1">2</span>
           </div>
           <div className="border border-border rounded-b-md">
             <EntityRow
               leading={<PriorityIcon priority="high" />}
               identifier="PAP-101"
-              title={td("Build agent heartbeat system")}
+              title="Build agent heartbeat system"
               onClick={() => {}}
             />
             <EntityRow
               leading={<PriorityIcon priority="medium" />}
               identifier="PAP-102"
-              title={td("Add cost tracking dashboard")}
+              title="Add cost tracking dashboard"
               onClick={() => {}}
             />
           </div>
@@ -1329,28 +1355,28 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  COMMENT THREAD PATTERN                                       */}
       {/* ============================================================ */}
-      <Section title={td("Comment Thread Pattern")}>
+      <Section title="Comment Thread Pattern">
         <div className="space-y-3 max-w-2xl">
-          <h3 className="text-sm font-semibold">{td("Comments (2)")}</h3>
+          <h3 className="text-sm font-semibold">Comments (2)</h3>
           <div className="space-y-3">
             <div className="rounded-md border border-border p-3">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-muted-foreground">{td("Agent")}</span>
-                <span className="text-xs text-muted-foreground">{formatDate("2025-01-15")}</span>
+                <span className="text-xs font-medium text-muted-foreground">Agent</span>
+                <span className="text-xs text-muted-foreground">Jan 15, 2025</span>
               </div>
-              <p className="text-sm">{td("Started working on the authentication module. Will need API keys configured.")}</p>
+              <p className="text-sm">Started working on the authentication module. Will need API keys configured.</p>
             </div>
             <div className="rounded-md border border-border p-3">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-muted-foreground">{td("Human")}</span>
-                <span className="text-xs text-muted-foreground">{formatDate("2025-01-16")}</span>
+                <span className="text-xs font-medium text-muted-foreground">Human</span>
+                <span className="text-xs text-muted-foreground">Jan 16, 2025</span>
               </div>
-              <p className="text-sm">{td("API keys have been added to the vault. Please proceed.")}</p>
+              <p className="text-sm">API keys have been added to the vault. Please proceed.</p>
             </div>
           </div>
           <div className="space-y-2">
-            <Textarea placeholder={td("Leave a comment...")} rows={3} />
-            <Button size="sm">{td("Comment")}</Button>
+            <Textarea placeholder="Leave a comment..." rows={3} />
+            <Button size="sm">Comment</Button>
           </div>
         </div>
       </Section>
@@ -1358,14 +1384,14 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  COST TABLE PATTERN                                           */}
       {/* ============================================================ */}
-      <Section title={td("Cost Table Pattern")}>
+      <Section title="Cost Table Pattern">
         <div className="border border-border rounded-lg overflow-hidden">
           <table className="w-full text-xs">
             <thead className="border-b border-border bg-accent/20">
               <tr>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">{td("Model")}</th>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">{td("Tokens")}</th>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">{td("Cost")}</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Model</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Tokens</th>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Cost</th>
               </tr>
             </thead>
             <tbody>
@@ -1380,7 +1406,7 @@ export function DesignGuide() {
                 <td className="px-3 py-2 font-mono">$1.25</td>
               </tr>
               <tr>
-                <td className="px-3 py-2 font-medium">{td("Total")}</td>
+                <td className="px-3 py-2 font-medium">Total</td>
                 <td className="px-3 py-2 font-mono">1.7M</td>
                 <td className="px-3 py-2 font-mono font-medium">$19.25</td>
               </tr>
@@ -1392,8 +1418,8 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  SKELETONS                                                    */}
       {/* ============================================================ */}
-      <Section title={td("Skeletons")}>
-        <SubSection title={td("Individual")}>
+      <Section title="Skeletons">
+        <SubSection title="Individual">
           <div className="space-y-2">
             <Skeleton className="h-4 w-48" />
             <Skeleton className="h-8 w-full max-w-sm" />
@@ -1401,13 +1427,13 @@ export function DesignGuide() {
           </div>
         </SubSection>
 
-        <SubSection title={td("Page Skeleton (list)")}>
+        <SubSection title="Page Skeleton (list)">
           <div className="border border-border rounded-md p-4">
             <PageSkeleton variant="list" />
           </div>
         </SubSection>
 
-        <SubSection title={td("Page Skeleton (detail)")}>
+        <SubSection title="Page Skeleton (detail)">
           <div className="border border-border rounded-md p-4">
             <PageSkeleton variant="detail" />
           </div>
@@ -1417,14 +1443,14 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  SEPARATOR                                                    */}
       {/* ============================================================ */}
-      <Section title={td("Separator")}>
+      <Section title="Separator">
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">{td("Horizontal")}</p>
+          <p className="text-sm text-muted-foreground">Horizontal</p>
           <Separator />
           <div className="flex items-center gap-4 h-8">
-            <span className="text-sm">{td("Left")}</span>
+            <span className="text-sm">Left</span>
             <Separator orientation="vertical" />
-            <span className="text-sm">{td("Right")}</span>
+            <span className="text-sm">Right</span>
           </div>
         </div>
       </Section>
@@ -1432,8 +1458,96 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  ICON REFERENCE                                               */}
       {/* ============================================================ */}
-      <Section title={td("Common Icons (Lucide)")}>
-        <div className="grid grid-cols-4 md:grid-cols-6 gap-4" data-e2e-ignore-i18n="true">
+      {/*  TEAM CATALOG                                                 */}
+      {/* ============================================================ */}
+      <Section title="Team Catalog">
+        <p className="text-sm text-muted-foreground">
+          Components from the Team Catalog browse/install surface (<code className="font-mono text-xs">/teams-catalog</code>).
+          Fixtures are shared with the Storybook stories.
+        </p>
+
+        <SubSection title="TeamRow (browse list)">
+          <div className="w-[28rem] rounded-md border border-border">
+            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Bundled · 1
+            </div>
+            <TeamRow team={sampleTeam} selected onSelect={() => {}} />
+            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Optional · 2
+            </div>
+            <TeamRow team={optionalTeam} selected={false} onSelect={() => {}} />
+            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Installed · 2
+            </div>
+            <TeamRow team={sampleTeam} selected={false} onSelect={() => {}} installed={outOfDateInstalledState} />
+            <TeamRow team={warnTeam} selected={false} onSelect={() => {}} installed={currentInstalledState} />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Installed teams collapse under <code className="font-mono">INSTALLED · N</code>; an out-of-date
+            install (server <code className="font-mono">originHash</code> ≠ catalog <code className="font-mono">contentHash</code>)
+            shows the amber <code className="font-mono">↑</code> badge (PAP-10256).
+          </p>
+        </SubSection>
+
+        <SubSection title="TeamCard (onboarding grid)">
+          <p className="text-xs text-muted-foreground">
+            Square tile for the onboarding &ldquo;Pick a starter team&rdquo; grid. Selected tile gets{" "}
+            <code className="font-mono">ring-2 ring-ring</code>. Drives the{" "}
+            <code className="font-mono">useInstallTeamCatalogEntry</code> simplified flow.
+          </p>
+          <TeamCardShowcase />
+        </SubSection>
+
+        <SubSection title="TeamHierarchyPreview">
+          <div className="max-w-md">
+            <TeamHierarchyPreview team={sampleTeam} />
+          </div>
+        </SubSection>
+
+        <SubSection title="RequiredSkillsList">
+          <div className="max-w-xl">
+            <RequiredSkillsList skills={sampleTeam.requiredSkills} />
+          </div>
+        </SubSection>
+
+        <SubSection title="EnvInputsList">
+          <div className="max-w-xl">
+            <EnvInputsList inputs={sampleTeam.envInputs} />
+          </div>
+        </SubSection>
+
+        <SubSection title="ExternalSourcesList">
+          <div className="max-w-xl">
+            <ExternalSourcesList sources={sampleTeam.sourceRefs} />
+          </div>
+        </SubSection>
+
+        <SubSection title="Source policy step (StepSourcePolicy)">
+          <div className="max-w-xl rounded-md border border-border p-4">
+            <StepSourcePolicy
+              team={warnTeam}
+              allowExternalSources={allowExternal}
+              allowUnpinnedOptionalSources={allowUnpinned}
+              allowLocalPathSources={allowLocalPath}
+              onChange={(key, value) => {
+                if (key === "external") setAllowExternal(value);
+                if (key === "unpinned") setAllowUnpinned(value);
+                if (key === "localPath") setAllowLocalPath(value);
+              }}
+            />
+          </div>
+        </SubSection>
+
+        <SubSection title="Skill plan step (StepSkillPlan)">
+          <div className="max-w-xl rounded-md border border-border p-4">
+            <StepSkillPlan team={sampleTeam} preparations={sampleSkillPreparations} />
+          </div>
+        </SubSection>
+      </Section>
+
+      {/* ============================================================ */}
+      <Section title="Common Icons (Lucide)">
+        <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
           {[
             ["Inbox", Inbox],
             ["ListTodo", ListTodo],
@@ -1467,15 +1581,15 @@ export function DesignGuide() {
       {/* ============================================================ */}
       {/*  KEYBOARD SHORTCUTS                                           */}
       {/* ============================================================ */}
-      <Section title={td("Keyboard Shortcuts")}>
+      <Section title="Keyboard Shortcuts">
         <div className="border border-border rounded-md divide-y divide-border text-sm">
           {[
-            ["Cmd+K / Ctrl+K", td("Open Command Palette")],
-            ["C", td("New Issue (outside inputs)")],
-            ["[", td("Toggle Sidebar")],
-            ["]", td("Toggle Properties Panel")],
+            ["Cmd+K / Ctrl+K", "Open Command Palette"],
+            ["C", "New Issue (outside inputs)"],
+            ["[", "Toggle Sidebar"],
+            ["]", "Toggle Properties Panel"],
 
-            ["Cmd+Enter / Ctrl+Enter", td("Submit markdown comment")],
+            ["Cmd+Enter / Ctrl+Enter", "Submit markdown comment"],
           ].map(([key, desc]) => (
             <div key={key} className="flex items-center justify-between px-4 py-2">
               <span className="text-muted-foreground">{desc}</span>

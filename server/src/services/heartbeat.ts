@@ -9,6 +9,7 @@ import {
   AGENT_DEFAULT_MAX_CONCURRENT_RUNS,
   ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY,
   MODEL_PROFILE_KEYS,
+  envBindingSchema,
   isEnvironmentDriverSupportedForAdapter,
   type BillingType,
   type EnvironmentLeaseStatus,
@@ -20,7 +21,7 @@ import {
   type ModelProfileKey,
   type RoutineRevisionSnapshotV1,
   type RunLivenessState,
-  type UiLocale,
+  type SourceTrustMetadata,
 } from "@penclipai/shared";
 import {
   agents,
@@ -122,14 +123,6 @@ import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./exec
 import { workspaceOperationService } from "./workspace-operations.js";
 import { isProcessGroupAlive, terminateLocalService } from "./local-service-supervisor.js";
 import {
-  resolveRuntimeLocalizationPrompt,
-} from "./agent-runtime-localization.js";
-import {
-  canCoalesceWithRunLocale,
-  materializeRuntimeUiLocaleContextSnapshot,
-  resolveContextRuntimeUiLocale,
-} from "./heartbeat-runtime-locale.js";
-import {
   buildExecutionWorkspaceAdapterConfig,
   gateProjectExecutionWorkspacePolicy,
   issueExecutionWorkspaceModeForPersistedWorkspace,
@@ -163,6 +156,10 @@ import { recoveryService } from "./recovery/service.js";
 import { productivityReviewService } from "./productivity-review.js";
 import { withAgentStartLock } from "./agent-start-lock.js";
 import {
+  redactQuarantinedBodyForHigherTrust,
+  sanitizeQuarantinedCommentForHigherTrust,
+} from "./source-trust.js";
+import {
   redactCurrentUserText,
   redactCurrentUserValue,
   type CurrentUserRedactionOptions,
@@ -182,6 +179,11 @@ import { environmentService } from "./environments.js";
 import { environmentRuntimeService } from "./environment-runtime.js";
 import { environmentRunOrchestrator } from "./environment-run-orchestrator.js";
 import { isUnsafeSessionWorkspaceCwd } from "./session-workspace-cwd.js";
+import {
+  assertLowTrustRuntimeServicesAllowed,
+  assertLowTrustWorkspaceIsolation,
+} from "./low-trust-runtime-containment.js";
+import { resolveCoreTrustPreset, type TrustPresetResolution } from "./trust-preset-resolver.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -332,13 +334,11 @@ const RUNNING_ISSUE_WAKE_REASONS_REQUIRING_FOLLOWUP = new Set(["approval_approve
 const SESSIONED_LOCAL_ADAPTERS = new Set([
   "claude_local",
   "codex_local",
-  "codebuddy_local",
   "cursor",
   "gemini_local",
   "hermes_local",
   "opencode_local",
   "pi_local",
-  "qwen_local",
 ]);
 const INLINE_BASE64_IMAGE_DATA_RE = /("type":"image","source":\{"type":"base64","data":")([A-Za-z0-9+/=]{1024,})(")/g;
 
@@ -346,6 +346,9 @@ type RuntimeConfigSecretResolver = Pick<
   ReturnType<typeof secretService>,
   "resolveAdapterConfigForRuntime" | "resolveEnvBindings"
 >;
+
+const LOW_TRUST_SENSITIVE_ENV_KEY_RE =
+  /(api[-_]?key|access[-_]?token|auth(?:_?token)?|authorization|bearer|secret|passwd|password|credential|jwt|private[-_]?key|cookie|connectionstring)/i;
 
 function isPaperclipRuntimeEnvKey(key: string) {
   return key.startsWith("PAPERCLIP_");
@@ -367,6 +370,24 @@ function stripPaperclipRuntimeEnvFromAdapterConfig(config: Record<string, unknow
   };
 }
 
+function assertLowTrustEnvConfigAllowed(envValue: unknown, source: string) {
+  const record = stripPaperclipRuntimeEnvBindings(envValue);
+  if (!record) return;
+  for (const [key, rawBinding] of Object.entries(record)) {
+    const parsed = envBindingSchema.safeParse(rawBinding);
+    if (!parsed.success) continue;
+    const binding = parsed.data;
+    const isPlainBinding =
+      typeof binding === "string" ||
+      (typeof binding === "object" && binding !== null && binding.type === "plain");
+    if (isPlainBinding && LOW_TRUST_SENSITIVE_ENV_KEY_RE.test(key)) {
+      throw new HttpError(422, `Low-trust execution cannot use inline sensitive env value ${source}.${key}`, {
+        code: "low_trust_inline_sensitive_env_denied",
+      });
+    }
+  }
+}
+
 export async function resolveExecutionRunAdapterConfig(input: {
   companyId: string;
   agentId?: string | null;
@@ -378,10 +399,19 @@ export async function resolveExecutionRunAdapterConfig(input: {
   projectEnv: unknown;
   routineEnv?: unknown;
   secretsSvc: RuntimeConfigSecretResolver;
+  trustPreset?: TrustPresetResolution;
 }) {
   const executionRunConfig = stripPaperclipRuntimeEnvFromAdapterConfig(input.executionRunConfig);
   const projectEnv = stripPaperclipRuntimeEnvBindings(input.projectEnv);
   const routineEnv = stripPaperclipRuntimeEnvBindings(input.routineEnv);
+  const lowTrustAllowedBindingIds = input.trustPreset?.kind === "low_trust_review"
+    ? input.trustPreset.boundary.allowedSecretBindingIds ?? []
+    : undefined;
+  if (input.trustPreset?.kind === "low_trust_review") {
+    assertLowTrustEnvConfigAllowed(executionRunConfig.env, "agent.env");
+    assertLowTrustEnvConfigAllowed(projectEnv, "project.env");
+    assertLowTrustEnvConfigAllowed(routineEnv, "routine.env");
+  }
   const { config: resolvedConfig, secretKeys, manifest } = await input.secretsSvc.resolveAdapterConfigForRuntime(
     input.companyId,
     executionRunConfig,
@@ -393,6 +423,7 @@ export async function resolveExecutionRunAdapterConfig(input: {
           actorId: input.agentId,
           issueId: input.issueId ?? null,
           heartbeatRunId: input.heartbeatRunId ?? null,
+          ...(lowTrustAllowedBindingIds !== undefined ? { allowedBindingIds: lowTrustAllowedBindingIds } : {}),
         }
       : undefined,
   );
@@ -408,6 +439,7 @@ export async function resolveExecutionRunAdapterConfig(input: {
               actorId: input.agentId ?? null,
               issueId: input.issueId ?? null,
               heartbeatRunId: input.heartbeatRunId ?? null,
+              ...(lowTrustAllowedBindingIds !== undefined ? { allowedBindingIds: lowTrustAllowedBindingIds } : {}),
             }
           : undefined,
       )
@@ -433,6 +465,7 @@ export async function resolveExecutionRunAdapterConfig(input: {
               actorId: input.agentId ?? null,
               issueId: input.issueId ?? null,
               heartbeatRunId: input.heartbeatRunId ?? null,
+              ...(lowTrustAllowedBindingIds !== undefined ? { allowedBindingIds: lowTrustAllowedBindingIds } : {}),
             }
           : undefined,
       )
@@ -534,6 +567,7 @@ async function resolveRunScopedMentionedSkillKeys(input: {
       and(
         eq(issueComments.issueId, input.issueId),
         eq(issueComments.companyId, input.companyId),
+        isNull(issueComments.deletedAt),
       ),
     );
   const mentionedSkillIds = extractMentionedSkillIdsFromSources([
@@ -718,6 +752,79 @@ function buildExecutionWorkspaceConfigSnapshot(
     return true;
   }) || hasExplicitEnvironmentSelection;
   return hasSnapshot ? snapshot : null;
+}
+
+export function stripHostWorkspaceProvisionForLowTrustSandbox(input: {
+  config: Record<string, unknown>;
+  trustPreset: TrustPresetResolution;
+  selectedEnvironmentDriver: string | null | undefined;
+}): Record<string, unknown> {
+  if (input.trustPreset.kind !== "low_trust_review") return input.config;
+  if (input.selectedEnvironmentDriver !== "sandbox") return input.config;
+
+  const workspaceStrategy = parseObject(input.config.workspaceStrategy);
+  if (typeof workspaceStrategy.provisionCommand !== "string") return input.config;
+
+  const nextWorkspaceStrategy = { ...workspaceStrategy };
+  delete nextWorkspaceStrategy.provisionCommand;
+
+  return {
+    ...input.config,
+    workspaceStrategy: nextWorkspaceStrategy,
+  };
+}
+
+export async function preflightLowTrustWorkspaceIsolation(input: {
+  db?: Db;
+  trustPreset: TrustPresetResolution;
+  isolatedWorkspacesEnabled: boolean;
+  effectiveExecutionWorkspaceMode: string | null | undefined;
+  issue: { companyId: string; id?: string | null; projectId?: string | null } | null;
+  resolveSelectedEnvironmentDriver: () => Promise<string | null | undefined>;
+}): Promise<string | null> {
+  if (input.trustPreset.kind !== "denied" && input.trustPreset.kind !== "low_trust_review") {
+    return null;
+  }
+
+  const selectedEnvironmentDriver =
+    input.trustPreset.kind === "low_trust_review"
+      ? await input.resolveSelectedEnvironmentDriver()
+      : null;
+
+  await assertLowTrustWorkspaceIsolation({
+    db: input.db,
+    resolution: input.trustPreset,
+    isolatedWorkspacesEnabled: input.isolatedWorkspacesEnabled,
+    effectiveExecutionWorkspaceMode: input.effectiveExecutionWorkspaceMode,
+    selectedEnvironmentDriver,
+    issue: input.issue,
+  });
+
+  return selectedEnvironmentDriver ?? null;
+}
+
+export async function resolveWorkspaceAfterLowTrustPreflight<TWorkspace>(input: {
+  db?: Db;
+  trustPreset: TrustPresetResolution;
+  isolatedWorkspacesEnabled: boolean;
+  effectiveExecutionWorkspaceMode: string | null | undefined;
+  issue: { companyId: string; id?: string | null; projectId?: string | null } | null;
+  resolveSelectedEnvironmentDriver: () => Promise<string | null | undefined>;
+  resolveWorkspace: () => Promise<TWorkspace>;
+}): Promise<{ selectedEnvironmentDriver: string | null; workspace: TWorkspace }> {
+  const selectedEnvironmentDriver = await preflightLowTrustWorkspaceIsolation({
+    db: input.db,
+    trustPreset: input.trustPreset,
+    isolatedWorkspacesEnabled: input.isolatedWorkspacesEnabled,
+    effectiveExecutionWorkspaceMode: input.effectiveExecutionWorkspaceMode,
+    issue: input.issue,
+    resolveSelectedEnvironmentDriver: input.resolveSelectedEnvironmentDriver,
+  });
+
+  return {
+    selectedEnvironmentDriver,
+    workspace: await input.resolveWorkspace(),
+  };
 }
 
 function deriveRepoNameFromRepoUrl(repoUrl: string | null): string | null {
@@ -2045,14 +2152,13 @@ export function mergeCoalescedContextSnapshot(
     // regenerate any structured payload from those ids.
     delete merged[PAPERCLIP_WAKE_PAYLOAD_KEY];
   }
-  delete merged.requestedUiLocale;
   if (!hasInteractionContinuationWakeContext(incoming)) {
     clearInteractionContinuationWakeContext(merged);
   }
   return merged;
 }
 
-async function buildPaperclipWakePayload(input: {
+export async function buildPaperclipWakePayload(input: {
   db: Db;
   companyId: string;
   contextSnapshot: Record<string, unknown>;
@@ -2061,6 +2167,7 @@ async function buildPaperclipWakePayload(input: {
         key: string;
         title: string | null;
         body: string;
+        sourceTrust?: SourceTrustMetadata | null;
         updatedAt: Date;
       }
     | null;
@@ -2072,8 +2179,11 @@ async function buildPaperclipWakePayload(input: {
         status: string;
         priority: string;
         workMode: string;
+        projectId?: string | null;
+        executionPolicy?: unknown;
       }
     | null;
+  exposeLowTrustRaw?: boolean;
 }) {
   const executionStage = parseObject(input.contextSnapshot.executionStage);
   const commentIds = extractWakeCommentIds(input.contextSnapshot);
@@ -2111,6 +2221,12 @@ async function buildPaperclipWakePayload(input: {
             authorUserId: issueComments.authorUserId,
             presentation: issueComments.presentation,
             metadata: issueComments.metadata,
+            deletedAt: issueComments.deletedAt,
+            deletedByType: issueComments.deletedByType,
+            deletedByAgentId: issueComments.deletedByAgentId,
+            deletedByUserId: issueComments.deletedByUserId,
+            deletedByRunId: issueComments.deletedByRunId,
+            sourceTrust: issueComments.sourceTrust,
             createdAt: issueComments.createdAt,
           })
           .from(issueComments)
@@ -2126,6 +2242,10 @@ async function buildPaperclipWakePayload(input: {
   let remainingBodyChars = MAX_INLINE_WAKE_COMMENT_BODY_TOTAL_CHARS;
   let truncated = false;
   let missingCommentCount = 0;
+  const safeContinuationSummary =
+    continuationSummary && !input.exposeLowTrustRaw
+      ? redactQuarantinedBodyForHigherTrust(continuationSummary)
+      : continuationSummary;
 
   for (const commentId of commentIds) {
     const row = commentsById.get(commentId);
@@ -2139,7 +2259,9 @@ async function buildPaperclipWakePayload(input: {
       break;
     }
 
-    const fullBody = row.body;
+    const deletedAt = row.deletedAt ?? null;
+    const safeRow = deletedAt || input.exposeLowTrustRaw ? row : sanitizeQuarantinedCommentForHigherTrust(row);
+    const fullBody = deletedAt ? "" : safeRow.body;
     const allowedBodyChars = Math.min(MAX_INLINE_WAKE_COMMENT_BODY_CHARS, remainingBodyChars);
     if (allowedBodyChars <= 0) {
       truncated = true;
@@ -2157,8 +2279,14 @@ async function buildPaperclipWakePayload(input: {
       authorType: row.authorType ?? (row.authorAgentId ? "agent" : row.authorUserId ? "user" : "system"),
       body,
       bodyTruncated,
-      presentation: row.presentation ?? null,
-      metadata: row.metadata ?? null,
+      presentation: deletedAt ? null : safeRow.presentation ?? null,
+      metadata: deletedAt ? null : safeRow.metadata ?? null,
+      deletedAt: deletedAt ? deletedAt.toISOString() : null,
+      deletedByType: deletedAt ? row.deletedByType ?? null : null,
+      deletedByAgentId: deletedAt ? row.deletedByAgentId ?? null : null,
+      deletedByUserId: deletedAt ? row.deletedByUserId ?? null : null,
+      deletedByRunId: deletedAt ? row.deletedByRunId ?? null : null,
+      sourceTrust: row.sourceTrust ?? null,
       createdAt: row.createdAt.toISOString(),
       author: row.authorAgentId
         ? { type: "agent", id: row.authorAgentId }
@@ -2261,16 +2389,17 @@ async function buildPaperclipWakePayload(input: {
       ? input.contextSnapshot.unresolvedBlockerSummaries
       : [],
     executionStage: Object.keys(executionStage).length > 0 ? executionStage : null,
-    continuationSummary: continuationSummary
+    continuationSummary: safeContinuationSummary
       ? {
-          key: continuationSummary.key,
-          title: continuationSummary.title,
+          key: safeContinuationSummary.key,
+          title: safeContinuationSummary.title,
           body:
-            continuationSummary.body.length > 4_000
-              ? continuationSummary.body.slice(0, 4_000)
-              : continuationSummary.body,
-          bodyTruncated: continuationSummary.body.length > 4_000,
-          updatedAt: continuationSummary.updatedAt.toISOString(),
+            safeContinuationSummary.body.length > 4_000
+              ? safeContinuationSummary.body.slice(0, 4_000)
+              : safeContinuationSummary.body,
+          bodyTruncated: safeContinuationSummary.body.length > 4_000,
+          sourceTrust: safeContinuationSummary.sourceTrust ?? null,
+          updatedAt: safeContinuationSummary.updatedAt.toISOString(),
         }
       : null,
     commentIds,
@@ -2768,6 +2897,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         executionWorkspacePreference: issues.executionWorkspacePreference,
         assigneeAgentId: issues.assigneeAgentId,
         assigneeAdapterOverrides: issues.assigneeAdapterOverrides,
+        executionPolicy: issues.executionPolicy,
         executionWorkspaceSettings: issues.executionWorkspaceSettings,
         originKind: issues.originKind,
         originId: issues.originId,
@@ -5034,19 +5164,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     now: Date,
   ) {
     const contextSnapshot = parseObject(run.contextSnapshot);
-    const runtimeDefaultLocale = (await instanceSettings.getGeneral()).runtimeDefaultLocale;
     const issueId = readNonEmptyString(contextSnapshot.issueId);
     const taskKey = deriveTaskKeyWithHeartbeatFallback(contextSnapshot, null);
     const sessionBefore = await resolveSessionBeforeForWakeup(agent, taskKey);
-    const retryContextSnapshot = materializeRuntimeUiLocaleContextSnapshot(
-      withRecoveryModelProfileHint({
-        ...contextSnapshot,
-        retryOfRunId: run.id,
-        wakeReason: "process_lost_retry",
-        retryReason: "process_lost",
-      }, "normal_model"),
-      runtimeDefaultLocale,
-    );
+    const retryContextSnapshot = withRecoveryModelProfileHint({
+      ...contextSnapshot,
+      retryOfRunId: run.id,
+      wakeReason: "process_lost_retry",
+      retryReason: "process_lost",
+    }, "normal_model");
 
     const queued = await db.transaction(async (tx) => {
       const wakeupRequest = await tx
@@ -6711,6 +6837,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             eq(issueComments.companyId, run.companyId),
             eq(issueComments.issueId, contextIssueId),
             eq(issueComments.createdByRunId, run.id),
+            isNull(issueComments.deletedAt),
           ),
         )
       : [{ count: 0, latestAt: null }];
@@ -7246,6 +7373,12 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
               authorUserId: issueComments.authorUserId,
               presentation: issueComments.presentation,
               metadata: issueComments.metadata,
+              deletedAt: issueComments.deletedAt,
+              deletedByType: issueComments.deletedByType,
+              deletedByAgentId: issueComments.deletedByAgentId,
+              deletedByUserId: issueComments.deletedByUserId,
+              deletedByRunId: issueComments.deletedByRunId,
+              sourceTrust: issueComments.sourceTrust,
             })
             .from(issueComments)
             .where(and(
@@ -7253,7 +7386,17 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
               eq(issueComments.issueId, issueContext.id),
               eq(issueComments.companyId, agent.companyId),
             ))
-            .then((rows) => rows[0] ?? null)
+            .then((rows) => {
+              const row = rows[0] ?? null;
+              return row?.deletedAt
+                ? {
+                    ...row,
+                    body: "",
+                    presentation: null,
+                    metadata: null,
+                  }
+                : row;
+            })
         : null;
     const issueAssigneeOverrides =
       issueContext && issueContext.assigneeAgentId === agent.id
@@ -7314,6 +7457,25 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       parseProjectExecutionWorkspacePolicy(projectContext?.executionWorkspacePolicy),
       isolatedWorkspacesEnabled,
     );
+    const trustPreset = resolveCoreTrustPreset({
+      companyId: agent.companyId,
+      agent: {
+        companyId: agent.companyId,
+        permissions: agent.permissions,
+      },
+      project: projectContext
+        ? {
+            companyId: agent.companyId,
+            executionWorkspacePolicy: projectExecutionWorkspacePolicy,
+          }
+        : null,
+      issue: issueContext
+        ? {
+            companyId: agent.companyId,
+            executionPolicy: issueContext.executionPolicy,
+          }
+        : null,
+    });
     const taskSession = taskKey
       ? await getTaskSession(agent.companyId, agent.id, agent.adapterType, taskKey)
       : null;
@@ -7339,17 +7501,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         sessionCodec.deserialize(taskSessionForRun?.sessionParamsJson ?? null),
       );
     const config = parseObject(agent.adapterConfig);
-    const requestedExecutionWorkspaceMode = resolveExecutionWorkspaceMode({
+    const resolvedExecutionWorkspaceMode = resolveExecutionWorkspaceMode({
       projectPolicy: projectExecutionWorkspacePolicy,
       issueSettings: issueExecutionWorkspaceSettings,
       legacyUseProjectWorkspace: issueAssigneeOverrides?.useProjectWorkspace ?? null,
     });
-    const resolvedWorkspace = await resolveWorkspaceForRun(
-      agent,
-      context,
-      previousSessionParams,
-      { useProjectWorkspace: requestedExecutionWorkspaceMode !== "agent_default" },
-    );
+    const requestedExecutionWorkspaceMode =
+      trustPreset.kind === "low_trust_review" && resolvedExecutionWorkspaceMode === "shared_workspace"
+        ? "isolated_workspace"
+        : resolvedExecutionWorkspaceMode;
     const issueRef = issueContext
       ? {
           id: issueContext.id,
@@ -7368,12 +7528,22 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     const continuationSummary = issueRef
       ? await getIssueContinuationSummaryDocument(db, issueRef.id)
       : null;
+    const exposeLowTrustRaw = trustPreset.kind === "low_trust_review";
+    const safeContinuationSummary =
+      continuationSummary && !exposeLowTrustRaw
+        ? redactQuarantinedBodyForHigherTrust(continuationSummary)
+        : continuationSummary;
+    const safeWakeCommentContext =
+      wakeCommentContext && !exposeLowTrustRaw
+        ? sanitizeQuarantinedCommentForHigherTrust(wakeCommentContext)
+        : wakeCommentContext;
     if (continuationSummary) {
       context.paperclipContinuationSummary = {
-        key: continuationSummary.key,
-        title: continuationSummary.title,
-        body: continuationSummary.body,
-        updatedAt: continuationSummary.updatedAt.toISOString(),
+        key: safeContinuationSummary!.key,
+        title: safeContinuationSummary!.title,
+        body: safeContinuationSummary!.body,
+        sourceTrust: safeContinuationSummary!.sourceTrust ?? null,
+        updatedAt: safeContinuationSummary!.updatedAt.toISOString(),
       };
     } else {
       delete context.paperclipContinuationSummary;
@@ -7391,8 +7561,11 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             status: issueRef.status,
             priority: issueRef.priority,
             workMode: issueRef.workMode,
+            projectId: issueRef.projectId,
+            executionPolicy: issueContext?.executionPolicy ?? null,
           }
         : null,
+      exposeLowTrustRaw,
     });
     if (paperclipWakePayload) {
       context[PAPERCLIP_WAKE_PAYLOAD_KEY] = paperclipWakePayload;
@@ -7409,7 +7582,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             description: issueRef.description,
           }
         : null,
-      wakeComment: wakeCommentContext,
+      wakeComment: safeWakeCommentContext,
       interaction: {
         kind: readNonEmptyString(context.interactionKind),
         status: readNonEmptyString(context.interactionStatus),
@@ -7430,7 +7603,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       delete context.paperclipIssue;
     }
     if (wakeCommentContext) {
-      context.paperclipWakeComment = wakeCommentContext;
+      context.paperclipWakeComment = safeWakeCommentContext;
     } else {
       delete context.paperclipWakeComment;
     }
@@ -7492,6 +7665,37 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         ? persistedExecutionWorkspaceMode
         : requestedExecutionWorkspaceMode;
     const selectedEnvironmentId = environmentResolution.environmentId;
+    const {
+      selectedEnvironmentDriver: lowTrustPreflightEnvironmentDriver,
+      workspace: resolvedWorkspace,
+    } = await resolveWorkspaceAfterLowTrustPreflight({
+      db,
+      trustPreset,
+      isolatedWorkspacesEnabled,
+      effectiveExecutionWorkspaceMode,
+      issue: issueRef
+        ? {
+            companyId: agent.companyId,
+            id: issueRef.id,
+            projectId: issueRef.projectId,
+          }
+        : null,
+      resolveSelectedEnvironmentDriver: async () => {
+        const preflightEnvironment = await envOrchestrator.resolveEnvironment({
+          companyId: agent.companyId,
+          selectedEnvironmentId,
+          defaultEnvironmentId: defaultEnvironment.id,
+        });
+        return preflightEnvironment.driver;
+      },
+      resolveWorkspace: () =>
+        resolveWorkspaceForRun(
+          agent,
+          context,
+          previousSessionParams,
+          { useProjectWorkspace: requestedExecutionWorkspaceMode !== "agent_default" },
+        ),
+    });
     const workspaceManagedConfig = shouldReuseExisting
       ? { ...config }
       : buildExecutionWorkspaceAdapterConfig({
@@ -7555,6 +7759,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       projectEnv: projectContext?.env ?? null,
       routineEnv: routineEnvContext.env,
       secretsSvc,
+      trustPreset,
     });
     if (secretManifest.length > 0) {
       context.paperclipSecrets = {
@@ -7577,6 +7782,11 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       ...effectiveResolvedConfig,
       paperclipRuntimeSkills: runtimeSkillEntries,
     };
+    const hostExecutionWorkspaceConfig = stripHostWorkspaceProvisionForLowTrustSandbox({
+      config: runtimeConfig,
+      trustPreset,
+      selectedEnvironmentDriver: lowTrustPreflightEnvironmentDriver,
+    });
     const workspaceOperationRecorder = workspaceOperationsSvc.createRecorder({
       companyId: agent.companyId,
       heartbeatRunId: run.id,
@@ -7625,7 +7835,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       : null;
     const executionWorkspace = reusedExecutionWorkspace ?? await realizeExecutionWorkspace({
           base: executionWorkspaceBase,
-          config: runtimeConfig,
+          config: hostExecutionWorkspaceConfig,
           issue: issueRef,
           agent: {
             id: agent.id,
@@ -7882,14 +8092,6 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       })(),
     };
     context.paperclipWorkspaces = resolvedWorkspace.workspaceHints;
-    const runtimeDefaultLocale = (await instanceSettings.getGeneral()).runtimeDefaultLocale;
-    context.runtimeUiLocale = resolveContextRuntimeUiLocale(context, runtimeDefaultLocale);
-    delete context.requestedUiLocale;
-    context.paperclipLocalizationPromptMarkdown = resolveRuntimeLocalizationPrompt({
-      locale: context.runtimeUiLocale as UiLocale,
-      platform: process.platform,
-      env: process.env,
-    });
     const runtimeServiceIntents = (() => {
       const runtimeConfig = parseObject(resolvedConfig.workspaceRuntime);
       return Array.isArray(runtimeConfig.services)
@@ -7898,6 +8100,10 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           )
         : [];
     })();
+    assertLowTrustRuntimeServicesAllowed({
+      resolution: trustPreset,
+      runtimeServiceCount: runtimeServiceIntents.length,
+    });
     if (runtimeServiceIntents.length > 0) {
       context.paperclipRuntimeServiceIntents = runtimeServiceIntents;
     } else {
@@ -8935,7 +9141,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         delete promotedPayload[DEFERRED_WAKE_CONTEXT_KEY];
 
         const {
-          contextSnapshot: promotedContextSeedSnapshot,
+          contextSnapshot: promotedContextSnapshot,
           taskKey: promotedTaskKey,
         } = enrichWakeContextSnapshot({
           contextSnapshot: promotedContextSeed,
@@ -8944,11 +9150,6 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           triggerDetail: promotedTriggerDetail,
           payload: promotedPayload,
         });
-        const runtimeDefaultLocale = (await instanceSettings.getGeneral()).runtimeDefaultLocale;
-        const promotedContextSnapshot = materializeRuntimeUiLocaleContextSnapshot(
-          promotedContextSeedSnapshot,
-          runtimeDefaultLocale,
-        );
 
         const sessionBefore =
           readNonEmptyString(promotedContextSnapshot.resumeSessionDisplayId) ??
@@ -9192,6 +9393,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       triggerDetail,
       payload,
     });
+    let issueId = readNonEmptyString(enrichedContextSnapshot.issueId) ?? issueIdFromPayload;
+
     const agent = await getAgent(agentId);
     if (!agent) throw notFound("Agent not found");
 
@@ -9246,20 +9449,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       if (!readNonEmptyString(enrichedContextSnapshot.taskKey) && explicitResumeSession.taskKey) {
         enrichedContextSnapshot.taskKey = explicitResumeSession.taskKey;
       }
+      issueId = readNonEmptyString(enrichedContextSnapshot.issueId) ?? issueId;
     }
-    const runtimeDefaultLocale = (await instanceSettings.getGeneral()).runtimeDefaultLocale;
-    const localizedContextSnapshot = materializeRuntimeUiLocaleContextSnapshot(
-      enrichedContextSnapshot,
-      runtimeDefaultLocale,
-    );
-    let issueId = readNonEmptyString(localizedContextSnapshot.issueId) ?? issueIdFromPayload;
-    const effectiveTaskKey = readNonEmptyString(localizedContextSnapshot.taskKey) ?? taskKey;
+    const effectiveTaskKey = readNonEmptyString(enrichedContextSnapshot.taskKey) ?? taskKey;
     const sessionBefore =
       explicitResumeSession?.sessionDisplayId ??
       await resolveSessionBeforeForWakeup(agent, effectiveTaskKey);
     const continuationAttempt = readContinuationAttempt(enrichedContextSnapshot.livenessContinuationAttempt);
 
-    let projectId = readNonEmptyString(localizedContextSnapshot.projectId);
+    let projectId = readNonEmptyString(enrichedContextSnapshot.projectId);
     if (!projectId && issueId) {
       // Look up by either UUID or identifier (e.g. "ENV-13"), but always scope
       // by companyId so a row from another tenant can never be returned even
@@ -9360,19 +9558,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           return null;
         }
 
-        const treeHoldInteractionContext = {
-          treeHoldInteraction: true,
-          activeTreeHold: {
-            holdId: activePauseHold.holdId,
-            rootIssueId: activePauseHold.rootIssueId,
-            mode: activePauseHold.mode,
-            reason: activePauseHold.reason,
-            releasePolicy: activePauseHold.releasePolicy,
-            interaction: true,
-          },
+        enrichedContextSnapshot.treeHoldInteraction = true;
+        enrichedContextSnapshot.activeTreeHold = {
+          holdId: activePauseHold.holdId,
+          rootIssueId: activePauseHold.rootIssueId,
+          mode: activePauseHold.mode,
+          reason: activePauseHold.reason,
+          releasePolicy: activePauseHold.releasePolicy,
+          interaction: true,
         };
-        Object.assign(enrichedContextSnapshot, treeHoldInteractionContext);
-        Object.assign(localizedContextSnapshot, treeHoldInteractionContext);
       }
     }
 
@@ -9588,19 +9782,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           allowsIssueInteractionWake(enrichedContextSnapshot);
 
         if (blockedInteractionWake) {
-          const dependencyBlockedInteractionContext = {
-            dependencyBlockedInteraction: true,
-            unresolvedBlockerIssueIds: dependencyReadiness.unresolvedBlockerIssueIds,
-            unresolvedBlockerCount: dependencyReadiness.unresolvedBlockerCount,
-            unresolvedBlockerSummaries: await listUnresolvedBlockerSummaries(
-              tx,
-              issue.companyId,
-              issue.id,
-              dependencyReadiness.unresolvedBlockerIssueIds,
-            ),
-          };
-          Object.assign(enrichedContextSnapshot, dependencyBlockedInteractionContext);
-          Object.assign(localizedContextSnapshot, dependencyBlockedInteractionContext);
+          enrichedContextSnapshot.dependencyBlockedInteraction = true;
+          enrichedContextSnapshot.unresolvedBlockerIssueIds = dependencyReadiness.unresolvedBlockerIssueIds;
+          enrichedContextSnapshot.unresolvedBlockerCount = dependencyReadiness.unresolvedBlockerCount;
+          enrichedContextSnapshot.unresolvedBlockerSummaries = await listUnresolvedBlockerSummaries(
+            tx,
+            issue.companyId,
+            issue.id,
+            dependencyReadiness.unresolvedBlockerIssueIds,
+          );
         }
 
         if (!activeExecutionRun && dependencyReadiness && !dependencyReadiness.isDependencyReady && !blockedInteractionWake) {
@@ -9643,7 +9833,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           if (isSameExecutionAgent && !shouldQueueFollowupForRunningWake) {
             const mergedContextSnapshot = mergeCoalescedContextSnapshot(
               activeExecutionRun.contextSnapshot,
-              localizedContextSnapshot,
+              enrichedContextSnapshot,
             );
             const mergedRun = await tx
               .update(heartbeatRuns)
@@ -9677,7 +9867,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           const deferredPayload = {
             ...(payload ?? {}),
             issueId,
-            [DEFERRED_WAKE_CONTEXT_KEY]: localizedContextSnapshot,
+            [DEFERRED_WAKE_CONTEXT_KEY]: enrichedContextSnapshot,
           };
 
           const existingDeferred = await tx
@@ -9700,7 +9890,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             const existingDeferredContext = parseObject(existingDeferredPayload[DEFERRED_WAKE_CONTEXT_KEY]);
             const mergedDeferredContext = mergeCoalescedContextSnapshot(
               existingDeferredContext,
-              localizedContextSnapshot,
+              enrichedContextSnapshot,
             );
             const mergedDeferredPayload = {
               ...existingDeferredPayload,
@@ -9763,7 +9953,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             triggerDetail,
             status: "queued",
             wakeupRequestId: wakeupRequest.id,
-            contextSnapshot: localizedContextSnapshot,
+            contextSnapshot: enrichedContextSnapshot,
             sessionIdBefore: sessionBefore,
             continuationAttempt,
           })
@@ -9828,24 +10018,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       !sameScopeQueuedRun &&
       shouldQueueFollowupForRunningIssueWake({ contextSnapshot: enrichedContextSnapshot, wakeCommentId });
 
-    const localeMatchedRunningRun = sameScopeRunningRun && canCoalesceWithRunLocale({
-      existingContextSnapshot: parseObject(sameScopeRunningRun.contextSnapshot),
-      incomingContextSnapshot: localizedContextSnapshot,
-      existingStatus: sameScopeRunningRun.status,
-      runtimeDefaultLocale,
-    })
-      ? sameScopeRunningRun
-      : null;
-
     const coalescedTargetRun =
       sameScopeQueuedRun ??
       sameScopeScheduledRetryRun ??
-      (shouldQueueFollowupForRunningWake ? null : localeMatchedRunningRun ?? null);
+      (shouldQueueFollowupForRunningWake ? null : sameScopeRunningRun ?? null);
 
     if (coalescedTargetRun) {
       const mergedContextSnapshot = mergeCoalescedContextSnapshot(
         coalescedTargetRun.contextSnapshot,
-        localizedContextSnapshot,
+        enrichedContextSnapshot,
       );
       const mergedRun = await db
         .update(heartbeatRuns)
@@ -9901,7 +10082,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         triggerDetail,
         status: "queued",
         wakeupRequestId: wakeupRequest.id,
-        contextSnapshot: localizedContextSnapshot,
+        contextSnapshot: enrichedContextSnapshot,
         sessionIdBefore: sessionBefore,
         continuationAttempt,
       })

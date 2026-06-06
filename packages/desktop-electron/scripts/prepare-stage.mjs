@@ -35,6 +35,12 @@ const bundledPluginPackageExclusions = new Set([
 const standaloneBundledPluginPackagePrefixes = [
   "sandbox-providers/",
 ];
+const standaloneBundledPluginInstallEnv = {
+  ...process.env,
+  NODE_ENV: "development",
+  NPM_CONFIG_PRODUCTION: "false",
+  npm_config_production: "false",
+};
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
@@ -300,7 +306,10 @@ for (const packageJsonPath of findBundledPluginPackageJsons(bundledPluginsDir)) 
   if (shouldInstallBundledPluginBeforeBuild(packageRoot)) {
     const relativePackageRoot = bundledPluginRelativeRoot(packageRoot);
     console.log(`[desktop-stage] Installing standalone bundled plugin deps for ${relativePackageRoot}...`);
-    runPnpm(["--dir", packageRoot, "install", "--ignore-workspace", "--no-lockfile"], { cwd: packageRoot });
+    runPnpm(["--dir", packageRoot, "install", "--ignore-workspace", "--no-lockfile"], {
+      cwd: packageRoot,
+      env: standaloneBundledPluginInstallEnv,
+    });
   }
   if (pkg.scripts?.build) {
     runPnpm(["--dir", packageRoot, "run", "build"], { cwd: packageRoot });

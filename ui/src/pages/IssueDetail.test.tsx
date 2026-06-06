@@ -1,26 +1,12 @@
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Agent, Issue, IssueTreeControlPreview, IssueTreeHold } from "@penclipai/shared";
+import type { Agent, Issue, IssueAttachment, IssueTreeControlPreview, IssueTreeHold, IssueWorkProduct } from "@penclipai/shared";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { canBoardResolveRecoveryAction, IssueDetail } from "./IssueDetail";
-
-vi.mock("react-i18next", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react-i18next")>();
-  return {
-    ...actual,
-    initReactI18next: { type: "3rdParty", init: () => {} },
-    useTranslation: () => ({
-      t: (key: string, options?: Record<string, unknown>) => {
-        const template = typeof options?.defaultValue === "string" ? options.defaultValue : key;
-        return template.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""));
-      },
-    }),
-  };
-});
 
 const mockIssuesApi = vi.hoisted(() => ({
   get: vi.fn(),
@@ -87,6 +73,7 @@ const mockSetMobileToolbar = vi.hoisted(() => vi.fn());
 const mockPushToast = vi.hoisted(() => vi.fn());
 const mockIssuesListRender = vi.hoisted(() => vi.fn());
 const mockIssueChatThreadRender = vi.hoisted(() => vi.fn());
+const mockImageGalleryRender = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/issues", () => ({
   issuesApi: mockIssuesApi,
@@ -253,6 +240,10 @@ vi.mock("../components/IssueDocumentsSection", () => ({
   IssueDocumentsSection: () => <div>Documents</div>,
 }));
 
+vi.mock("../components/MarkdownBody", () => ({
+  MarkdownBody: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+}));
+
 vi.mock("../components/IssuesList", () => ({
   IssuesList: (props: { issueBadgeById?: Map<string, string> }) => {
     mockIssuesListRender(props);
@@ -280,7 +271,10 @@ vi.mock("../components/IssueWorkspaceCard", () => ({
 }));
 
 vi.mock("../components/ImageGalleryModal", () => ({
-  ImageGalleryModal: () => null,
+  ImageGalleryModal: (props: { images: IssueAttachment[]; initialIndex: number; open: boolean }) => {
+    mockImageGalleryRender(props);
+    return null;
+  },
 }));
 
 vi.mock("../components/ScrollToBottom", () => ({
@@ -435,6 +429,74 @@ function createIssue(overrides: Partial<Issue> = {}): Issue {
     documentSummaries: [],
     ...overrides,
   } as Issue;
+}
+
+function createAttachment(overrides: Partial<IssueAttachment> & { id: string }): IssueAttachment {
+  const { id, ...attachmentOverrides } = overrides;
+  return {
+    id,
+    companyId: "company-1",
+    issueId: "issue-1",
+    issueCommentId: null,
+    assetId: `asset-${id}`,
+    provider: "local_disk",
+    objectKey: `attachments/${id}`,
+    contentType: overrides.contentType ?? "application/octet-stream",
+    byteSize: overrides.byteSize ?? 4096,
+    sha256: "sha256",
+    originalFilename: overrides.originalFilename ?? null,
+    createdByAgentId: null,
+    createdByUserId: null,
+    createdAt: new Date("2026-04-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-04-21T00:00:00.000Z"),
+    contentPath: overrides.contentPath ?? `/api/attachments/${id}/content`,
+    openPath: overrides.openPath ?? `/api/attachments/${id}/content`,
+    downloadPath: overrides.downloadPath ?? `/api/attachments/${id}/content?download=1`,
+    ...attachmentOverrides,
+  };
+}
+
+function createArtifactWorkProduct(
+  overrides: Partial<IssueWorkProduct> & {
+    id: string;
+    attachmentId: string;
+    contentType: string;
+    originalFilename: string;
+  },
+): IssueWorkProduct {
+  const { id, attachmentId, contentType, originalFilename, ...workProductOverrides } = overrides;
+  const contentPath = `/api/attachments/${attachmentId}/content`;
+  return {
+    id,
+    companyId: "company-1",
+    projectId: null,
+    issueId: "issue-1",
+    executionWorkspaceId: null,
+    runtimeServiceId: null,
+    type: "artifact",
+    provider: "paperclip",
+    externalId: null,
+    title: overrides.title ?? originalFilename,
+    url: null,
+    status: "active",
+    reviewState: "none",
+    isPrimary: false,
+    healthStatus: "unknown",
+    summary: null,
+    metadata: {
+      attachmentId,
+      contentType,
+      byteSize: 4096,
+      contentPath,
+      openPath: contentPath,
+      downloadPath: `${contentPath}?download=1`,
+      originalFilename,
+    },
+    createdByRunId: null,
+    createdAt: new Date("2026-04-21T00:00:00.000Z"),
+    updatedAt: new Date("2026-04-21T00:00:00.000Z"),
+    ...workProductOverrides,
+  } as IssueWorkProduct;
 }
 
 function createAgent(overrides: Partial<Agent> = {}): Agent {
@@ -821,6 +883,10 @@ describe("IssueDetail", () => {
     });
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      text: async () => "# Attachment preview",
+    } as Response);
 
     mockIssuesApi.list.mockResolvedValue([]);
     mockIssuesApi.listComments.mockResolvedValue([]);
@@ -856,6 +922,7 @@ describe("IssueDetail", () => {
     mockIssuesApi.listAcceptedPlanDecompositions.mockResolvedValue([]);
     mockIssuesListRender.mockClear();
     mockIssueChatThreadRender.mockClear();
+    mockImageGalleryRender.mockClear();
   });
 
   afterEach(async () => {
@@ -1430,6 +1497,68 @@ describe("IssueDetail", () => {
     localStorage.removeItem("paperclip:issue-comment-draft:issue-1");
   });
 
+  it("hides attachments backing promoted outputs while keeping filtered markdown artifacts visible", async () => {
+    const issue = createIssue();
+    const videoAttachment = createAttachment({
+      id: "11111111-1111-4111-8111-111111111111",
+      contentType: "video/mp4",
+      originalFilename: "demo.mp4",
+    });
+    const imageAttachment = createAttachment({
+      id: "33333333-3333-4333-8333-333333333333",
+      contentType: "image/png",
+      originalFilename: "screenshot.png",
+    });
+    const markdownAttachment = createAttachment({
+      id: "22222222-2222-4222-8222-222222222222",
+      contentType: "text/markdown",
+      originalFilename: "report.md",
+    });
+    mockIssuesApi.get.mockResolvedValue(issue);
+    mockIssuesApi.listAttachments.mockResolvedValue([videoAttachment, imageAttachment, markdownAttachment]);
+    mockIssuesApi.listWorkProducts.mockResolvedValue([
+      createArtifactWorkProduct({
+        id: "wp-video",
+        attachmentId: videoAttachment.id,
+        contentType: "video/mp4",
+        originalFilename: "demo.mp4",
+        isPrimary: true,
+      }),
+      createArtifactWorkProduct({
+        id: "wp-image",
+        attachmentId: imageAttachment.id,
+        contentType: "image/png",
+        originalFilename: "screenshot.png",
+      }),
+      createArtifactWorkProduct({
+        id: "wp-markdown",
+        attachmentId: markdownAttachment.id,
+        contentType: "text/markdown",
+        originalFilename: "report.md",
+      }),
+    ]);
+
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <IssueDetail />
+        </QueryClientProvider>,
+      );
+    });
+    await flushReact();
+    await flushReact();
+
+    expect(container.textContent).toContain("Output");
+    expect(container.textContent).toContain("demo.mp4");
+    expect(container.textContent).toContain("Attachments");
+    expect(container.textContent).toContain("report.md");
+    expect(container.textContent).toContain("Attachments1");
+    expect(container.querySelectorAll("video")).toHaveLength(1);
+    expect(mockImageGalleryRender.mock.calls.at(-1)?.[0].images.map((attachment: IssueAttachment) => attachment.id)).toEqual([
+      imageAttachment.id,
+    ]);
+  });
+
   it("renders Paused by board distinctly and defaults leaf resume to wake the assignee", async () => {
     const activeHold = createPauseHold();
     const releasedHold = createPauseHold({
@@ -1657,14 +1786,10 @@ describe("IssueDetail", () => {
       .find((element) =>
         typeof element.className === "string"
         && element.className.includes("overflow-y-auto")
-        && (
-          element.textContent?.includes("Reason (optional)")
-          || element.textContent?.includes("Reason (required)")
-        ),
+        && element.textContent?.includes("Reason (optional)"),
       );
-    expect(bodyScrollRegion).toBeTruthy();
-    expect(bodyScrollRegion!.className).toContain("min-h-0");
-    expect(bodyScrollRegion!.className).toContain("overscroll-contain");
+    expect(bodyScrollRegion?.className).toContain("min-h-0");
+    expect(bodyScrollRegion?.className).toContain("overscroll-contain");
 
     const cancelApplyButton = Array.from(dialogContent!.querySelectorAll("button"))
       .find((button) => button.textContent?.trim() === "Cancel 24 issues") as HTMLButtonElement | undefined;

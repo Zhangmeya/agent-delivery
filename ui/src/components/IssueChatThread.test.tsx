@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 
 import { act, createRef, forwardRef, useImperativeHandle, useState } from "react";
+import { flushSync } from "react-dom";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import i18n from "i18next";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent } from "@penclipai/shared";
@@ -32,6 +34,14 @@ import type {
   IssueChatLinkedRun,
   IssueChatTranscriptEntry,
 } from "../lib/issue-chat-messages";
+
+function flushAct<T>(callback: () => T): T {
+  let result: T | undefined;
+  flushSync(() => {
+    result = callback();
+  });
+  return result as T;
+}
 
 function hasSmoothScrollBehavior(arg: unknown) {
   return typeof arg === "object"
@@ -68,6 +78,7 @@ vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>();
   const translations: Record<string, string> = {
     None: "无",
+    "issueChat.deletedComment": "{{authorName}} deleted this comment",
     "issueChat.agentPaused.bodyAfterName": "已暂停。恢复该智能体前不会启动新的运行。",
     "issueChat.agentPaused.budgetDetail": "该智能体因预算硬停止而暂停。",
     "issueChat.agentPaused.manualDetail": "该智能体已手动暂停。",
@@ -81,20 +92,30 @@ vi.mock("react-i18next", async (importOriginal) => {
     ...actual,
     useTranslation: () => ({
       t: (key: string, options?: Record<string, unknown>) => {
-        if (key in translations) return translations[key];
-        return typeof options?.defaultValue === "string"
+        const value = key in translations
+          ? translations[key]
+          : typeof options?.defaultValue === "string"
           ? options.defaultValue.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""))
           : key.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""));
+        return value.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""));
       },
     }),
   };
 });
 
 vi.mock("../i18n", () => ({
-  translateInstant: (key: string, options?: Record<string, unknown>) =>
-    typeof options?.defaultValue === "string"
+  translateInstant: (key: string, options?: Record<string, unknown>) => {
+    const translations: Record<string, string> = {
+      None: "无",
+      "status.done": "已完成",
+      "status.inProgress": "进行中",
+      "status.todo": "待办",
+    };
+    const value = translations[key] ?? (typeof options?.defaultValue === "string"
       ? options.defaultValue.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""))
-      : key,
+      : key);
+    return value.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""));
+  },
   getCurrentLocale: () => "en",
 }));
 
@@ -1292,6 +1313,168 @@ describe("IssueChatThread", () => {
     });
   });
 
+  it("confirms and invokes delete only for the current user's normal comments", async () => {
+    const root = createRoot(container);
+    const onDeleteComment = vi.fn(async () => {});
+
+    act(() => {
+      root.render(
+        <MemoryRouter>
+          <IssueChatThread
+            comments={[
+              {
+                id: "comment-owned",
+                companyId: "company-1",
+                issueId: "issue-1",
+                authorAgentId: null,
+                authorUserId: "user-board",
+                body: "Delete me",
+                authorType: "user",
+                presentation: null,
+                metadata: null,
+                createdAt: new Date("2026-04-06T12:00:00.000Z"),
+                updatedAt: new Date("2026-04-06T12:00:00.000Z"),
+              },
+              {
+                id: "comment-other",
+                companyId: "company-1",
+                issueId: "issue-1",
+                authorAgentId: null,
+                authorUserId: "user-other",
+                body: "Do not delete",
+                authorType: "user",
+                presentation: null,
+                metadata: null,
+                createdAt: new Date("2026-04-06T12:01:00.000Z"),
+                updatedAt: new Date("2026-04-06T12:01:00.000Z"),
+              },
+            ]}
+            currentUserId="user-board"
+            linkedRuns={[]}
+            timelineEvents={[]}
+            liveRuns={[]}
+            onAdd={async () => {}}
+            onDeleteComment={onDeleteComment}
+            showComposer={false}
+            enableLiveTranscriptPolling={false}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    const deleteButtons = Array.from(container.querySelectorAll("button[aria-label='Delete comment']"));
+    expect(deleteButtons).toHaveLength(1);
+
+    await act(async () => {
+      deleteButtons[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain("Delete comment?");
+    const confirmButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent === "Delete comment");
+    expect(confirmButton).toBeTruthy();
+
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onDeleteComment).toHaveBeenCalledWith("comment-owned");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("renders deleted comments as tombstones without the original body", () => {
+    const root = createRoot(container);
+
+    flushAct(() => {
+      root.render(
+        <MemoryRouter>
+          <IssueChatThread
+            comments={[{
+              id: "comment-deleted",
+              companyId: "company-1",
+              issueId: "issue-1",
+              authorAgentId: null,
+              authorUserId: "user-board",
+              body: "Sensitive deleted body",
+              authorType: "user",
+              presentation: null,
+              metadata: null,
+              deletedAt: new Date("2026-04-06T12:05:00.000Z"),
+              deletedByType: "user",
+              deletedByUserId: "user-board",
+              createdAt: new Date("2026-04-06T12:00:00.000Z"),
+              updatedAt: new Date("2026-04-06T12:05:00.000Z"),
+            }]}
+            currentUserId="user-board"
+            linkedRuns={[]}
+            timelineEvents={[]}
+            liveRuns={[]}
+            onAdd={async () => {}}
+            onDeleteComment={async () => {}}
+            showComposer={false}
+            enableLiveTranscriptPolling={false}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.textContent).toContain("Me deleted this comment");
+    expect(container.textContent).not.toContain("Sensitive deleted body");
+    expect(container.querySelector("button[aria-label='Delete comment']")).toBeNull();
+    expect(container.querySelector("button[aria-label='Copy message']")).toBeNull();
+
+    flushAct(() => {
+      root.unmount();
+    });
+  });
+
+  it("clears a deleted comment deep-link hash instead of highlighting it", () => {
+    const root = createRoot(container);
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
+
+    flushAct(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/issues/PAP-1#comment-comment-deleted"]}>
+          <IssueChatThread
+            comments={[{
+              id: "comment-deleted",
+              companyId: "company-1",
+              issueId: "issue-1",
+              authorAgentId: null,
+              authorUserId: "user-board",
+              body: "Sensitive deleted body",
+              authorType: "user",
+              presentation: null,
+              metadata: null,
+              deletedAt: new Date("2026-04-06T12:05:00.000Z"),
+              deletedByType: "user",
+              deletedByUserId: "user-board",
+              createdAt: new Date("2026-04-06T12:00:00.000Z"),
+              updatedAt: new Date("2026-04-06T12:05:00.000Z"),
+            }]}
+            currentUserId="user-board"
+            linkedRuns={[]}
+            timelineEvents={[]}
+            liveRuns={[]}
+            onAdd={async () => {}}
+            showComposer={false}
+            enableLiveTranscriptPolling={false}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(replaceStateSpy).toHaveBeenCalledWith(null, "", "/issues/PAP-1");
+
+    replaceStateSpy.mockRestore();
+    flushAct(() => {
+      root.unmount();
+    });
+  });
+
   it("shows explicit follow-up badges and event copy", () => {
     const root = createRoot(container);
 
@@ -1339,8 +1522,10 @@ describe("IssueChatThread", () => {
     });
   });
 
-  it("localizes timeline status change values", () => {
+  it("localizes timeline status change values", async () => {
     const root = createRoot(container);
+
+    await i18n.changeLanguage("zh-CN");
 
     act(() => {
       root.render(
@@ -1384,6 +1569,8 @@ describe("IssueChatThread", () => {
     act(() => {
       root.unmount();
     });
+
+    await i18n.changeLanguage("en");
   });
 
   it("shows unresolved blocker context above the composer", () => {
@@ -1701,6 +1888,70 @@ describe("IssueChatThread", () => {
         kind: "ask_user_questions",
       }),
       [{ questionId: "scope", optionIds: ["phase-1"] }],
+    );
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("submits Other text for pending question interactions", async () => {
+    const root = createRoot(container);
+    const onSubmitInteractionAnswers = vi.fn(async () => undefined);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <IssueChatThread
+            comments={[]}
+            interactions={[createQuestionInteraction()]}
+            linkedRuns={[]}
+            timelineEvents={[]}
+            liveRuns={[]}
+            onAdd={async () => {}}
+            onSubmitInteractionAnswers={onSubmitInteractionAnswers}
+            showComposer={false}
+            enableLiveTranscriptPolling={false}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    const otherButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Other"),
+    );
+    expect(otherButton).toBeTruthy();
+
+    await act(async () => {
+      otherButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const textarea = container.querySelector("textarea") as HTMLTextAreaElement | null;
+    expect(textarea).toBeTruthy();
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      )?.set;
+      valueSetter?.call(textarea, "Phase 1 plus docs");
+      textarea!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const submitButton = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Submit answers"),
+    );
+
+    await act(async () => {
+      submitButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onSubmitInteractionAnswers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "interaction-question-1",
+        kind: "ask_user_questions",
+      }),
+      [{ questionId: "scope", optionIds: [], otherText: "Phase 1 plus docs" }],
     );
 
     act(() => {

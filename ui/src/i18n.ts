@@ -14,12 +14,12 @@ export const LOCALE_STORAGE_KEY = "paperclip.locale";
 
 function resolveDetectionOrder() {
   if (typeof document === "undefined") {
-    return ["querystring", "localStorage", "navigator", "htmlTag"] as const;
+    return ["querystring", "localStorage", "htmlTag"] as const;
   }
 
   return document.documentElement.dataset.uiLocaleSource === "request"
     ? ["querystring", "localStorage", "htmlTag", "navigator"] as const
-    : ["querystring", "localStorage", "navigator", "htmlTag"] as const;
+    : ["querystring", "localStorage", "htmlTag"] as const;
 }
 
 function applyDocumentLanguage(language: string) {
@@ -27,32 +27,34 @@ function applyDocumentLanguage(language: string) {
   document.documentElement.lang = normalizeUiLocale(language);
 }
 
-void i18n
-  .use(Backend)
-  .use(LanguageDetector)
-  .use(initReactI18next)
-  .init({
-    fallbackLng: DEFAULT_UI_LOCALE,
-    supportedLngs: [...SUPPORTED_UI_LOCALES],
-    load: "currentOnly",
-    defaultNS: "common",
-    ns: ["common"],
-    keySeparator: false,
-    nsSeparator: false,
-    returnNull: false,
-    interpolation: {
-      escapeValue: false,
-    },
-    backend: {
-      loadPath: "/locales/{{lng}}/common.json",
-    },
-    detection: {
-      order: [...resolveDetectionOrder()],
-      caches: ["localStorage"],
-      lookupLocalStorage: LOCALE_STORAGE_KEY,
-      convertDetectedLanguage: convertDetectedUiLocale,
-    },
-  });
+if (!i18n.isInitialized) {
+  void i18n
+    .use(Backend)
+    .use(LanguageDetector)
+    .use(initReactI18next)
+    .init({
+      fallbackLng: DEFAULT_UI_LOCALE,
+      supportedLngs: [...SUPPORTED_UI_LOCALES],
+      load: "currentOnly",
+      defaultNS: "common",
+      ns: ["common"],
+      keySeparator: false,
+      nsSeparator: false,
+      returnNull: false,
+      interpolation: {
+        escapeValue: false,
+      },
+      backend: {
+        loadPath: "/locales/{{lng}}/common.json",
+      },
+      detection: {
+        order: [...resolveDetectionOrder()],
+        caches: ["localStorage"],
+        lookupLocalStorage: LOCALE_STORAGE_KEY,
+        convertDetectedLanguage: convertDetectedUiLocale,
+      },
+    });
+}
 
 applyDocumentLanguage(i18n.resolvedLanguage ?? i18n.language);
 i18n.on("languageChanged", applyDocumentLanguage);
