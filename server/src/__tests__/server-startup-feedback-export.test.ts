@@ -35,7 +35,9 @@ const {
     start: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
   };
-  const embeddedPostgresCtorMock = vi.fn(() => embeddedPostgresInstanceMock);
+  const embeddedPostgresCtorMock = vi.fn(function EmbeddedPostgresMock() {
+    return embeddedPostgresInstanceMock;
+  });
   const ensurePostgresDatabaseMock = vi.fn(async () => "existing");
   const feedbackExportServiceMock = {
     flushPendingFeedbackTraces: vi.fn(async () => ({ attempted: 0, sent: 0, failed: 0 })),
