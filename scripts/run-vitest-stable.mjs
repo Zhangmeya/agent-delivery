@@ -60,7 +60,6 @@ const generalGroupNames = [generalServerGroupName, generalWorkspacesAGroupName, 
 const serializedServerVitestArgs = [
   "--no-file-parallelism",
   "--maxWorkers=1",
-  "--minWorkers=1",
 ];
 
 function quoteCmdArg(value) {
@@ -342,7 +341,7 @@ function runSerializedSuites(routeTests, shardIndex, shardCount) {
         "@penclipai/server",
         routeTest.repoPath,
         "--pool=forks",
-        "--poolOptions.forks.isolate=true",
+        "--isolate",
       ],
       routeTest.repoPath,
     );

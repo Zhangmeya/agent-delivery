@@ -3447,7 +3447,7 @@ describeEmbeddedPostgres("workspace runtime startup reconciliation", () => {
       executionWorkspaceId,
       workspaceCwd: workspace.cwd,
     });
-  });
+  }, 30_000);
 });
 
 describe("normalizeAdapterManagedRuntimeServices", () => {

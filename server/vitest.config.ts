@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    include: ["src/**/*.test.ts"],
     globalSetup: ["../packages/db/src/test-embedded-postgres-global-setup.ts"],
     hookTimeout: 30_000,
     teardownTimeout: 30_000,
@@ -11,13 +12,6 @@ export default defineConfig({
     maxWorkers: 1,
     minWorkers: 1,
     pool: "forks",
-    poolOptions: {
-      forks: {
-        isolate: true,
-        maxForks: 1,
-        minForks: 1,
-      },
-    },
     sequence: {
       concurrent: false,
       hooks: "list",
