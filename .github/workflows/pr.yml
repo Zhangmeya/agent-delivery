@@ -311,8 +311,9 @@ jobs:
       # also requires a clean working tree, so any in-place lockfile churn
       # from `pnpm install --frozen-lockfile` must be reverted first — unless
       # the policy job uploaded a regenerated lockfile (manifest-only PRs),
-      # in which case we keep the artifact-restored copy so the workspace
-      # build sees a lockfile that matches the manifest.
+      # in which case the already-installed node_modules reflect the
+      # artifact-restored lockfile and the CI-only lockfile replacement is
+      # hidden from release.sh's clean-tree check.
       - name: Release canary dry run via release.sh internal build
         env:
           RELEASE_REMOTE: origin
@@ -321,6 +322,8 @@ jobs:
           git checkout -B master HEAD
           if [ "$USED_ARTIFACT_LOCKFILE" != "1" ]; then
             git checkout -- pnpm-lock.yaml
+          else
+            git update-index --assume-unchanged pnpm-lock.yaml
           fi
           ./scripts/release.sh canary --skip-verify --dry-run
 
