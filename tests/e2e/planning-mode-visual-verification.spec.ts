@@ -29,16 +29,41 @@ test("captures planning mode UI for desktop and mobile", async ({ page }) => {
     await expect(html).toHaveAttribute("lang", "en");
   }
 
-  await expect(page.locator("h3", { hasText: "Name your company" })).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator("h3", { hasText: /Name your company|为你的公司命名/ })).toBeVisible({ timeout: 5_000 });
 
   await page.locator('input[placeholder="Acme Corp"]').fill(companyName);
   await page.getByRole("button", { name: "Next" }).click();
 
-  await expect(page.locator("h3", { hasText: "Create your first agent" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("h3", { hasText: /Create your first agent|创建首个智能体/ })).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('input[placeholder="CEO"]')).toHaveValue(AGENT_NAME);
-  await page.getByRole("button", { name: "Next" }).click();
 
-  await expect(page.locator("h3", { hasText: "Give it something to do" })).toBeVisible({ timeout: 30_000 });
+  if (SKIP_LLM) {
+    await page.route("**/api/companies/*/adapters/*/test-environment", async (route) => {
+      const adapterType = route.request().url().match(/\/adapters\/([^/]+)\/test-environment/)?.[1] ?? "unknown";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          adapterType,
+          status: "pass",
+          testedAt: new Date().toISOString(),
+          checks: [
+            {
+              code: "e2e_skip_llm_adapter_probe",
+              level: "info",
+              message: "Live adapter probe skipped for the skip-LLM planning visual e2e.",
+            },
+          ],
+        }),
+      });
+    });
+  }
+
+  const agentStepNextButton = page.getByRole("button", { name: "Next" });
+  await expect(agentStepNextButton).toBeEnabled({ timeout: 30_000 });
+  await agentStepNextButton.click();
+
+  await expect(page.locator("h3", { hasText: /Give it something to do|给它一项任务/ })).toBeVisible({ timeout: 30_000 });
   const baseUrl = page.url().split("/").slice(0, 3).join("/");
 
   if (SKIP_LLM) {
@@ -78,8 +103,8 @@ test("captures planning mode UI for desktop and mobile", async ({ page }) => {
   await taskTitleInput.fill(TASK_TITLE);
   await page.getByRole("button", { name: "Next" }).click();
 
-  await expect(page.locator("h3", { hasText: "Ready to launch" })).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Create & Open Task" }).click();
+  await expect(page.locator("h3", { hasText: /Ready to launch|准备启动/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: /Create & Open Issue|创建并打开任务/ }).click();
   await expect(page).toHaveURL(/\/issues\//, { timeout: 30_000 });
 
   const openedIssueUrl = page.url();
