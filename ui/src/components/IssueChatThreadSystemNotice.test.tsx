@@ -73,6 +73,7 @@ const { i18nLanguageRef, i18nTranslations } = vi.hoisted(() => ({
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>();
+  const enCommon = (await import("../../public/locales/en/common.json")).default as Record<string, string>;
   const interpolate = (text: string, options?: Record<string, unknown>) =>
     text.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""));
   return {
@@ -80,7 +81,7 @@ vi.mock("react-i18next", async (importOriginal) => {
     useTranslation: () => ({
       t: (key: string, options?: Record<string, unknown>) => {
         const translated = i18nTranslations[i18nLanguageRef.current]?.[key];
-        const fallback = typeof options?.defaultValue === "string" ? options.defaultValue : key;
+        const fallback = typeof options?.defaultValue === "string" ? options.defaultValue : enCommon[key] ?? key;
         return interpolate(translated ?? fallback, options);
       },
       i18n: {
