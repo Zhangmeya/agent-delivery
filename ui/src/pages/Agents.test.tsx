@@ -8,6 +8,7 @@ import type { Agent } from "@penclipai/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../context/ToastContext";
 import { Agents } from "./Agents";
+import type { AgentOrgChainHealth } from "@paperclipai/shared";
 
 const mockAgentsApi = vi.hoisted(() => ({
   list: vi.fn(),
@@ -121,6 +122,34 @@ function makeAgent(overrides: Partial<Agent>): Agent {
   };
 }
 
+const invalidOrgChainHealth: AgentOrgChainHealth = {
+  status: "invalid_org_chain",
+  reason: "terminated_ancestor",
+  fullChain: [
+    {
+      id: "agent-1",
+      companyId: "company-1",
+      name: "Alpha",
+      status: "active",
+      reportsTo: "manager-1",
+      depth: 0,
+      relation: "self",
+    },
+    {
+      id: "manager-1",
+      companyId: "company-1",
+      name: "Terminated Manager",
+      status: "terminated",
+      reportsTo: null,
+      depth: 1,
+      relation: "ancestor",
+    },
+  ],
+  firstInvalidAncestor: { id: "manager-1", name: "Terminated Manager", status: "terminated" },
+  invalidAncestors: [{ id: "manager-1", name: "Terminated Manager", status: "terminated" }],
+  repairGuidance: "Alpha reports through terminated ancestor Terminated Manager.",
+};
+
 async function flushReact() {
   await act(async () => {
     await Promise.resolve();
@@ -156,7 +185,11 @@ describe("Agents", () => {
     });
 
     mockAgentsApi.list.mockResolvedValue([
-      makeAgent({ adapterConfig: { model: "gpt-5.4" } }),
+      makeAgent({
+        adapterConfig: { model: "gpt-5.4" },
+        // Old enough that relativeTime() falls back to an absolute date string.
+        lastHeartbeatAt: new Date("2026-01-15T00:00:00Z"),
+      }),
     ]);
     mockAgentsApi.org.mockResolvedValue([
       {

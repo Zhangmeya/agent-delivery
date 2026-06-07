@@ -168,6 +168,7 @@ function project(overrides: Partial<Project> = {}): Project {
     leadAgentId: null,
     targetDate: null,
     color: "#14b8a6",
+    icon: null,
     env: null,
     pauseReason: null,
     pausedAt: null,
@@ -339,7 +340,7 @@ describe("ExecutionWorkspaceDetail plugin slots", () => {
 
     const tabLabels = Array.from(container.querySelectorAll("[data-tab-value]")).map((tab) => tab.textContent);
     expect(tabLabels).toEqual([
-      "Issues",
+      "Tasks",
       "Services",
       "Changes",
       "Configuration",

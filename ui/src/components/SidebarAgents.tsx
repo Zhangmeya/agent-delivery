@@ -11,6 +11,7 @@ import {
   PlayCircle,
   Plus,
   Users,
+  AlertTriangle,
 } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
 import { useDialogActions } from "../context/DialogContext";
@@ -291,6 +292,25 @@ export function SidebarAgents() {
     { value: "recent", label: t("Recent", { defaultValue: "Recent" }) },
   ], [t]);
 
+  // IA Phase 5 (streamlined): if any agent has a live run, show only those
+  // active agents. Otherwise fall back to up to RECENT_AGENT_LIMIT agents. Either
+  // way a "See all agents" link is shown so the full list is always reachable.
+  // Classic mode (PAP-89, flag OFF) restores the show-all behavior.
+  const runningAgents = useMemo(
+    () => sortedAgents.filter((agent: Agent) => (liveCountByAgent.get(agent.id) ?? 0) > 0),
+    [sortedAgents, liveCountByAgent],
+  );
+  const hasActiveAgents = runningAgents.length > 0;
+  const displayedAgents = !streamlined
+    ? sortedAgents
+    : hasActiveAgents
+      ? runningAgents
+      : sortedAgents.slice(0, RECENT_AGENT_LIMIT);
+  // Always expose "See all agents" whenever the displayed list is a subset of all
+  // agents, so users never lose the entry point to the full list. In classic mode
+  // every agent is already shown, so the link is unnecessary.
+  const showSeeAllLink = streamlined && sortedAgents.length > 0;
+
   const agentMatch = location.pathname.match(/^\/(?:[^/]+\/)?agents\/([^/]+)(?:\/([^/]+))?/);
   const activeAgentId = agentMatch?.[1] ?? null;
   const activeTab = agentMatch?.[2] ?? null;
@@ -429,7 +449,7 @@ export function SidebarAgents() {
         onRadioValueChange: persistSortMode,
       }}
     >
-      {sortedAgents.map((agent: Agent) => {
+      {displayedAgents.map((agent: Agent) => {
         const runCount = liveCountByAgent.get(agent.id) ?? 0;
         return (
           <SidebarAgentItem
@@ -447,6 +467,19 @@ export function SidebarAgents() {
           />
         );
       })}
+      {showSeeAllLink && (
+        <Link
+          to="/agents/all"
+          state={SIDEBAR_SCROLL_RESET_STATE}
+          onClick={() => {
+            if (isMobile) setSidebarOpen(false);
+          }}
+          className="flex items-center gap-2.5 px-3 py-1.5 pointer-coarse:py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+        >
+          <Users className="shrink-0 h-3.5 w-3.5" />
+          <span>See all agents</span>
+        </Link>
+      )}
     </SidebarSection>
   );
 }

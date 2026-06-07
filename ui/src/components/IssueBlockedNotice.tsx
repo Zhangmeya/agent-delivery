@@ -18,6 +18,7 @@ import { isAssignedBacklogBlocker } from "../lib/issue-blockers";
 import {
   deriveActiveRecoveryDisplayState,
   RECOVERY_CHIP_DEFAULT_TONE,
+  recoveryChipLabel,
 } from "../lib/recovery-display";
 
 function BlockerRecoveryIndicator({ action }: { action: IssueRecoveryAction }) {
@@ -31,6 +32,7 @@ function BlockerRecoveryIndicator({ action }: { action: IssueRecoveryAction }) {
     <span
       data-testid="issue-blocked-notice-recovery-indicator"
       data-recovery-state={state}
+      data-recovery-kind={action.kind}
       role="status"
       aria-label={label}
       title={t("issueBlocked.recoveryIndicatorTitle", {

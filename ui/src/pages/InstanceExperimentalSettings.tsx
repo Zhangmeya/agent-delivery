@@ -206,6 +206,8 @@ export function InstanceExperimentalSettings() {
 
   const enableEnvironments = experimentalQuery.data?.enableEnvironments === true;
   const enableIsolatedWorkspaces = experimentalQuery.data?.enableIsolatedWorkspaces === true;
+  const enableStreamlinedLeftNavigation =
+    experimentalQuery.data?.enableStreamlinedLeftNavigation === true;
   const enableIssuePlanDecompositions =
     experimentalQuery.data?.enableIssuePlanDecompositions === true;
   const enableCloudSync = experimentalQuery.data?.enableCloudSync === true;

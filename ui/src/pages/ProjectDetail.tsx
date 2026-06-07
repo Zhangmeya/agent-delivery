@@ -19,6 +19,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { ProjectProperties, type ProjectConfigFieldKey, type ProjectFieldSaveState } from "../components/ProjectProperties";
 import { InlineEditor } from "../components/InlineEditor";
 import { StatusBadge } from "../components/StatusBadge";
+import { ProjectTile } from "../components/ProjectTile";
 import { BudgetPolicyCard } from "../components/BudgetPolicyCard";
 import { IssuesList } from "../components/IssuesList";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -30,6 +31,9 @@ import { displaySeededName } from "../lib/seeded-display";
 import { projectRouteRef } from "../lib/utils";
 import { collectLiveIssueIds } from "../lib/liveIssueIds";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/tabs";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
@@ -106,30 +110,34 @@ function OverviewContent({
   );
 }
 
-/* ── Color picker popover ── */
+/* ── Combined icon + color picker popover (PAP-72 / PAP-68 part 4) ── */
 
-function ColorPicker({
-  currentColor,
-  onSelect,
+const DEFAULT_PROJECT_ICON = "folder";
+
+function ProjectTilePicker({
+  color,
+  icon,
+  onSelectIcon,
+  onSelectColor,
 }: {
-  currentColor: string;
-  onSelect: (color: string) => void;
+  color: string | null;
+  icon: string | null;
+  onSelectIcon: (icon: string) => void;
+  onSelectColor: (color: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
 
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
+  const filteredIcons = useMemo(() => {
+    const entries = PROJECT_ICON_NAMES.map((name) => [name, PROJECT_ICONS[name]] as const);
+    if (!search) return entries;
+    const q = search.toLowerCase();
+    return entries.filter(([name]) => name.includes(q));
+  }, [search]);
 
+  // Keep the popover open across selections so the user can pick both an icon
+  // and a color in one pass; reset the search when it closes.
   return (
     <div className="relative" ref={ref}>
       <button
@@ -141,15 +149,27 @@ function ColorPicker({
       {open && (
         <div className="absolute top-full left-0 mt-2 p-2 bg-popover border border-border rounded-lg shadow-lg z-50 w-max">
           <div className="grid grid-cols-5 gap-1.5">
-            {PROJECT_COLORS.map((color) => (
+            {/* Neutral / reset-to-gray option */}
+            <button
+              type="button"
+              onClick={() => onSelectColor(null)}
+              className={`h-6 w-6 cursor-pointer transition-[transform,box-shadow] duration-150 hover:scale-110 ${
+                color === null
+                  ? "ring-2 ring-foreground ring-offset-1 ring-offset-background rounded-md"
+                  : ""
+              }`}
+              aria-label="Reset to neutral gray"
+              title="Neutral (default)"
+            >
+              <ProjectTile color={null} size="sm" />
+            </button>
+            {PROJECT_COLORS.map((swatch) => (
               <button
-                key={color}
-                onClick={() => {
-                  onSelect(color);
-                  setOpen(false);
-                }}
+                key={swatch}
+                type="button"
+                onClick={() => onSelectColor(swatch)}
                 className={`h-6 w-6 rounded-md cursor-pointer transition-[transform,box-shadow] duration-150 hover:scale-110 ${
-                  color === currentColor
+                  swatch === color
                     ? "ring-2 ring-foreground ring-offset-1 ring-offset-background"
                     : "hover:ring-2 hover:ring-foreground/30"
                 }`}
@@ -162,8 +182,8 @@ function ColorPicker({
             ))}
           </div>
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -721,9 +741,11 @@ export function ProjectDetail() {
       ) : null}
       <div className="flex items-start gap-3">
         <div className="h-7 flex items-center">
-          <ColorPicker
-            currentColor={project.color ?? "#6366f1"}
-            onSelect={(color) => updateProject.mutate({ color })}
+          <ProjectTilePicker
+            color={project.color ?? null}
+            icon={project.icon ?? null}
+            onSelectIcon={(icon) => updateProject.mutate({ icon })}
+            onSelectColor={(color) => updateProject.mutate({ color })}
           />
         </div>
         <div className="min-w-0 space-y-2">
