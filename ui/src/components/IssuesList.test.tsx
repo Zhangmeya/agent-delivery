@@ -22,7 +22,7 @@ const translations: Record<string, string> = {
   "Parent issue": "父任务",
   "Tags": "标签",
   "Last updated": "最后更新",
-  "Issue state chip on the left edge.": "左侧边缘的任务状态标识。",
+  "Issue state chip on the left edge.": "Task state chip on the left edge.",
   "Ticket identifier like PAP-1009.": "像 PAP-1009 这样的任务标识。",
   "Assigned agent or board user.": "已分配的智能体或董事会用户。",
   "Linked project pill with its color.": "带项目颜色的关联项目标签。",
@@ -1511,7 +1511,7 @@ describe("IssuesList", () => {
     await waitForAssertion(() => {
       expect(document.body.textContent).toContain("桌面端任务行");
       expect(document.body.textContent).toContain("状态");
-      expect(document.body.textContent).toContain("左侧边缘的任务状态标识。");
+      expect(document.body.textContent).toContain("Task state chip on the left edge.");
       expect(document.body.textContent).toContain("恢复默认值");
     });
 

@@ -431,7 +431,9 @@ function CommentCard({
         </span>
       </div>
       {isDeleted ? (
-        <div className="text-sm italic text-muted-foreground">Comment deleted</div>
+        <div className="text-sm italic text-muted-foreground">
+          {t("commentThread.deleted", { defaultValue: "Comment deleted" })}
+        </div>
       ) : (
         <MarkdownBody className="text-sm" softBreaks>{comment.body}</MarkdownBody>
       )}

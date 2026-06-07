@@ -1712,7 +1712,7 @@ describe("IssueDetail", () => {
       mode: "restore",
       releasePolicy: { strategy: "manual" },
     });
-    expect(container.textContent).toContain("Restore issues cancelled by this subtree operation so work can resume.");
+    expect(container.textContent).toContain("Restore tasks cancelled by this subtree operation so work can resume.");
     expect(container.textContent).toContain("Cancelled child");
 
     const restoreApplyButton = Array.from(container.querySelectorAll("button"))

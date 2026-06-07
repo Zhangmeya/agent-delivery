@@ -67,24 +67,24 @@ export function CompanySettingsSidebar() {
 
       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide px-3 py-2">
         <div className="flex flex-col gap-0.5">
-          <SidebarNavItem to="/company/settings" label="General" icon={SlidersHorizontal} end />
+          <SidebarNavItem to="/company/settings" label={t("General")} icon={SlidersHorizontal} end />
           <SidebarNavItem
             to="/company/settings/environments"
-            label="Environments"
+            label={t("Environments")}
             icon={MonitorCog}
             end
           />
           {showCloudUpstream ? (
             <SidebarNavItem
               to="/company/settings/cloud-upstream"
-              label="Cloud upstream"
+              label={t("Cloud upstream")}
               icon={CloudUpload}
               end
             />
           ) : null}
           <SidebarNavItem
             to="/company/settings/members"
-            label="Members"
+            label={t("Members")}
             icon={Users}
             badge={badges?.joinRequests ?? 0}
             end
@@ -100,8 +100,8 @@ export function CompanySettingsSidebar() {
                 end
               />
             ))}
-          <SidebarNavItem to="/company/settings/invites" label="Invites" icon={MailPlus} end />
-          <SidebarNavItem to="/company/settings/secrets" label="Secrets" icon={KeyRound} end />
+          <SidebarNavItem to="/company/settings/invites" label={t("Invites")} icon={MailPlus} end />
+          <SidebarNavItem to="/company/settings/secrets" label={t("Secrets")} icon={KeyRound} end />
         </div>
       </nav>
     </aside>

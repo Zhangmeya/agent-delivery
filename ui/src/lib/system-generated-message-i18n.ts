@@ -87,6 +87,10 @@ const SYSTEM_GENERATED_TEXT: Record<string, TranslationEntry> = {
     key: "systemGenerated.runEvent.detachedProcessActivityCleared",
     defaultValue: "Detached child process reported activity; cleared detached warning",
   },
+  "Missing-comment retry suppressed because the agent is not invokable": {
+    key: "systemGenerated.runEvent.missingCommentRetrySuppressedAgentNotInvokable",
+    defaultValue: "Missing-comment retry suppressed because the agent is not invokable",
+  },
   "Run ended without an issue comment after one retry; no further comment wake will be queued": {
     key: "systemGenerated.runEvent.missingCommentRetryExhausted",
     defaultValue: "Run ended without an issue comment after one retry; no further comment wake will be queued",
@@ -103,9 +107,17 @@ const SYSTEM_GENERATED_TEXT: Record<string, TranslationEntry> = {
     key: "systemGenerated.runEvent.maxTurnContinuationPolicyDisabled",
     defaultValue: "Max-turn continuation suppressed because the policy is disabled",
   },
+  "Process-loss retry suppressed because the agent is not invokable": {
+    key: "systemGenerated.runEvent.processLossRetrySuppressedAgentNotInvokable",
+    defaultValue: "Process-loss retry suppressed because the agent is not invokable",
+  },
   "Cancelled because the target issue no longer exists": {
     key: "systemGenerated.runEvent.cancelledTargetIssueMissing",
     defaultValue: "Cancelled because the target issue no longer exists",
+  },
+  "Source-resolved watchdog fold finalized stale active run": {
+    key: "systemGenerated.runEvent.sourceResolvedWatchdogFoldFinalized",
+    defaultValue: "Source-resolved watchdog fold finalized stale active run",
   },
   "run started": {
     key: "systemGenerated.runEvent.runStarted",
@@ -118,6 +130,25 @@ const SYSTEM_GENERATED_TEXT: Record<string, TranslationEntry> = {
   "run cancelled": {
     key: "systemGenerated.runEvent.runCancelled",
     defaultValue: "run cancelled",
+  },
+  "run failed": {
+    key: "systemGenerated.runEvent.runFailed",
+    defaultValue: "run failed",
+  },
+  "run succeeded": {
+    key: "systemGenerated.runEvent.runSucceeded",
+    defaultValue: "run succeeded",
+  },
+  "run timed_out": {
+    key: "systemGenerated.runEvent.runTimedOut",
+    defaultValue: "run timed_out",
+  },
+};
+
+const RUN_EVENT_STREAM_LABELS: Record<string, TranslationEntry> = {
+  system: {
+    key: "systemGenerated.runEvent.stream.system",
+    defaultValue: "system",
   },
 };
 
@@ -233,7 +264,47 @@ export function translateSystemGeneratedText<T extends string | null | undefined
     });
   }
 
+  const boundedRetryExhaustedMatch = /^Bounded retry exhausted after (\d+) scheduled attempts; no further automatic retry will be queued$/.exec(trimmed);
+  if (boundedRetryExhaustedMatch) {
+    const attempts = boundedRetryExhaustedMatch[1] ?? "";
+    return t("systemGenerated.runEvent.boundedRetryExhausted", {
+      attempts,
+      defaultValue: `Bounded retry exhausted after ${attempts} scheduled attempts; no further automatic retry will be queued`,
+    });
+  }
+
+  const reusedMaxTurnContinuationMatch = /^Reused existing max-turn continuation (\d+)\/(\d+)$/.exec(trimmed);
+  if (reusedMaxTurnContinuationMatch) {
+    const attempt = reusedMaxTurnContinuationMatch[1] ?? "";
+    const maxAttempts = reusedMaxTurnContinuationMatch[2] ?? "";
+    return t("systemGenerated.runEvent.reusedMaxTurnContinuation", {
+      attempt,
+      maxAttempts,
+      defaultValue: `Reused existing max-turn continuation ${attempt}/${maxAttempts}`,
+    });
+  }
+
+  const scheduledBoundedRetryMatch = /^Scheduled bounded retry (\d+)\/(\d+) for (.+)$/.exec(trimmed);
+  if (scheduledBoundedRetryMatch) {
+    const attempt = scheduledBoundedRetryMatch[1] ?? "";
+    const maxAttempts = scheduledBoundedRetryMatch[2] ?? "";
+    const dueAt = scheduledBoundedRetryMatch[3] ?? "";
+    return t("systemGenerated.runEvent.scheduledBoundedRetry", {
+      attempt,
+      maxAttempts,
+      dueAt,
+      defaultValue: `Scheduled bounded retry ${attempt}/${maxAttempts} for ${dueAt}`,
+    });
+  }
+
   return text;
+}
+
+export function translateRunEventStream(t: TFunction, stream: string | null | undefined): string {
+  if (!stream) return "";
+  const entry = RUN_EVENT_STREAM_LABELS[stream];
+  if (!entry) return stream;
+  return t(entry.key, { defaultValue: entry.defaultValue });
 }
 
 export function translateSystemGeneratedMarkdownText(text: string, t: TFunction): string {
@@ -259,6 +330,9 @@ function matchesKnownSystemGeneratedText(text: string): boolean {
   if (SYSTEM_GENERATED_TEXT[text]) return true;
   if (/^Scheduled retry suppressed because issue reached terminal status \(([^)]+)\)$/.test(text)) return true;
   if (/^Cancelled because issue reached terminal status \(([^)]+)\) before the queued run could start$/.test(text)) return true;
+  if (/^Bounded retry exhausted after \d+ scheduled attempts; no further automatic retry will be queued$/.test(text)) return true;
+  if (/^Reused existing max-turn continuation \d+\/\d+$/.test(text)) return true;
+  if (/^Scheduled bounded retry \d+\/\d+ for .+$/.test(text)) return true;
   return /^Scheduled max-turn continuation suppressed because issue is no longer in_progress \(current status: ([^)]+)\)$/.test(text);
 }
 

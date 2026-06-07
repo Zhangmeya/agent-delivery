@@ -36,6 +36,13 @@ describe("displaySeededName", () => {
     });
   });
 
+  it("maps onboarding project names to the onboarding translation key", () => {
+    expect(displaySeededName("Onboarding")).toBe("Onboarding");
+    expect(translateInstantMock).toHaveBeenCalledWith("seededName.onboarding", {
+      defaultValue: "Onboarding",
+    });
+  });
+
   it("returns non-seeded names unchanged", () => {
     expect(displaySeededName("Founding Engineer")).toBe("Founding Engineer");
     expect(translateInstantMock).not.toHaveBeenCalled();

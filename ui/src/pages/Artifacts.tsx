@@ -1,44 +1,178 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Package, Search, X } from "lucide-react";
-import { artifactsApi, type ArtifactKindFilter } from "../api/artifacts";
+import { useTranslation } from "react-i18next";
+import { ArrowLeft, Check, Layers, Package, Search, X } from "lucide-react";
+import type { To } from "react-router-dom";
+import {
+  artifactsApi,
+  type ArtifactGroupBy,
+  type ArtifactKindFilter,
+} from "../api/artifacts";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { ArtifactCard } from "../components/artifacts/ArtifactCard";
+import { ArtifactGroupCard } from "../components/artifacts/ArtifactGroupCard";
+import { useSearchParams, Link } from "@/lib/router";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const ARTIFACTS_PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 250;
 
-const KIND_FILTERS: { value: ArtifactKindFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "image", label: "Images" },
-  { value: "video", label: "Videos" },
-  { value: "document", label: "Documents" },
-  { value: "text", label: "Text" },
-  { value: "file", label: "Files" },
+export const ARTIFACT_KIND_FILTERS: { value: ArtifactKindFilter; label: string; labelKey: string }[] = [
+  { value: "all", label: "All", labelKey: "artifacts.filter.all" },
+  { value: "image", label: "Images", labelKey: "artifacts.filter.images" },
+  { value: "video", label: "Videos", labelKey: "artifacts.filter.videos" },
+  { value: "document", label: "Documents", labelKey: "artifacts.filter.documents" },
+  { value: "text", label: "Text", labelKey: "artifacts.filter.text" },
+  { value: "file", label: "Files", labelKey: "artifacts.filter.files" },
 ];
 
+export const ARTIFACT_GROUP_OPTIONS: { value: ArtifactGroupBy; label: string; labelKey: string }[] = [
+  { value: "none", label: "None", labelKey: "artifacts.group.none" },
+  { value: "task", label: "Task", labelKey: "artifacts.group.task" },
+  { value: "parent_task", label: "Parent task", labelKey: "artifacts.group.parentTask" },
+];
+
+const KIND_VALUES = new Set(ARTIFACT_KIND_FILTERS.map((filter) => filter.value));
+
+function parseGroupBy(value: string | null): ArtifactGroupBy {
+  if (value === "none" || value === "task" || value === "parent_task") return value;
+  return "task";
+}
+
+function parseKind(value: string | null): ArtifactKindFilter {
+  return value && KIND_VALUES.has(value as ArtifactKindFilter)
+    ? (value as ArtifactKindFilter)
+    : "all";
+}
+
+export function artifactGroupByLabel(value: ArtifactGroupBy): string {
+  return ARTIFACT_GROUP_OPTIONS.find((option) => option.value === value)?.label ?? "None";
+}
+
+function artifactGroupByTranslationKey(value: ArtifactGroupBy): string {
+  return ARTIFACT_GROUP_OPTIONS.find((option) => option.value === value)?.labelKey ?? "artifacts.group.none";
+}
+
 export function Artifacts() {
+  const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const [kind, setKind] = useState<ArtifactKindFilter>("all");
-  const [draftQuery, setDraftQuery] = useState("");
-  const [query, setQuery] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const kind = parseKind(searchParams.get("kind"));
+  const query = searchParams.get("q") ?? "";
+  const groupBy = parseGroupBy(searchParams.get("groupBy"));
+  const groupIssueId = searchParams.get("groupIssueId") ?? undefined;
+
+  const [draftQuery, setDraftQuery] = useState(query);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    setBreadcrumbs([{ label: "Artifacts" }]);
-  }, [setBreadcrumbs]);
+  const grouping = groupBy !== "none";
+  const viewingStackList = grouping && !groupIssueId;
+  const viewingSelectedStack = grouping && !!groupIssueId;
 
+  // Keep the search box in sync when the committed query changes from outside
+  // (e.g. back/forward navigation or a shared URL), without clobbering in-flight
+  // typing (which leaves `query` unchanged until the debounce commits).
   useEffect(() => {
-    const handle = window.setTimeout(() => setQuery(draftQuery.trim()), SEARCH_DEBOUNCE_MS);
+    setDraftQuery((prev) => (prev.trim() === query ? prev : query));
+  }, [query]);
+
+  // Debounce the search box into the `q` URL param so searches are shareable.
+  useEffect(() => {
+    const trimmed = draftQuery.trim();
+    if (trimmed === query) return;
+    const handle = window.setTimeout(() => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (trimmed) next.set("q", trimmed);
+          else next.delete("q");
+          return next;
+        },
+        { replace: true },
+      );
+    }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [draftQuery]);
+  }, [draftQuery, query, setSearchParams]);
+
+  const updateParams = useCallback(
+    (mutate: (next: URLSearchParams) => void) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        mutate(next);
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
+  const selectKind = useCallback(
+    (value: ArtifactKindFilter) => {
+      updateParams((next) => {
+        if (value === "all") next.delete("kind");
+        else next.set("kind", value);
+      });
+    },
+    [updateParams],
+  );
+
+  const selectGroupBy = useCallback(
+    (value: ArtifactGroupBy) => {
+      updateParams((next) => {
+        // Switching the grouping mode always returns to the stack list.
+        next.delete("groupIssueId");
+        if (value === "task") next.delete("groupBy");
+        else next.set("groupBy", value);
+      });
+    },
+    [updateParams],
+  );
+
+  // Build a relative `To` that preserves the active filters/search while
+  // changing only the grouping selection. A bare query string keeps the current
+  // pathname (the company-prefixed /artifacts route) and stays linkable.
+  const buildTo = useCallback(
+    (mutate: (next: URLSearchParams) => void): To => {
+      const next = new URLSearchParams(searchParams);
+      mutate(next);
+      const serialized = next.toString();
+      return serialized ? `?${serialized}` : "?";
+    },
+    [searchParams],
+  );
+
+  const stackTo = useCallback(
+    (issueId: string): To =>
+      buildTo((next) => {
+        if (groupBy === "task") next.delete("groupBy");
+        else if (groupBy !== "none") next.set("groupBy", groupBy);
+        next.set("groupIssueId", issueId);
+      }),
+    [buildTo, groupBy],
+  );
+
+  const backToStacksTo = useMemo<To>(
+    () =>
+      buildTo((next) => {
+        if (groupBy === "task") next.delete("groupBy");
+        next.delete("groupIssueId");
+      }),
+    [buildTo, groupBy],
+  );
 
   const {
     data,
@@ -49,11 +183,13 @@ export function Artifacts() {
     fetchNextPage,
     error,
   } = useInfiniteQuery({
-    queryKey: queryKeys.artifacts.list(selectedCompanyId!, kind, query),
+    queryKey: queryKeys.artifacts.list(selectedCompanyId!, kind, query, groupBy, groupIssueId),
     queryFn: ({ pageParam }) =>
       artifactsApi.list(selectedCompanyId!, {
         kind,
         q: query || undefined,
+        groupBy,
+        groupIssueId,
         limit: ARTIFACTS_PAGE_SIZE,
         cursor: pageParam,
       }),
@@ -75,11 +211,45 @@ export function Artifacts() {
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const artifacts = useMemo(() => data?.pages.flatMap((page) => page.artifacts) ?? [], [data]);
+  const groups = useMemo(
+    () => data?.pages.flatMap((page) => page.groups ?? []) ?? [],
+    [data],
+  );
+  const selectedGroup = useMemo(
+    () => data?.pages.map((page) => page.selectedGroup).find(Boolean) ?? null,
+    [data],
+  );
   const searching = query.length > 0;
 
+  useEffect(() => {
+    if (viewingSelectedStack && selectedGroup) {
+      setBreadcrumbs([
+        { label: t("artifacts.title"), href: "/artifacts" },
+        { label: `${selectedGroup.issue.identifier} · ${selectedGroup.title}` },
+      ]);
+    } else {
+      setBreadcrumbs([{ label: t("artifacts.title") }]);
+    }
+  }, [setBreadcrumbs, t, viewingSelectedStack, selectedGroup]);
+
   if (!selectedCompanyId) {
-    return <EmptyState icon={Package} message="Select a company to view artifacts." />;
+    return <EmptyState icon={Package} message={t("artifacts.selectCompany")} />;
   }
+
+  const showGroupCards = viewingStackList;
+  const items = showGroupCards ? groups : artifacts;
+
+  const emptyMessage = showGroupCards
+    ? searching
+      ? t("artifacts.emptyStackSearch")
+      : t("artifacts.emptyStacks")
+    : searching
+      ? t("artifacts.emptySearch")
+      : viewingSelectedStack
+        ? t("artifacts.emptySelectedStack")
+        : kind === "all"
+          ? t("artifacts.emptyAll")
+          : t("artifacts.emptyKind");
 
   return (
     <div className="w-full max-w-6xl space-y-5">
@@ -89,15 +259,15 @@ export function Artifacts() {
           <Input
             value={draftQuery}
             onChange={(event) => setDraftQuery(event.currentTarget.value)}
-            placeholder="Search artifacts..."
-            aria-label="Search artifacts"
+            placeholder={t("artifacts.searchPlaceholder")}
+            aria-label={t("artifacts.searchAria")}
             className="h-9 pl-9 pr-9 text-sm"
           />
           {draftQuery.length > 0 ? (
             <button
               type="button"
               onClick={() => setDraftQuery("")}
-              aria-label="Clear artifact search"
+              aria-label={t("artifacts.clearSearch")}
               className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
@@ -105,56 +275,107 @@ export function Artifacts() {
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Filter artifacts by type">
-          {KIND_FILTERS.map((filter) => (
-            <button
-              key={filter.value}
-              type="button"
-              role="tab"
-              aria-selected={kind === filter.value}
-              onClick={() => setKind(filter.value)}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                kind === filter.value
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              )}
-            >
-              {filter.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label={t("artifacts.groupAria", {
+                  group: t(artifactGroupByTranslationKey(groupBy)),
+                  defaultValue: "Group artifacts (currently {{group}})",
+                })}
+                title={t("artifacts.groupTitle")}
+                data-testid="artifact-group-control"
+                data-group-by={groupBy}
+                className={cn("h-8 w-8 shrink-0", grouping && "bg-accent")}
+              >
+                <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuLabel>{t("artifacts.groupBy")}</DropdownMenuLabel>
+              {ARTIFACT_GROUP_OPTIONS.map((option) => (
+                <DropdownMenuItem
+                  key={option.value}
+                  data-testid={`artifact-group-option-${option.value}`}
+                  aria-selected={groupBy === option.value}
+                  onSelect={() => selectGroupBy(option.value)}
+                  className="justify-between"
+                >
+                  {t(option.labelKey)}
+                  {groupBy === option.value ? <Check className="h-3.5 w-3.5" /> : null}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label={t("artifacts.filterAria")}>
+            {ARTIFACT_KIND_FILTERS.map((filter) => (
+              <button
+                key={filter.value}
+                type="button"
+                role="tab"
+                aria-selected={kind === filter.value}
+                onClick={() => selectKind(filter.value)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  kind === filter.value
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+                {t(filter.labelKey)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {viewingSelectedStack ? (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Link
+            to={backToStacksTo}
+            data-testid="artifact-stack-back"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("artifacts.allStacks")}
+          </Link>
+          {selectedGroup ? (
+            <span className="truncate text-muted-foreground">
+              <span className="text-foreground/80">{selectedGroup.issue.identifier}</span>{" "}
+              {selectedGroup.title}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
 
       {isLoading ? (
         <PageSkeleton variant="list" />
-      ) : artifacts.length === 0 ? (
-        <EmptyState
-          icon={Package}
-          message={
-            searching
-              ? "No artifacts match this search."
-              : kind === "all"
-                ? "No artifacts yet. Outputs attached to issues will appear here."
-                : "No artifacts of this type yet."
-          }
-        />
+      ) : items.length === 0 ? (
+        <EmptyState icon={showGroupCards ? Layers : Package} message={emptyMessage} />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {artifacts.map((artifact) => (
-              <ArtifactCard key={`${artifact.source}:${artifact.id}`} artifact={artifact} />
-            ))}
+            {showGroupCards
+              ? groups.map((group) => (
+                  <ArtifactGroupCard key={group.id} group={group} to={stackTo(group.issue.id)} />
+                ))
+              : artifacts.map((artifact) => (
+                  <ArtifactCard key={`${artifact.source}:${artifact.id}`} artifact={artifact} />
+                ))}
           </div>
           <div ref={loadMoreRef} className="flex min-h-10 items-center justify-center pb-2 text-xs text-muted-foreground">
             {isFetchingNextPage
-              ? "Loading more artifacts..."
+              ? t("artifacts.loadingMore")
               : hasNextPage
                 ? null
                 : isFetching
-                  ? "Updating artifacts..."
+                  ? t("artifacts.updating")
                   : null}
           </div>
         </>

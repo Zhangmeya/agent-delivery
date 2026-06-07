@@ -254,6 +254,7 @@ export function InviteLandingPage() {
   const [error, setError] = useState<string | null>(null);
   const [authFeedback, setAuthFeedback] = useState<AuthFeedback | null>(null);
   const [autoAcceptStarted, setAutoAcceptStarted] = useState(false);
+  const authErrorId = "invite-auth-error";
 
   const healthQuery = useQuery({
     queryKey: queryKeys.health,
@@ -755,6 +756,7 @@ export function InviteLandingPage() {
                     <label className="block text-sm">
                       <span className="mb-1 block text-zinc-400">{t("Name", { defaultValue: "Name" })}</span>
                       <input
+                        id="invite-name"
                         name="name"
                         className={fieldClassName}
                         value={name}
@@ -763,6 +765,10 @@ export function InviteLandingPage() {
                           setAuthFeedback(null);
                         }}
                         autoComplete="name"
+                        required
+                        aria-required="true"
+                        aria-invalid={authFeedback?.tone === "error" ? true : undefined}
+                        aria-describedby={authFeedback ? authErrorId : undefined}
                         autoFocus
                       />
                     </label>
@@ -770,6 +776,7 @@ export function InviteLandingPage() {
                   <label className="block text-sm">
                     <span className="mb-1 block text-zinc-400">{t("Email", { defaultValue: "Email" })}</span>
                     <input
+                      id="invite-email"
                       name="email"
                       type="email"
                       className={fieldClassName}
@@ -778,13 +785,18 @@ export function InviteLandingPage() {
                         setEmail(event.target.value);
                         setAuthFeedback(null);
                       }}
-                      autoComplete="email"
+                      autoComplete="username"
+                      required
+                      aria-required="true"
+                      aria-invalid={authFeedback?.tone === "error" ? true : undefined}
+                      aria-describedby={authFeedback ? authErrorId : undefined}
                       autoFocus={authMode === "sign_in"}
                     />
                   </label>
                   <label className="block text-sm">
                     <span className="mb-1 block text-zinc-400">{t("Password", { defaultValue: "Password" })}</span>
                     <input
+                      id="invite-password"
                       name="password"
                       type="password"
                       className={fieldClassName}
@@ -794,10 +806,16 @@ export function InviteLandingPage() {
                         setAuthFeedback(null);
                       }}
                       autoComplete={authMode === "sign_in" ? "current-password" : "new-password"}
+                      required
+                      aria-required="true"
+                      aria-invalid={authFeedback?.tone === "error" ? true : undefined}
+                      aria-describedby={authFeedback ? authErrorId : undefined}
                     />
                   </label>
                   {authFeedback ? (
                     <p
+                      id={authErrorId}
+                      role="alert"
                       className={`text-xs ${
                         authFeedback.tone === "info" ? "text-amber-300" : "text-red-400"
                       }`}

@@ -13,13 +13,15 @@ import {
   GitBranch,
   Package,
   Settings,
+  FolderOpen,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { NavLink } from "@/lib/router";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarNavItem } from "./SidebarNavItem";
-import { SidebarProjects } from "./SidebarProjects";
 import { SidebarAgents } from "./SidebarAgents";
+import { SidebarProjects } from "./SidebarProjects";
 import { useDialogActions } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { heartbeatsApi } from "../api/heartbeats";
@@ -32,6 +34,7 @@ import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
 
 export function Sidebar() {
+  const { t } = useTranslation();
   const { openNewIssue } = useDialogActions();
   const { selectedCompanyId, selectedCompany } = useCompany();
   const inboxBadge = useInboxBadge(selectedCompanyId);
@@ -47,6 +50,11 @@ export function Sidebar() {
   });
   const liveRunCount = liveRuns?.length ?? 0;
   const showWorkspacesLink = experimentalSettings?.enableIsolatedWorkspaces === true;
+  // IA flag (PAP-89): branch the sidebar nav presentation. Default OFF = classic
+  // (per-project collapsible, no Projects nav link). ON = streamlined
+  // (top-level Projects link). Issue/Task wording is split to PR #7651.
+  // Gating is navigation-only; all routes stay registered in both modes.
+  const streamlined = experimentalSettings?.enableStreamlinedLeftNavigation === true;
 
   const pluginContext = {
     companyId: selectedCompanyId,
@@ -63,8 +71,8 @@ export function Sidebar() {
           variant="ghost"
           size="icon-sm"
           className="text-muted-foreground shrink-0"
-          aria-label="Open search"
-          title="Open search"
+          aria-label={t("sidebar.openSearch", { defaultValue: "Open search" })}
+          title={t("sidebar.openSearch", { defaultValue: "Open search" })}
         >
           <NavLink to="/search">
             <Search className="h-4 w-4" />
@@ -74,19 +82,19 @@ export function Sidebar() {
 
       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide flex flex-col gap-4 pointer-coarse:gap-3 px-3 py-2">
         <div className="flex flex-col gap-0.5">
-          {/* New Issue button aligned with nav items */}
+          {/* New Task button aligned with nav items */}
           <button
             onClick={() => openNewIssue()}
             data-slot="icon-button"
-            className="flex items-center gap-2.5 px-3 py-2 pointer-coarse:py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+            className="flex items-center gap-2.5 px-3 py-2 pointer-coarse:py-1.5 text-[13px] font-medium text-foreground/80 hover:bg-accent/50 hover:text-foreground transition-colors"
           >
             <SquarePen className="h-4 w-4 shrink-0" />
-            <span className="truncate">New Issue</span>
+            <span className="truncate">{t("sidebar.newIssue", { defaultValue: "New Issue" })}</span>
           </button>
-          <SidebarNavItem to="/dashboard" label="Dashboard" icon={LayoutDashboard} liveCount={liveRunCount} />
+          <SidebarNavItem to="/dashboard" label={t("sidebar.dashboard", { defaultValue: "Dashboard" })} icon={LayoutDashboard} liveCount={liveRunCount} />
           <SidebarNavItem
             to="/inbox"
-            label="Inbox"
+            label={t("sidebar.inbox", { defaultValue: "Inbox" })}
             icon={Inbox}
             badge={inboxBadge.inbox}
             badgeTone={inboxBadge.failedRuns > 0 ? "danger" : "default"}
@@ -94,13 +102,16 @@ export function Sidebar() {
           />
         </div>
 
-        <SidebarSection label="Work">
-          <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
-          <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
-          <SidebarNavItem to="/goals" label="Goals" icon={Target} />
-          <SidebarNavItem to="/artifacts" label="Artifacts" icon={Package} />
+        <SidebarSection label={t("sidebar.work", { defaultValue: "Work" })}>
+          <SidebarNavItem to="/issues" label={t("sidebar.issues", { defaultValue: "Issues" })} icon={CircleDot} />
+          <SidebarNavItem to="/routines" label={t("sidebar.routines", { defaultValue: "Routines" })} icon={Repeat} />
+          <SidebarNavItem to="/goals" label={t("sidebar.goals", { defaultValue: "Goals" })} icon={Target} />
+          <SidebarNavItem to="/artifacts" label={t("sidebar.artifacts", { defaultValue: "Artifacts" })} icon={Package} />
           {showWorkspacesLink ? (
-            <SidebarNavItem to="/workspaces" label="Workspaces" icon={GitBranch} />
+            <SidebarNavItem to="/workspaces" label={t("sidebar.workspaces", { defaultValue: "Workspaces" })} icon={GitBranch} />
+          ) : null}
+          {streamlined ? (
+            <SidebarNavItem to="/projects" label={t("Projects")} icon={FolderOpen} />
           ) : null}
           <PluginSlotOutlet
             slotTypes={["sidebar"]}
@@ -117,16 +128,17 @@ export function Sidebar() {
           />
         </SidebarSection>
 
-        <SidebarProjects />
+        {/* Classic mode restores the per-project collapsible below Work. */}
+        {streamlined ? null : <SidebarProjects />}
 
-        <SidebarAgents />
+        <SidebarAgents streamlined={streamlined} />
 
-        <SidebarSection label="Company">
-          <SidebarNavItem to="/org" label="Org" icon={Network} />
-          <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
-          <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
-          <SidebarNavItem to="/activity" label="Activity" icon={History} />
-          <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
+        <SidebarSection label={t("sidebar.company", { defaultValue: "Company" })}>
+          <SidebarNavItem to="/org" label={t("sidebar.org", { defaultValue: "Org" })} icon={Network} />
+          <SidebarNavItem to="/skills" label={t("sidebar.skills", { defaultValue: "Skills" })} icon={Boxes} />
+          <SidebarNavItem to="/costs" label={t("sidebar.costs", { defaultValue: "Costs" })} icon={DollarSign} />
+          <SidebarNavItem to="/activity" label={t("sidebar.activity", { defaultValue: "Activity" })} icon={History} />
+          <SidebarNavItem to="/company/settings" label={t("sidebar.settings", { defaultValue: "Settings" })} icon={Settings} />
         </SidebarSection>
 
         <PluginSlotOutlet

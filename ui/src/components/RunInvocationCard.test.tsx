@@ -8,13 +8,18 @@ import type { HeartbeatRun } from "@penclipai/shared";
 import { ThemeProvider } from "../context/ThemeContext";
 import { LatestRunCard, RunInvocationCard } from "../pages/AgentDetail";
 
-vi.mock("react-i18next", () => ({
-  initReactI18next: { type: "3rdParty", init: () => {} },
-  useTranslation: () => ({
-    t: (key: string, options?: Record<string, unknown>) =>
-      String(options?.defaultValue ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name] ?? "")),
-  }),
-}));
+vi.mock("react-i18next", async () => {
+  const enCommon = (await import("../../public/locales/en/common.json")).default as Record<string, string>;
+  return {
+    initReactI18next: { type: "3rdParty", init: () => {} },
+    useTranslation: () => ({
+      t: (key: string, options?: Record<string, unknown>) => {
+        const template = String(options?.defaultValue ?? enCommon[key] ?? key);
+        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options?.[name] ?? ""));
+      },
+    }),
+  };
+});
 
 vi.mock("@/lib/router", async () => {
   const actual = await vi.importActual<typeof import("@/lib/router")>("@/lib/router");

@@ -19,6 +19,7 @@ import { queryKeys } from "../lib/queryKeys";
 import { ProjectProperties, type ProjectConfigFieldKey, type ProjectFieldSaveState } from "../components/ProjectProperties";
 import { InlineEditor } from "../components/InlineEditor";
 import { StatusBadge } from "../components/StatusBadge";
+import { ProjectTile } from "../components/ProjectTile";
 import { BudgetPolicyCard } from "../components/BudgetPolicyCard";
 import { IssuesList } from "../components/IssuesList";
 import { PageSkeleton } from "../components/PageSkeleton";
@@ -27,9 +28,13 @@ import { ProjectWorkspacesContent } from "../components/ProjectWorkspacesContent
 import { MembershipAction } from "../components/MembershipAction";
 import { buildProjectWorkspaceSummaries } from "../lib/project-workspaces-tab";
 import { displaySeededName } from "../lib/seeded-display";
+import { PROJECT_ICONS, PROJECT_ICON_NAMES } from "../lib/project-icons";
 import { projectRouteRef } from "../lib/utils";
 import { collectLiveIssueIds } from "../lib/liveIssueIds";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/tabs";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
@@ -106,64 +111,124 @@ function OverviewContent({
   );
 }
 
-/* ── Color picker popover ── */
+/* ── Combined icon + color picker popover (PAP-72 / PAP-68 part 4) ── */
 
-function ColorPicker({
-  currentColor,
-  onSelect,
+const DEFAULT_PROJECT_ICON = "folder";
+
+function ProjectTilePicker({
+  color,
+  icon,
+  onSelectIcon,
+  onSelectColor,
 }: {
-  currentColor: string;
-  onSelect: (color: string) => void;
+  color: string | null;
+  icon: string | null;
+  onSelectIcon: (icon: string) => void;
+  onSelectColor: (color: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [search, setSearch] = useState("");
   const { t } = useTranslation();
 
-  useEffect(() => {
-    if (!open) return;
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
+  const filteredIcons = useMemo(() => {
+    const entries = PROJECT_ICON_NAMES.map((name) => [name, PROJECT_ICONS[name]] as const);
+    if (!search) return entries;
+    const q = search.toLowerCase();
+    return entries.filter(([name]) => name.includes(q));
+  }, [search]);
 
+  // Keep the popover open across selections so the user can pick both an icon
+  // and a color in one pass; reset the search when it closes.
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="shrink-0 h-5 w-5 rounded-md cursor-pointer hover:ring-2 hover:ring-foreground/20 transition-[box-shadow]"
-        style={{ backgroundColor: currentColor }}
-        aria-label={t("Change project color", { defaultValue: "Change project color" })}
-      />
-      {open && (
-        <div className="absolute top-full left-0 mt-2 p-2 bg-popover border border-border rounded-lg shadow-lg z-50 w-max">
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setSearch("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="shrink-0 rounded-lg cursor-pointer hover:ring-2 hover:ring-foreground/20 transition-[box-shadow]"
+          aria-label={t("projectDetail.changeIconAndColor", { defaultValue: "Change project icon and color" })}
+        >
+          <ProjectTile color={color} icon={icon} size="md" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-3" align="start">
+        <p className="text-xs font-medium text-muted-foreground mb-2">
+          {t("projectDetail.icon", { defaultValue: "Icon" })}
+        </p>
+        <Input
+          placeholder={t("projectDetail.searchIconsPlaceholder", { defaultValue: "Search icons..." })}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="mb-2 h-8 text-sm"
+          autoFocus
+        />
+        <div className="grid grid-cols-7 gap-1 max-h-40 overflow-y-auto">
+          {filteredIcons.map(([name, Icon]) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onSelectIcon(name)}
+              className={cn(
+                "flex items-center justify-center h-8 w-8 rounded hover:bg-accent transition-colors",
+                (icon ?? DEFAULT_PROJECT_ICON) === name && "bg-accent ring-1 ring-primary",
+              )}
+              title={name}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
+          {filteredIcons.length === 0 && (
+            <p className="col-span-7 text-xs text-muted-foreground text-center py-2">
+              {t("projectDetail.noIconsMatch", { defaultValue: "No icons match" })}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="text-xs font-medium text-muted-foreground mb-2">
+            {t("projectDetail.color", { defaultValue: "Color" })}
+          </p>
           <div className="grid grid-cols-5 gap-1.5">
-            {PROJECT_COLORS.map((color) => (
+            {/* Neutral / reset-to-gray option */}
+            <button
+              type="button"
+              onClick={() => onSelectColor(null)}
+              className={`h-6 w-6 cursor-pointer transition-[transform,box-shadow] duration-150 hover:scale-110 ${
+                color === null
+                  ? "ring-2 ring-foreground ring-offset-1 ring-offset-background rounded-md"
+                  : ""
+              }`}
+              aria-label={t("projectDetail.resetToNeutralGray", { defaultValue: "Reset to neutral gray" })}
+              title={t("projectDetail.neutralDefault", { defaultValue: "Neutral (default)" })}
+            >
+              <ProjectTile color={null} size="sm" />
+            </button>
+            {PROJECT_COLORS.map((swatch) => (
               <button
-                key={color}
-                onClick={() => {
-                  onSelect(color);
-                  setOpen(false);
-                }}
+                key={swatch}
+                type="button"
+                onClick={() => onSelectColor(swatch)}
                 className={`h-6 w-6 rounded-md cursor-pointer transition-[transform,box-shadow] duration-150 hover:scale-110 ${
-                  color === currentColor
+                  swatch === color
                     ? "ring-2 ring-foreground ring-offset-1 ring-offset-background"
                     : "hover:ring-2 hover:ring-foreground/30"
                 }`}
-                style={{ backgroundColor: color }}
+                style={{ backgroundColor: swatch }}
                 aria-label={t("Select color {{color}}", {
-                  color,
-                  defaultValue: `Select color ${color}`,
+                  color: swatch,
+                  defaultValue: `Select color ${swatch}`,
                 })}
               />
             ))}
           </div>
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -721,9 +786,11 @@ export function ProjectDetail() {
       ) : null}
       <div className="flex items-start gap-3">
         <div className="h-7 flex items-center">
-          <ColorPicker
-            currentColor={project.color ?? "#6366f1"}
-            onSelect={(color) => updateProject.mutate({ color })}
+          <ProjectTilePicker
+            color={project.color ?? null}
+            icon={project.icon ?? null}
+            onSelectIcon={(icon) => updateProject.mutate({ icon })}
+            onSelectColor={(color) => updateProject.mutate({ color })}
           />
         </div>
         <div className="min-w-0 space-y-2">

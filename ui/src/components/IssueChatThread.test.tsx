@@ -76,6 +76,7 @@ vi.mock("@assistant-ui/react", () => ({
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>();
+  const enCommon = (await import("../../public/locales/en/common.json")).default as Record<string, string>;
   const translations: Record<string, string> = {
     None: "无",
     "issueChat.deletedComment": "{{authorName}} deleted this comment",
@@ -94,6 +95,8 @@ vi.mock("react-i18next", async (importOriginal) => {
       t: (key: string, options?: Record<string, unknown>) => {
         const value = key in translations
           ? translations[key]
+          : key in enCommon
+          ? enCommon[key]
           : typeof options?.defaultValue === "string"
           ? options.defaultValue.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""))
           : key.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""));
@@ -103,7 +106,9 @@ vi.mock("react-i18next", async (importOriginal) => {
   };
 });
 
-vi.mock("../i18n", () => ({
+vi.mock("../i18n", async () => {
+  const enCommon = (await import("../../public/locales/en/common.json")).default as Record<string, string>;
+  return {
   translateInstant: (key: string, options?: Record<string, unknown>) => {
     const translations: Record<string, string> = {
       None: "无",
@@ -111,13 +116,14 @@ vi.mock("../i18n", () => ({
       "status.inProgress": "进行中",
       "status.todo": "待办",
     };
-    const value = translations[key] ?? (typeof options?.defaultValue === "string"
+    const value = translations[key] ?? enCommon[key] ?? (typeof options?.defaultValue === "string"
       ? options.defaultValue.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""))
       : key);
     return value.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""));
   },
   getCurrentLocale: () => "en",
-}));
+  };
+});
 
 vi.mock("./transcript/useLiveRunTranscripts", () => ({
   useLiveRunTranscripts: () => ({
@@ -1603,7 +1609,7 @@ describe("IssueChatThread", () => {
       );
     });
 
-    expect(container.textContent).toContain("Work on this issue is blocked by the linked issue");
+    expect(container.textContent).toContain("Work on this task is blocked by the linked task");
     expect(container.textContent).toContain("Comments still wake the assignee for questions or triage");
     expect(container.textContent).toContain("PAP-1723");
     expect(container.textContent).toContain("QA the install flow");
@@ -2301,7 +2307,7 @@ describe("IssueChatThread", () => {
     expect(container.querySelector('[data-testid="issue-chat-composer-drop-overlay"]')).not.toBeNull();
     expect(container.textContent).toContain("Drop to upload");
     expect(container.textContent).toContain("Images insert into the reply");
-    expect(container.textContent).toContain("Other files are added to this issue");
+    expect(container.textContent).toContain("Other files are added to this task");
     expect(composer?.className).toContain("border-primary/45");
 
     act(() => {
@@ -2357,7 +2363,7 @@ describe("IssueChatThread", () => {
     const attachmentList = container.querySelector('[data-testid="issue-chat-composer-attachments"]');
     expect(attachmentList).not.toBeNull();
     expect(container.textContent).toContain("report.pdf");
-    expect(container.textContent).toContain("Attached to issue");
+    expect(container.textContent).toContain("Attached to task");
 
     await act(async () => {
       root.unmount();
@@ -2457,7 +2463,7 @@ describe("IssueChatThread", () => {
     expect(attachmentList).not.toBeNull();
     expect(attachmentList?.className).toContain("mb-3");
     expect(container.textContent).toContain("report.pdf");
-    expect(container.textContent).toContain("Attached to issue");
+    expect(container.textContent).toContain("Attached to task");
 
     await act(async () => {
       root.unmount();

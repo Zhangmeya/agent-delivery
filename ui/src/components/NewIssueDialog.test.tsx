@@ -9,10 +9,14 @@ import { NewIssueDialog } from "./NewIssueDialog";
 
 vi.mock("react-i18next", async () => {
   const actual = await vi.importActual<typeof import("react-i18next")>("react-i18next");
+  const enCommon = (await import("../../public/locales/en/common.json")).default as Record<string, string>;
   return {
     ...actual,
     useTranslation: () => ({
-      t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+      t: (key: string, options?: Record<string, unknown>) => {
+        const template = typeof options?.defaultValue === "string" ? options.defaultValue : enCommon[key] ?? key;
+        return template.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""));
+      },
       i18n: { language: "en", resolvedLanguage: "en" },
     }),
   };

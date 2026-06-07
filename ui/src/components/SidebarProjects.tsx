@@ -23,8 +23,10 @@ import { queryKeys } from "../lib/queryKeys";
 import { cn, projectRouteRef } from "../lib/utils";
 import { buildDndAccessibility } from "../lib/dnd-accessibility";
 import { useProjectOrder } from "../hooks/useProjectOrder";
+import { displaySeededName } from "../lib/seeded-display";
 import { resourceMembershipState, useResourceMembershipMutation, useResourceMemberships } from "../hooks/useResourceMemberships";
 import { BudgetSidebarMarker } from "./BudgetSidebarMarker";
+import { ProjectTile } from "./ProjectTile";
 import { SidebarSection, type SidebarSectionRadioChoice } from "./SidebarSection";
 import { Button } from "@/components/ui/button";
 import {
@@ -116,6 +118,7 @@ function ProjectItem({
 }: ProjectItemProps) {
   const { t } = useTranslation(undefined, { useSuspense: false });
   const routeRef = projectRouteRef(project);
+  const displayName = displaySeededName(project.name);
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -137,11 +140,8 @@ function ProjectItem({
               : "text-foreground/80 hover:bg-accent/50 hover:text-foreground",
           )}
         >
-          <span
-            className="shrink-0 h-3.5 w-3.5 rounded-sm"
-            style={{ backgroundColor: project.color ?? "#6366f1" }}
-          />
-          <span className="flex-1 truncate">{project.name}</span>
+          <ProjectTile color={project.color ?? null} icon={project.icon ?? null} size="xs" />
+          <span className="flex-1 truncate">{displayName}</span>
           {project.pauseReason === "budget" ? (
             <BudgetSidebarMarker title={t("Project paused by budget", { defaultValue: "Project paused by budget" })} />
           ) : null}
@@ -160,7 +160,7 @@ function ProjectItem({
               )}
               aria-label={t("Open actions for {{name}}", {
                 defaultValue: "Open actions for {{name}}",
-                name: project.name,
+                name: displayName,
               })}
             >
               <MoreHorizontal className="h-3.5 w-3.5" />

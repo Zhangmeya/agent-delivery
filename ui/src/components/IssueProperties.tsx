@@ -13,7 +13,7 @@ import { issuesApi } from "../api/issues";
 import { projectsApi } from "../api/projects";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
-import { buildCompanyUserInlineOptions, buildCompanyUserLabelMap } from "../lib/company-members";
+import { buildCompanyUserInlineOptions, buildCompanyUserLabelMap, isAgentTaskTarget } from "../lib/company-members";
 import { ISSUE_OVERRIDE_ADAPTER_TYPES, type IssueModelLane } from "../lib/issue-assignee-overrides";
 import { useProjectOrder } from "../hooks/useProjectOrder";
 import {
@@ -25,6 +25,7 @@ import {
 } from "../lib/recent-assignees";
 import { getRecentProjectIds, trackRecentProject } from "../lib/recent-projects";
 import { orderItemsBySelectedAndRecent } from "../lib/recent-selections";
+import { displaySeededName } from "../lib/seeded-display";
 import { formatAssigneeUserLabel } from "../lib/assignees";
 import { buildExecutionPolicy, stageParticipantValues } from "../lib/issue-execution-policy";
 import { formatMonitorOffset } from "../lib/issue-monitor";
@@ -529,9 +530,9 @@ export function IssueProperties({
   };
 
   const projectName = (id: string | null) => {
-    if (!id) return id?.slice(0, 8) ?? "None";
+    if (!id) return t("No project", { defaultValue: "No project" });
     const project = orderedProjects.find((p) => p.id === id);
-    return project?.name ?? id.slice(0, 8);
+    return project ? displaySeededName(project.name) : id.slice(0, 8);
   };
   const currentProject = issue.projectId
     ? orderedProjects.find((project) => project.id === issue.projectId) ?? null
@@ -579,7 +580,7 @@ export function IssueProperties({
   const recentAssigneeIds = useMemo(() => getRecentAssigneeIds(), [assigneeOpen]);
   const recentAssigneeSelectionIds = useMemo(() => getRecentAssigneeSelectionIds(), [assigneeOpen]);
   const sortedAgents = useMemo(
-    () => sortAgentsByRecency((agents ?? []).filter((a) => a.status !== "terminated"), recentAssigneeIds),
+    () => sortAgentsByRecency((agents ?? []).filter(isAgentTaskTarget), recentAssigneeIds),
     [agents, recentAssigneeIds],
   );
   const recentAssigneeValues = useMemo(
@@ -1381,13 +1382,13 @@ export function IssueProperties({
 
   const assigneePickerOptions = orderItemsBySelectedAndRecent(
     [
-      { id: "", kind: "none" as const, label: "No assignee", searchText: "" },
+      { id: "", kind: "none" as const, label: t("No assignee", { defaultValue: "No assignee" }), searchText: "" },
       ...(currentUserId
         ? [{
             id: `user:${currentUserId}`,
             kind: "user" as const,
             userId: currentUserId,
-            label: "Assign to me",
+            label: t("Assign to me", { defaultValue: "Assign to me" }),
             searchText: userLabel(currentUserId) ?? "",
           }]
         : []),
@@ -1396,7 +1397,9 @@ export function IssueProperties({
             id: `user:${issue.createdByUserId}`,
             kind: "user" as const,
             userId: issue.createdByUserId,
-            label: creatorUserLabel ? `Assign to ${creatorUserLabel}` : "Assign to requester",
+            label: creatorUserLabel
+              ? t("Assign to {{name}}", { defaultValue: "Assign to {{name}}", name: creatorUserLabel })
+              : t("Assign to requester", { defaultValue: "Assign to requester" }),
             searchText: creatorUserLabel ?? "requester",
           }]
         : []),
@@ -1477,7 +1480,9 @@ export function IssueProperties({
     <>
       <input
         className="w-full px-2 py-1.5 text-xs bg-transparent outline-none border-b border-border mb-1 placeholder:text-muted-foreground/50"
-        placeholder={`Search ${stageType === "review" ? "reviewers" : "approvers"}...`}
+        placeholder={stageType === "review"
+          ? t("Search reviewers...", { defaultValue: "Search reviewers..." })
+          : t("Search approvers...", { defaultValue: "Search approvers..." })}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         autoFocus={!inline}
@@ -1577,12 +1582,12 @@ export function IssueProperties({
   );
   const projectPickerOptions = orderItemsBySelectedAndRecent(
     [
-      { id: "", kind: "none" as const, name: "No project", color: null as string | null },
+      { id: "", kind: "none" as const, name: t("No project", { defaultValue: "No project" }), color: null as string | null },
       ...orderedProjects.map((project) => ({
         id: project.id,
         kind: "project" as const,
         project,
-        name: project.name,
+        name: displaySeededName(project.name),
         color: project.color ?? null,
       })),
     ],

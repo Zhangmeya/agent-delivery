@@ -1344,7 +1344,9 @@ export function JsonSchemaForm({
             onClick={() => setIsAdvancedOpen((open) => !open)}
             aria-expanded={isAdvancedOpen}
           >
-            <span className="text-sm font-medium">Advanced options</span>
+            <span className="text-sm font-medium">
+              {t("jsonSchemaForm.advancedOptions", { defaultValue: "Advanced options" })}
+            </span>
             {isAdvancedOpen ? (
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             ) : (

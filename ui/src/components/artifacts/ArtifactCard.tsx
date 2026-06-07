@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { Download, ExternalLink, Paperclip, Play } from "lucide-react";
 import type { CompanyArtifact } from "@/api/artifacts";
 import { Link } from "@/lib/router";
@@ -33,9 +34,10 @@ function PlaceholderPreview({ label }: { label?: string }) {
 }
 
 function ImagePreview({ artifact }: { artifact: CompanyArtifact }) {
+  const { t } = useTranslation();
   const [errored, setErrored] = useState(false);
   if (errored || !artifact.contentPath) {
-    return <PlaceholderPreview label="Image" />;
+    return <PlaceholderPreview label={t("artifacts.media.image")} />;
   }
   return (
     <PreviewFrame>
@@ -52,6 +54,16 @@ function ImagePreview({ artifact }: { artifact: CompanyArtifact }) {
 
 function VideoPreview({ artifact }: { artifact: CompanyArtifact }) {
   const [errored, setErrored] = useState(false);
+  const [frameReady, setFrameReady] = useState(false);
+  const thumbnailSeekRequested = useRef(false);
+  const frameReadyFallbackTimer = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (frameReadyFallbackTimer.current !== null) {
+        window.clearTimeout(frameReadyFallbackTimer.current);
+      }
+    };
+  }, []);
   if (errored || !artifact.contentPath) {
     return (
       <PreviewFrame className="flex items-center justify-center bg-black/80">
@@ -61,6 +73,43 @@ function VideoPreview({ artifact }: { artifact: CompanyArtifact }) {
       </PreviewFrame>
     );
   }
+
+  const markFrameReady = () => {
+    if (frameReadyFallbackTimer.current !== null) {
+      window.clearTimeout(frameReadyFallbackTimer.current);
+      frameReadyFallbackTimer.current = null;
+    }
+    setFrameReady(true);
+  };
+  const scheduleFrameReadyFallback = () => {
+    if (frameReadyFallbackTimer.current !== null) {
+      window.clearTimeout(frameReadyFallbackTimer.current);
+    }
+    frameReadyFallbackTimer.current = window.setTimeout(markFrameReady, 3000);
+  };
+  const loadThumbnailFrame = (event: SyntheticEvent<HTMLVideoElement>) => {
+    if (thumbnailSeekRequested.current) return;
+    thumbnailSeekRequested.current = true;
+    const video = event.currentTarget;
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+    const seekTarget = duration > 0 ? Math.min(0.12, duration / 2) : 0.05;
+    try {
+      if (Math.abs(video.currentTime - seekTarget) > 0.001) {
+        video.currentTime = seekTarget;
+        scheduleFrameReadyFallback();
+      } else {
+        markFrameReady();
+      }
+    } catch {
+      markFrameReady();
+    }
+  };
+  const handleLoadedData = (event: SyntheticEvent<HTMLVideoElement>) => {
+    if (thumbnailSeekRequested.current || event.currentTarget.currentTime > 0) {
+      markFrameReady();
+    }
+  };
+
   return (
     <PreviewFrame className="bg-black">
       <video
@@ -68,7 +117,11 @@ function VideoPreview({ artifact }: { artifact: CompanyArtifact }) {
         preload="metadata"
         muted
         playsInline
-        className="h-full w-full object-contain"
+        data-frame-ready={frameReady ? "true" : "false"}
+        className={cn("h-full w-full object-contain transition-opacity", frameReady ? "opacity-100" : "opacity-0")}
+        onLoadedMetadata={loadThumbnailFrame}
+        onLoadedData={handleLoadedData}
+        onSeeked={markFrameReady}
         onError={() => setErrored(true)}
       />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -81,9 +134,10 @@ function VideoPreview({ artifact }: { artifact: CompanyArtifact }) {
 }
 
 function TextPreview({ artifact }: { artifact: CompanyArtifact }) {
+  const { t } = useTranslation();
   const preview = artifact.previewText?.trim();
   if (!preview) {
-    return <PlaceholderPreview label={artifact.source === "document" ? "Document" : "Text"} />;
+    return <PlaceholderPreview label={artifact.source === "document" ? t("artifacts.media.document") : t("artifacts.media.text")} />;
   }
   return (
     <PreviewFrame className="bg-card">
@@ -97,7 +151,8 @@ function TextPreview({ artifact }: { artifact: CompanyArtifact }) {
   );
 }
 
-function ArtifactPreview({ artifact }: { artifact: CompanyArtifact }) {
+export function ArtifactPreview({ artifact }: { artifact: CompanyArtifact }) {
+  const { t } = useTranslation();
   switch (artifact.mediaKind) {
     case "image":
       return <ImagePreview artifact={artifact} />;
@@ -107,7 +162,7 @@ function ArtifactPreview({ artifact }: { artifact: CompanyArtifact }) {
     case "document":
       return <TextPreview artifact={artifact} />;
     case "file":
-      return <PlaceholderPreview label="File" />;
+      return <PlaceholderPreview label={t("artifacts.media.file")} />;
     case "empty":
     default:
       return <PlaceholderPreview />;
@@ -140,6 +195,7 @@ function SecondaryAction({
 }
 
 export function ArtifactCard({ artifact }: ArtifactCardProps) {
+  const { t } = useTranslation();
   return (
     <Link
       to={artifact.href}
@@ -160,12 +216,12 @@ export function ArtifactCard({ artifact }: ArtifactCardProps) {
           </h3>
           <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
             {artifact.openPath ? (
-              <SecondaryAction href={artifact.openPath} title="Open file in new tab">
+              <SecondaryAction href={artifact.openPath} title={t("artifacts.openFile")}>
                 <ExternalLink className="h-3.5 w-3.5" />
               </SecondaryAction>
             ) : null}
             {artifact.downloadPath ? (
-              <SecondaryAction href={artifact.downloadPath} download title="Download file">
+              <SecondaryAction href={artifact.downloadPath} download title={t("artifacts.downloadFile")}>
                 <Download className="h-3.5 w-3.5" />
               </SecondaryAction>
             ) : null}
@@ -173,7 +229,7 @@ export function ArtifactCard({ artifact }: ArtifactCardProps) {
         </div>
 
         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/65">
-          <span>Last edited {formatDate(artifact.updatedAt)}</span>
+          <span>{t("artifacts.lastEdited", { date: formatDate(artifact.updatedAt) })}</span>
           {artifact.createdByAgent ? (
             <>
               <span className="text-muted-foreground/50">·</span>
