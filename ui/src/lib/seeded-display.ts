@@ -4,8 +4,10 @@ const SEEDED_NAME_TRANSLATION_KEYS: Record<string, string> = {
   CEO: "seededName.ceo",
   CTO: "seededName.cto",
   "Chief Technology Officer": "seededName.cto",
+  Onboarding: "seededName.onboarding",
   "首席执行官": "seededName.ceo",
   "首席技术官": "seededName.cto",
+  入门引导: "seededName.onboarding",
 };
 
 export function displaySeededName(name: string | null | undefined): string {

@@ -54,6 +54,10 @@ const KIND_LABEL: Record<IssueRecoveryActionKind, { key: string; defaultValue: s
     key: "issueRecoveryAction.kind.stranded_assigned_issue",
     defaultValue: "Stranded Issue",
   },
+  workspace_validation: {
+    key: "issueRecoveryAction.kind.workspace_validation",
+    defaultValue: "Workspace Validation",
+  },
   active_run_watchdog: {
     key: "issueRecoveryAction.kind.active_run_watchdog",
     defaultValue: "Active Watchdog",
@@ -72,6 +76,10 @@ const KIND_HEADLINE: Record<IssueRecoveryActionKind, { key: string; defaultValue
   stranded_assigned_issue: {
     key: "issueRecoveryAction.headline.stranded_assigned_issue",
     defaultValue: "Paperclip retried this issue's last run and it still has no live execution path.",
+  },
+  workspace_validation: {
+    key: "issueRecoveryAction.headline.workspace_validation",
+    defaultValue: "Paperclip stopped this run because the issue's git workspace could not be validated.",
   },
   active_run_watchdog: {
     key: "issueRecoveryAction.headline.active_run_watchdog",

@@ -25,6 +25,15 @@ vi.mock("../services/index.js", () => ({
   }),
   agentService: () => ({
     getById: vi.fn(),
+    resolveByReference: vi.fn(async (_companyId: string, reference: string) => ({
+      agent: {
+        id: reference,
+        companyId: "company-1",
+        status: "active",
+        orgChainHealth: null,
+      },
+      ambiguous: false,
+    })),
   }),
   companyService: () => ({
     getById: vi.fn(),

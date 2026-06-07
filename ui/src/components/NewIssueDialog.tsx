@@ -1508,9 +1508,9 @@ export function NewIssueDialog() {
                 recentOptionIds={recentAssigneeOptionIds}
                 placeholder={t("Reviewer")}
                 disablePortal
-                noneLabel="No reviewer"
-                searchPlaceholder="Search reviewers..."
-                emptyMessage="No reviewers found."
+                noneLabel={t("newIssue.noReviewer")}
+                searchPlaceholder={t("Search reviewers...")}
+                emptyMessage={t("newIssue.noReviewersFound")}
                 onChange={setReviewerValue}
                 renderTriggerValue={(option) =>
                   option ? (
@@ -1553,9 +1553,9 @@ export function NewIssueDialog() {
                 recentOptionIds={recentAssigneeOptionIds}
                 placeholder={t("Approver")}
                 disablePortal
-                noneLabel="No approver"
-                searchPlaceholder="Search approvers..."
-                emptyMessage="No approvers found."
+                noneLabel={t("newIssue.noApprover")}
+                searchPlaceholder={t("Search approvers...")}
+                emptyMessage={t("newIssue.noApproversFound")}
                 onChange={setApproverValue}
                 renderTriggerValue={(option) =>
                   option ? (
@@ -1645,12 +1645,17 @@ export function NewIssueDialog() {
               )}
               {executionWorkspaceMode === "reuse_existing" && selectedReusableExecutionWorkspace && (
                 <div className="text-[11px] text-muted-foreground">
-                  Reusing {selectedReusableExecutionWorkspace.name} from {selectedReusableExecutionWorkspace.branchName ?? selectedReusableExecutionWorkspace.cwd ?? "existing execution workspace"}.
+                  {t("newIssue.reusingExecutionWorkspace", {
+                    name: selectedReusableExecutionWorkspace.name,
+                    source: selectedReusableExecutionWorkspace.branchName ?? selectedReusableExecutionWorkspace.cwd ?? t("newIssue.existingExecutionWorkspace"),
+                  })}
                 </div>
               )}
               {showParentWorkspaceWarning ? (
                 <div className="rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-100">
-                  Warning: this sub-task will no longer use the parent task workspace{parentExecutionWorkspaceLabel ? ` (${parentExecutionWorkspaceLabel})` : ""}.
+                  {t("newIssue.executionWorkspace.parentWarning", {
+                    suffix: parentExecutionWorkspaceLabel ? ` (${parentExecutionWorkspaceLabel})` : "",
+                  })}
                 </div>
               ) : null}
             </div>
@@ -1687,26 +1692,22 @@ export function NewIssueDialog() {
                         )}
                         onClick={() => setAssigneeModelLane(lane)}
                       >
-                        {lane === "primary"
-                          ? "Primary"
-                          : lane === "cheap"
-                            ? "Cheap"
-                            : "Custom"}
+                        {t(`newIssue.modelLane.${lane}`)}
                       </button>
                     ))}
                   </div>
                   {assigneeModelLane === "cheap" && (
                     <p className="text-[11px] text-muted-foreground">
-                      Sends <code>modelProfile: "cheap"</code>{" "}
+                      {t("newIssue.modelLane.cheapSendsPrefix")} <code>modelProfile: "cheap"</code>{" "}
                       {assigneeCheapProfile?.adapterConfig && typeof (assigneeCheapProfile.adapterConfig as Record<string, unknown>).model === "string"
-                        ? <>· adapter default <code>{String((assigneeCheapProfile.adapterConfig as Record<string, unknown>).model)}</code></>
+                        ? <>{t("newIssue.modelLane.adapterDefaultPrefix")} <code>{String((assigneeCheapProfile.adapterConfig as Record<string, unknown>).model)}</code></>
                         : assigneeCheapProfile
-                          ? <>· uses the agent's configured cheap profile</>
-                          : <>· falls back to the primary model if no cheap profile is configured</>}
+                          ? <>{t("newIssue.modelLane.usesCheapProfile")}</>
+                          : <>{t("newIssue.modelLane.fallsBackToPrimary")}</>}
                     </p>
                   )}
                   {assigneeModelLane === "primary" && (
-                    <p className="text-[11px] text-muted-foreground">Runs on the agent's primary model.</p>
+                    <p className="text-[11px] text-muted-foreground">{t("newIssue.modelLane.primaryDescription")}</p>
                   )}
                   {assigneeModelLane === "custom" && (
                     <p className="text-[11px] text-muted-foreground">{t("newIssue.modelLane.customDescription")}</p>
@@ -1720,9 +1721,9 @@ export function NewIssueDialog() {
                       options={modelOverrideOptions}
                       placeholder={t("newIssue.defaultModel")}
                       disablePortal
-                      noneLabel="Default model"
-                      searchPlaceholder="Search models..."
-                      emptyMessage="No models found."
+                      noneLabel={t("newIssue.defaultModel")}
+                      searchPlaceholder={t("Search models...")}
+                      emptyMessage={t("issueProperties.noModelsFound")}
                       onChange={setAssigneeModelOverride}
                     />
                   </div>

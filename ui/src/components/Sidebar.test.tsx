@@ -167,7 +167,7 @@ describe("Sidebar", () => {
     expect(workSection?.textContent).toContain("Plugin launcher outlet");
     const workSectionContainer = workSection?.parentElement?.parentElement;
     expect(workSectionContainer?.textContent).toContain("Work");
-    expect(workSectionContainer?.textContent).toContain("Tasks");
+    expect(workSectionContainer?.textContent).toContain("Issues");
     expect(workSectionContainer?.textContent).toContain("Goals");
 
     flushSync(() => {
@@ -182,12 +182,12 @@ describe("Sidebar", () => {
     });
     const root = await renderSidebar();
 
-    expect(container.textContent).toContain("New Task");
-    expect(container.textContent).not.toContain("New Issue");
+    expect(container.textContent).toContain("New Issue");
+    expect(container.textContent).not.toContain("New Task");
 
     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
-    expect(navLabels).toContain("Tasks");
-    expect(navLabels).not.toContain("Issues");
+    expect(navLabels).toContain("Issues");
+    expect(navLabels).not.toContain("Tasks");
 
     const projectsLink = [...container.querySelectorAll("nav a")].find((a) => a.textContent?.trim() === "Projects");
     expect(projectsLink?.getAttribute("href")).toBe("/projects");
@@ -202,19 +202,19 @@ describe("Sidebar", () => {
     });
   });
 
-  it("classic (flag OFF): New Task button, Tasks label, per-project collapsible, no top-level Projects link", async () => {
+  it("classic (flag OFF): New Issue button, Tasks label, per-project collapsible, no top-level Projects link", async () => {
     mockInstanceSettingsApi.getExperimental.mockResolvedValue({
       enableIsolatedWorkspaces: false,
       enableStreamlinedLeftNavigation: false,
     });
     const root = await renderSidebar();
 
-    expect(container.textContent).toContain("New Task");
-    expect(container.textContent).not.toContain("New Issue");
+    expect(container.textContent).toContain("New Issue");
+    expect(container.textContent).not.toContain("New Task");
 
     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
-    expect(navLabels).toContain("Tasks");
-    expect(navLabels).not.toContain("Issues");
+    expect(navLabels).toContain("Issues");
+    expect(navLabels).not.toContain("Tasks");
     // No top-level Projects nav link in classic mode (D5 option A).
     expect(navLabels).not.toContain("Projects");
 

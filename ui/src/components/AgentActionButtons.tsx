@@ -1,4 +1,16 @@
-import { Pause, Play } from "lucide-react";
+import { useCallback, useState } from "react";
+import { useNavigate } from "@/lib/router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Pause,
+  Play,
+  Plus,
+  MoreHorizontal,
+  Loader2,
+  Copy,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +35,7 @@ import type {
   AgentInstructionsBundle,
   AgentInstructionsFileSummary,
   HeartbeatRun,
-} from "@paperclipai/shared";
+} from "@penclipai/shared";
 
 export function RunButton({
   onClick,
@@ -146,6 +158,7 @@ export function AgentActionButtons({
   children?: React.ReactNode;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { openNewIssue } = useDialogActions();
@@ -155,16 +168,19 @@ export function AgentActionButtons({
   const resolvedCompanyId = companyId ?? agent.companyId;
   const canonicalAgentRef = agentRouteRef(agent);
   const isPaused = agent.status === "paused";
+  const assignButtonLabel = assignLabel === "Assign Task"
+    ? t("agentDetail.assignTask")
+    : t(assignLabel, { defaultValue: assignLabel });
 
   const reportError = useCallback(
     (message: string) => {
       if (onActionError) {
         onActionError(message);
       } else {
-        pushToast({ title: "Action failed", body: message, tone: "error" });
+        pushToast({ title: t("agentDetail.actionFailed"), body: message, tone: "error" });
       }
     },
-    [onActionError, pushToast],
+    [onActionError, pushToast, t],
   );
 
   const invalidateAgent = useCallback(() => {
@@ -197,14 +213,14 @@ export function AgentActionButtons({
       }
     },
     onError: (err) => {
-      reportError(err instanceof Error ? err.message : "Action failed");
+      reportError(err instanceof Error ? err.message : t("agentDetail.actionFailed"));
     },
   });
 
   const duplicateAgent = useMutation({
     mutationFn: async () => {
       if (!resolvedCompanyId) {
-        throw new Error("Agent is not ready to duplicate");
+        throw new Error(t("agentActions.notReadyToDuplicate"));
       }
       const instructionsBundle = await loadDuplicateInstructionsBundle(agent.id, resolvedCompanyId);
       const payload = buildDuplicateAgentPayload(agent, instructionsBundle);
@@ -223,24 +239,27 @@ export function AgentActionButtons({
       if (resolvedCompanyId) {
         await queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(resolvedCompanyId) });
       }
-      pushToast({ title: "Agent duplicated", body: createdAgent.name, tone: "success" });
+      pushToast({ title: t("agentActions.duplicated"), body: createdAgent.name, tone: "success" });
       navigate(`/agents/${agentRouteRef(createdAgent)}/dashboard`);
     },
     onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to duplicate agent";
+      const message = err instanceof Error ? err.message : t("agentActions.duplicateFailed");
       onActionError?.(message);
-      pushToast({ title: "Could not duplicate agent", body: message, tone: "error" });
+      pushToast({ title: t("agentActions.couldNotDuplicate"), body: message, tone: "error" });
     },
   });
 
   const handleDuplicateAgent = useCallback(() => {
     if (duplicateAgent.isPending) return;
     const nextName = duplicateAgentName(agent.name);
-    const confirmed = window.confirm(`Duplicate ${agent.name} as ${nextName}?`);
+    const confirmed = window.confirm(t("agentActions.duplicateConfirm", {
+      name: agent.name,
+      nextName,
+    }));
     setMoreOpen(false);
     if (!confirmed) return;
     duplicateAgent.mutate();
-  }, [agent.name, duplicateAgent]);
+  }, [agent.name, duplicateAgent, t]);
 
   const resetTaskSession = useMutation({
     mutationFn: () => agentsApi.resetSession(agent.id, null, resolvedCompanyId ?? undefined),
@@ -250,7 +269,7 @@ export function AgentActionButtons({
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.taskSessions(agent.id) });
     },
     onError: (err) => {
-      reportError(err instanceof Error ? err.message : "Failed to reset session");
+      reportError(err instanceof Error ? err.message : t("agentActions.resetSessionFailed"));
     },
   });
 
@@ -269,7 +288,7 @@ export function AgentActionButtons({
         title={workActionsDisabled ? workActionsDisabledReason : undefined}
       >
         <Plus className="h-3.5 w-3.5 sm:mr-1" />
-        <span className="hidden sm:inline">{assignLabel}</span>
+        <span className="hidden sm:inline">{assignButtonLabel}</span>
       </Button>
       <RunButton
         onClick={() => agentAction.mutate("invoke")}
@@ -292,7 +311,14 @@ export function AgentActionButtons({
       {children}
       <Popover open={moreOpen} onOpenChange={setMoreOpen}>
         <PopoverTrigger asChild>
-          <Button variant="ghost" size="icon-xs" aria-label={`Open actions for ${agent.name}`}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t("Open actions for {{name}}", {
+              defaultValue: "Open actions for {{name}}",
+              name: agent.name,
+            })}
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
@@ -307,7 +333,7 @@ export function AgentActionButtons({
             ) : (
               <Copy className="h-3 w-3" />
             )}
-            Duplicate Agent
+            {t("agentDetail.duplicateAgent")}
           </button>
           <button
             className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50"
@@ -317,7 +343,7 @@ export function AgentActionButtons({
             }}
           >
             <Copy className="h-3 w-3" />
-            Copy Agent ID
+            {t("agentDetail.copyAgentId")}
           </button>
           <button
             className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50"
@@ -327,7 +353,7 @@ export function AgentActionButtons({
             }}
           >
             <RotateCcw className="h-3 w-3" />
-            Reset Sessions
+            {t("agentDetail.resetSessions")}
           </button>
           <button
             className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-destructive"
@@ -337,7 +363,7 @@ export function AgentActionButtons({
             }}
           >
             <Trash2 className="h-3 w-3" />
-            Terminate
+            {t("agentDetail.terminate")}
           </button>
         </PopoverContent>
       </Popover>

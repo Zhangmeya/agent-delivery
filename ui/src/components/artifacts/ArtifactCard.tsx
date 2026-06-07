@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, ExternalLink, Paperclip, Play } from "lucide-react";
 import type { CompanyArtifact } from "@/api/artifacts";
@@ -151,7 +151,7 @@ function TextPreview({ artifact }: { artifact: CompanyArtifact }) {
   );
 }
 
-function ArtifactPreview({ artifact }: { artifact: CompanyArtifact }) {
+export function ArtifactPreview({ artifact }: { artifact: CompanyArtifact }) {
   const { t } = useTranslation();
   switch (artifact.mediaKind) {
     case "image":

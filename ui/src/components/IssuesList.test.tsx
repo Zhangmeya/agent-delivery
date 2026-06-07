@@ -22,7 +22,7 @@ const translations: Record<string, string> = {
   "Parent issue": "父任务",
   "Tags": "标签",
   "Last updated": "最后更新",
-  "Issue state chip on the left edge.": "左侧边缘的任务状态标识。",
+  "Issue state chip on the left edge.": "Task state chip on the left edge.",
   "Ticket identifier like PAP-1009.": "像 PAP-1009 这样的任务标识。",
   "Assigned agent or board user.": "已分配的智能体或董事会用户。",
   "Linked project pill with its color.": "带项目颜色的关联项目标签。",
@@ -494,12 +494,12 @@ describe("IssuesList", () => {
     );
 
     await waitForAssertion(() => {
-      const button = container.querySelector<HTMLButtonElement>('button[aria-label="New task in Feature Branch"]');
+      const button = container.querySelector<HTMLButtonElement>('button[aria-label="New issue in Feature Branch"]');
       expect(button).not.toBeNull();
     });
 
     await act(async () => {
-      const button = container.querySelector<HTMLButtonElement>('button[aria-label="New task in Feature Branch"]');
+      const button = container.querySelector<HTMLButtonElement>('button[aria-label="New issue in Feature Branch"]');
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
     });
@@ -926,7 +926,7 @@ describe("IssuesList", () => {
       container,
     );
 
-    const input = container.querySelector('input[aria-label="Search tasks"]') as HTMLInputElement | null;
+    const input = container.querySelector('input[aria-label="Search issues"]') as HTMLInputElement | null;
     expect(input).not.toBeNull();
     const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     expect(valueSetter).toBeTypeOf("function");
@@ -1223,7 +1223,7 @@ describe("IssuesList", () => {
     );
 
     await waitForAssertion(() => {
-      expect(container.textContent).toContain("Some board columns are showing up to 200 tasks. Refine filters or search to reveal the rest.");
+      expect(container.textContent).toContain("Some board columns are showing up to 200 issues. Refine filters or search to reveal the rest.");
     });
 
     act(() => {
@@ -1253,7 +1253,7 @@ describe("IssuesList", () => {
 
     await waitForAssertion(() => {
       expect(container.querySelectorAll('[data-testid="issue-row"]')).toHaveLength(100);
-      expect(container.textContent).toContain("Rendering 100 of 220 tasks");
+      expect(container.textContent).toContain("Rendering 100 of 220 issues");
     });
 
     act(() => {
@@ -1292,7 +1292,7 @@ describe("IssuesList", () => {
 
     await waitForAssertion(() => {
       expect(container.querySelectorAll('[data-testid="issue-row"]')).toHaveLength(250);
-      expect(container.textContent).toContain("Rendering 250 of 420 tasks");
+      expect(container.textContent).toContain("Rendering 250 of 420 issues");
     });
 
     act(() => {
@@ -1511,7 +1511,7 @@ describe("IssuesList", () => {
     await waitForAssertion(() => {
       expect(document.body.textContent).toContain("桌面端任务行");
       expect(document.body.textContent).toContain("状态");
-      expect(document.body.textContent).toContain("左侧边缘的任务状态标识。");
+      expect(document.body.textContent).toContain("Task state chip on the left edge.");
       expect(document.body.textContent).toContain("恢复默认值");
     });
 
@@ -1781,13 +1781,13 @@ describe("IssuesList", () => {
     );
 
     await waitForAssertion(() => {
-      const input = container.querySelector('input[aria-label="Search tasks"]') as HTMLInputElement | null;
+      const input = container.querySelector('input[aria-label="Search issues"]') as HTMLInputElement | null;
       expect(input).not.toBeNull();
       input?.focus();
       expect(document.activeElement).toBe(input);
     });
 
-    const input = container.querySelector('input[aria-label="Search tasks"]') as HTMLInputElement;
+    const input = container.querySelector('input[aria-label="Search issues"]') as HTMLInputElement;
     act(() => {
       input.dispatchEvent(new KeyboardEvent("keydown", {
         key: "Enter",
@@ -1817,13 +1817,13 @@ describe("IssuesList", () => {
     );
 
     await waitForAssertion(() => {
-      const input = container.querySelector('input[aria-label="Search tasks"]') as HTMLInputElement | null;
+      const input = container.querySelector('input[aria-label="Search issues"]') as HTMLInputElement | null;
       expect(input).not.toBeNull();
       input?.focus();
       expect(document.activeElement).toBe(input);
     });
 
-    const input = container.querySelector('input[aria-label="Search tasks"]') as HTMLInputElement;
+    const input = container.querySelector('input[aria-label="Search issues"]') as HTMLInputElement;
     act(() => {
       input.dispatchEvent(new KeyboardEvent("keydown", {
         key: "Escape",

@@ -16,7 +16,13 @@ import {
   issues,
   issueComments,
 } from "@penclipai/db";
-import { AGENT_DEFAULT_MAX_CONCURRENT_RUNS, isUuidLike, normalizeAgentUrlKey } from "@penclipai/shared";
+import {
+  AGENT_DEFAULT_MAX_CONCURRENT_RUNS,
+  getAgentWorkEligibility,
+  isUuidLike,
+  normalizeAgentUrlKey,
+  type AgentEligibilityAgent,
+} from "@penclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import { normalizeAgentPermissions } from "./agent-permissions.js";
 import { REDACTED_EVENT_VALUE, sanitizeRecord } from "../redaction.js";

@@ -27,7 +27,8 @@ function BlockerRecoveryIndicator({ action }: { action: IssueRecoveryAction }) {
   if (!state) return null;
   const tone = RECOVERY_CHIP_DEFAULT_TONE[state];
   const Icon = tone.icon;
-  const label = t(tone.label, { defaultValue: tone.label });
+  const defaultLabel = recoveryChipLabel(state, action.kind);
+  const label = t(defaultLabel, { defaultValue: defaultLabel });
   return (
     <span
       data-testid="issue-blocked-notice-recovery-indicator"
@@ -146,8 +147,8 @@ export function IssueBlockedNotice({
       : null;
 
   const blockerLabel = blockers.length === 1
-    ? t("issueBlocked.linkedIssue", { defaultValue: "the linked issue" })
-    : t("issueBlocked.linkedIssues", { defaultValue: "the linked issues" });
+    ? t("issueBlocked.linkedIssue", { defaultValue: "the linked task" })
+    : t("issueBlocked.linkedIssues", { defaultValue: "the linked tasks" });
   const terminalBlockers = blockers
     .flatMap((blocker) => blocker.terminalBlockers ?? [])
     .filter((blocker, index, all) => all.findIndex((candidate) => candidate.id === blocker.id) === index);
@@ -283,19 +284,19 @@ export function IssueBlockedNotice({
                     ? stalledLeafBlockers.length > 1
                       ? t("issueBlocked.stalledMany", {
                         blockerLabel,
-                        defaultValue: "Work on this issue is blocked by {{blockerLabel}}, but the chain is stalled in review without a clear next step. Resolve the stalled reviews below or remove them as blockers.",
+                        defaultValue: "Work on this task is blocked by {{blockerLabel}}, but the chain is stalled in review without a clear next step. Resolve the stalled reviews below or remove them as blockers.",
                       })
                       : t("issueBlocked.stalledOne", {
                         blockerLabel,
-                        defaultValue: "Work on this issue is blocked by {{blockerLabel}}, but the chain is stalled in review without a clear next step. Resolve the stalled review below or remove it as a blocker.",
+                        defaultValue: "Work on this task is blocked by {{blockerLabel}}, but the chain is stalled in review without a clear next step. Resolve the stalled review below or remove it as a blocker.",
                       })
                     : t(blockers.length === 1 ? "issueBlocked.blockedByOne" : "issueBlocked.blockedByMany", {
                       blockerLabel,
                       defaultValue: blockers.length === 1
-                        ? "Work on this issue is blocked by {{blockerLabel}} until it is complete. Comments still wake the assignee for questions or triage."
-                        : "Work on this issue is blocked by {{blockerLabel}} until they are complete. Comments still wake the assignee for questions or triage.",
+                        ? "Work on this task is blocked by {{blockerLabel}} until it is complete. Comments still wake the assignee for questions or triage."
+                        : "Work on this task is blocked by {{blockerLabel}} until they are complete. Comments still wake the assignee for questions or triage.",
                     })
-                  : t("issueBlocked.blockedNoLinks", { defaultValue: "Work on this issue is blocked until it is moved back to todo. Comments still wake the assignee for questions or triage." })}
+                  : t("issueBlocked.blockedNoLinks", { defaultValue: "Work on this task is blocked until it is moved back to todo. Comments still wake the assignee for questions or triage." })}
               </p>
               {blockers.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">

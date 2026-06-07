@@ -2292,6 +2292,7 @@ function StaleDispositionWarningRow({
   metadata: IssueCommentMetadata | null;
   runAgentId?: string | null;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const detailsId = useId();
   const sections = mapCommentMetadataToSystemNoticeSections(metadata, { runAgentId });
@@ -2309,7 +2310,7 @@ function StaleDispositionWarningRow({
             onClick={() => setOpen((value) => !value)}
           >
             <span className="text-sm font-medium text-foreground/80">
-              Stale disposition warning
+              {t("issueChat.staleDispositionWarning", { defaultValue: "Stale disposition warning" })}
             </span>
             <span className="ml-auto flex items-center gap-1.5">
               {message.createdAt ? (
@@ -3365,8 +3366,8 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
       && !unassignedConfirmed
     ) {
       toastActions?.pushToast({
-        title: "No assignee selected",
-        body: "Pick an assignee or click Send again to post without one.",
+        title: t("issueChat.noAssigneeSelected"),
+        body: t("issueChat.noAssigneeSelectedBody"),
         tone: "warn",
         dedupeKey: `issue-chat-no-assignee:${draftKey ?? ""}`,
       });
@@ -3761,7 +3762,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
         ) : null}
 
         <Button size="sm" disabled={!canSubmit} onClick={() => void handleSubmit()}>
-          {submitting ? "Posting..." : "Send"}
+          {submitting ? t("Posting...") : t("Send")}
         </Button>
       </div>
     </div>
@@ -3838,6 +3839,7 @@ export function IssueChatThread({
   onResumeFromBacklog,
   resumeFromBacklogPending = false,
 }: IssueChatThreadProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const lastScrolledHashRef = useRef<string | null>(null);
   const virtualizedThreadRef = useRef<VirtualizedIssueChatThreadListHandle | null>(null);
@@ -4378,7 +4380,7 @@ export function IssueChatThread({
               onClick={handleJumpToLatest}
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
-              Jump to latest
+              {t("Jump to latest")}
             </button>
           </div>
         ) : null}
@@ -4448,10 +4450,10 @@ export function IssueChatThread({
                   {legacyRecoverySourceIssue ? (
                     <SystemNotice
                       tone="info"
-                      label="Legacy recovery task"
+                      label={t("issueChat.legacyRecoveryIssue.label")}
                       body={
                         <span>
-                          Legacy recovery task. Newer recovery actions live on the source task
+                          {t("issueChat.legacyRecoveryIssue.body")}
                           {legacyRecoverySourceIssue.identifier ? (
                             <>
                               {" — "}

@@ -340,7 +340,7 @@ describe("ExecutionWorkspaceDetail plugin slots", () => {
 
     const tabLabels = Array.from(container.querySelectorAll("[data-tab-value]")).map((tab) => tab.textContent);
     expect(tabLabels).toEqual([
-      "Tasks",
+      "Issues",
       "Services",
       "Changes",
       "Configuration",

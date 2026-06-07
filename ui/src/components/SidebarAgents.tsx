@@ -47,6 +47,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { Agent } from "@penclipai/shared";
 
+/**
+ * When no agent is running, the streamlined sidebar falls back to showing at
+ * most this many recently-active agents plus a "See all agents" link.
+ */
+const RECENT_AGENT_LIMIT = 5;
+
 function agentTimestamp(agent: Agent, field: "lastHeartbeatAt" | "updatedAt" | "createdAt"): number {
   const raw = agent[field];
   if (!raw) return 0;
@@ -219,7 +225,7 @@ function SidebarAgentItem({
   );
 }
 
-export function SidebarAgents() {
+export function SidebarAgents({ streamlined = false }: { streamlined?: boolean } = {}) {
   const { t } = useTranslation(undefined, { useSuspense: false });
   const [open, setOpen] = useState(true);
   const [pendingAgentIds, setPendingAgentIds] = useState<Set<string>>(() => new Set());
@@ -425,7 +431,7 @@ export function SidebarAgents() {
 
   return (
     <SidebarSection
-      label="Agents"
+      label={t("Agents")}
       collapsible={{ open, onOpenChange: setOpen }}
       headerAction={{
         ariaLabel: t("New agent", { defaultValue: "New agent" }),
@@ -477,7 +483,7 @@ export function SidebarAgents() {
           className="flex items-center gap-2.5 px-3 py-1.5 pointer-coarse:py-1 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
           <Users className="shrink-0 h-3.5 w-3.5" />
-          <span>See all agents</span>
+          <span>{t("See all agents", { defaultValue: "See all agents" })}</span>
         </Link>
       )}
     </SidebarSection>

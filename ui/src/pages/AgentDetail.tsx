@@ -49,6 +49,7 @@ import { SourceResolvedFoldCallout } from "../components/SourceResolvedFoldCallo
 import { SourceResolvedFoldBadge } from "../components/SourceResolvedFoldBadge";
 import { readSourceResolvedWatchdogFold } from "../lib/source-resolved-watchdog-fold";
 import { buildSameOriginWebSocketUrl } from "../lib/websocket-url";
+import { translateRunEventStream, translateSystemGeneratedText } from "../lib/system-generated-message-i18n";
 import { formatCents, formatDate, relativeTime, formatTokens, visibleRunCostUsd } from "../lib/utils";
 import { cn } from "../lib/utils";
 import { describeRunRetryState } from "../lib/runRetryState";
@@ -843,7 +844,7 @@ export function AgentDetail() {
       }
     },
     onError: (err) => {
-      setActionError(err instanceof Error ? err.message : "Action failed");
+      setActionError(err instanceof Error ? err.message : t("agentDetail.actionFailed"));
     },
   });
 
@@ -888,7 +889,7 @@ export function AgentDetail() {
       }
     },
     onError: (err) => {
-      setActionError(err instanceof Error ? err.message : "Failed to update permissions");
+      setActionError(err instanceof Error ? err.message : t("agentDetail.failedToUpdatePermissions"));
     },
   });
 
@@ -999,9 +1000,9 @@ export function AgentDetail() {
         <div className="flex items-start gap-3 border border-amber-300/35 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="min-w-0 space-y-1">
-            <p className="font-medium">Invalid reporting chain</p>
+            <p className="font-medium">{t("agentDetail.invalidReportingChain")}</p>
             <p className="text-amber-100/90">
-              {agent.name} cannot accept tasks or start runs until its reporting chain is repaired.
+              {t("agentDetail.invalidReportingChainDescription", { name: agent.name })}
             </p>
             <p className="break-words font-mono text-xs text-amber-100/80">
               {formatOrgChainHealthPath(agent)}
@@ -1010,7 +1011,7 @@ export function AgentDetail() {
               <p className="text-amber-100/85">{agent.orgChainHealth.repairGuidance}</p>
             ) : (
               <p className="text-amber-100/85">
-                Assign this agent to an active manager/root, or explicitly pause or terminate the affected agent/subtree.
+                {t("agentDetail.invalidReportingChainFallbackGuidance")}
               </p>
             )}
           </div>
@@ -1035,27 +1036,16 @@ export function AgentDetail() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => openNewIssue({ assigneeAgentId: agent.id })}
-          >
-            <Plus className="h-3.5 w-3.5 sm:mr-1" />
-            <span className="hidden sm:inline">{t("agentDetail.assignTask")}</span>
-          </Button>
-          <RunButton
-            onClick={() => agentAction.mutate("invoke")}
-            disabled={agentAction.isPending || isPendingApproval}
-            label={t("agentDetail.runHeartbeat")}
-          />
-          <PauseResumeButton
-            isPaused={agent.status === "paused"}
-            onPause={() => agentAction.mutate("pause")}
-            onResume={() => agentAction.mutate("resume")}
-            disabled={agentAction.isPending || isPendingApproval}
-          />
-          <span className="hidden sm:inline"><StatusBadge status={agent.status} /></span>
+        <AgentActionButtons
+          agent={agent}
+          companyId={resolvedCompanyId}
+          assignLabel={t("agentDetail.assignTask")}
+          runLabel={t("agentDetail.runHeartbeat")}
+          actionsDisabled={agentAction.isPending}
+          workActionsDisabled={hasInvalidOrgChain}
+          workActionsDisabledReason={t("agentDetail.repairReportingChainBeforeWork")}
+          onActionError={setActionError}
+        >
           {mobileLiveRun && (
             <Link
               to={`/agents/${canonicalAgentRef}/runs/${mobileLiveRun.id}`}
@@ -1068,60 +1058,7 @@ export function AgentDetail() {
               <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400">{t("agentDetail.live")}</span>
             </Link>
           )}
-
-          {/* Overflow menu */}
-          <Popover open={moreOpen} onOpenChange={setMoreOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon-xs">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-44 p-1" align="end">
-              <button
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50"
-                disabled={duplicateAgent.isPending}
-                onClick={handleDuplicateAgent}
-              >
-                {duplicateAgent.isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-                {t("agentDetail.duplicateAgent")}
-              </button>
-              <button
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50"
-                onClick={() => {
-                  navigator.clipboard.writeText(agent.id);
-                  setMoreOpen(false);
-                }}
-              >
-                <Copy className="h-3 w-3" />
-                {t("agentDetail.copyAgentId")}
-              </button>
-              <button
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50"
-                onClick={() => {
-                  resetTaskSession.mutate(null);
-                  setMoreOpen(false);
-                }}
-              >
-                <RotateCcw className="h-3 w-3" />
-                {t("agentDetail.resetSessions")}
-              </button>
-              <button
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-destructive"
-                onClick={() => {
-                  agentAction.mutate("terminate");
-                  setMoreOpen(false);
-                }}
-              >
-                <Trash2 className="h-3 w-3" />
-                {t("agentDetail.terminate")}
-              </button>
-            </PopoverContent>
-          </Popover>
-        </div>
+        </AgentActionButtons>
       </div>
 
       {!urlRunId && (
@@ -2195,20 +2132,20 @@ function PromptsTab({
       <Collapsible defaultOpen={currentMode === "external"}>
         <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors group">
           <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
-          Advanced
+          {t("Advanced")}
         </CollapsibleTrigger>
         <CollapsibleContent className="pt-4 pb-6">
           <TooltipProvider>
             <div className="grid gap-x-6 gap-y-4 md:grid-cols-[auto_minmax(0,1fr)_minmax(12rem,0.65fr)]">
               <label className="space-y-1.5 min-w-0">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  Mode
+                  {t("agentDetail.instructionsBundle.mode")}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" sideOffset={4}>
-                      Managed: Paperclip stores and serves the instructions bundle. External: you provide a path on disk where the instructions live.
+                      {t("agentDetail.instructionsBundle.modeTooltip")}
                     </TooltipContent>
                   </Tooltip>
                 </span>
@@ -2234,7 +2171,7 @@ function PromptsTab({
                       setSelectedFile(nextEntryFile);
                     }}
                   >
-                    Managed
+                    {t("Managed")}
                   </Button>
                   <Button
                     type="button"
@@ -2251,25 +2188,27 @@ function PromptsTab({
                       setSelectedFile(externalBundle?.selectedFile ?? nextEntryFile);
                     }}
                   >
-                    External
+                    {t("External")}
                   </Button>
                 </div>
               </label>
               <label className="space-y-1.5 min-w-0">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  Root path
+                  {t("Root path")}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" sideOffset={4}>
-                      The absolute directory on disk where the instructions bundle lives. In managed mode this is set by Paperclip automatically.
+                      {t("agentDetail.instructionsBundle.rootPathTooltip")}
                     </TooltipContent>
                   </Tooltip>
                 </span>
                 {currentMode === "managed" ? (
                   <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground pt-1.5">
-                    <span className="min-w-0 truncate" title={currentRootPath || undefined}>{currentRootPath || "(managed)"}</span>
+                    <span className="min-w-0 truncate" title={currentRootPath || undefined}>
+                      {currentRootPath || t("agentDetail.instructionsBundle.managedPlaceholder")}
+                    </span>
                     {currentRootPath && (
                       <CopyText text={currentRootPath} className="shrink-0">
                         <Copy className="h-3.5 w-3.5" />
@@ -2306,13 +2245,13 @@ function PromptsTab({
               </label>
               <label className="space-y-1.5">
                 <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  Entry file
+                  {t("Entry file")}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent side="right" sideOffset={4}>
-                      The main file the agent reads first when loading instructions. Defaults to AGENTS.md.
+                      {t("agentDetail.instructionsBundle.entryFileTooltip")}
                     </TooltipContent>
                   </Tooltip>
                 </span>
@@ -4255,6 +4194,12 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
                 ?? (evt.level ? levelColors[evt.level] : null)
                 ?? (evt.stream ? streamColors[evt.stream] : null)
                 ?? "text-foreground";
+              const eventStreamLabel = translateRunEventStream(t, evt.stream);
+              const eventMessage = evt.message
+                ? translateSystemGeneratedText(t, redactPathText(evt.message, censorUsernameInLogs))
+                : evt.payload
+                  ? JSON.stringify(redactPathValue(evt.payload, censorUsernameInLogs))
+                  : "";
 
               return (
                 <div key={evt.id} className="flex gap-2">
@@ -4262,14 +4207,10 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
                     {new Date(evt.createdAt).toLocaleTimeString("en-US", { hour12: false })}
                   </span>
                   <span className={cn("shrink-0 w-14", evt.stream ? (streamColors[evt.stream] ?? "text-neutral-500") : "text-neutral-500")}>
-                    {evt.stream ? `[${evt.stream}]` : ""}
+                    {eventStreamLabel ? `[${eventStreamLabel}]` : ""}
                   </span>
                   <span className={cn("break-all", color)}>
-                    {evt.message
-                      ? redactPathText(evt.message, censorUsernameInLogs)
-                      : evt.payload
-                        ? JSON.stringify(redactPathValue(evt.payload, censorUsernameInLogs))
-                        : ""}
+                    {eventMessage}
                   </span>
                 </div>
               );

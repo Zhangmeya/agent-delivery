@@ -111,7 +111,7 @@ export function Sidebar() {
             <SidebarNavItem to="/workspaces" label={t("sidebar.workspaces", { defaultValue: "Workspaces" })} icon={GitBranch} />
           ) : null}
           {streamlined ? (
-            <SidebarNavItem to="/projects" label="Projects" icon={FolderOpen} />
+            <SidebarNavItem to="/projects" label={t("Projects")} icon={FolderOpen} />
           ) : null}
           <PluginSlotOutlet
             slotTypes={["sidebar"]}

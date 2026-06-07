@@ -8,7 +8,7 @@ import type { Agent } from "@penclipai/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../context/ToastContext";
 import { Agents } from "./Agents";
-import type { AgentOrgChainHealth } from "@paperclipai/shared";
+import type { AgentOrgChainHealth } from "@penclipai/shared";
 
 const mockAgentsApi = vi.hoisted(() => ({
   list: vi.fn(),

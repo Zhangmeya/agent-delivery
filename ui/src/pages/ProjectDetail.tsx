@@ -28,6 +28,7 @@ import { ProjectWorkspacesContent } from "../components/ProjectWorkspacesContent
 import { MembershipAction } from "../components/MembershipAction";
 import { buildProjectWorkspaceSummaries } from "../lib/project-workspaces-tab";
 import { displaySeededName } from "../lib/seeded-display";
+import { PROJECT_ICONS, PROJECT_ICON_NAMES } from "../lib/project-icons";
 import { projectRouteRef } from "../lib/utils";
 import { collectLiveIssueIds } from "../lib/liveIssueIds";
 import { Button } from "@/components/ui/button";
@@ -126,7 +127,7 @@ function ProjectTilePicker({
   onSelectColor: (color: string | null) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [search, setSearch] = useState("");
   const { t } = useTranslation();
 
   const filteredIcons = useMemo(() => {
@@ -139,15 +140,59 @@ function ProjectTilePicker({
   // Keep the popover open across selections so the user can pick both an icon
   // and a color in one pass; reset the search when it closes.
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="shrink-0 h-5 w-5 rounded-md cursor-pointer hover:ring-2 hover:ring-foreground/20 transition-[box-shadow]"
-        style={{ backgroundColor: currentColor }}
-        aria-label={t("Change project color", { defaultValue: "Change project color" })}
-      />
-      {open && (
-        <div className="absolute top-full left-0 mt-2 p-2 bg-popover border border-border rounded-lg shadow-lg z-50 w-max">
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setSearch("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="shrink-0 rounded-lg cursor-pointer hover:ring-2 hover:ring-foreground/20 transition-[box-shadow]"
+          aria-label={t("projectDetail.changeIconAndColor", { defaultValue: "Change project icon and color" })}
+        >
+          <ProjectTile color={color} icon={icon} size="md" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-3" align="start">
+        <p className="text-xs font-medium text-muted-foreground mb-2">
+          {t("projectDetail.icon", { defaultValue: "Icon" })}
+        </p>
+        <Input
+          placeholder={t("projectDetail.searchIconsPlaceholder", { defaultValue: "Search icons..." })}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="mb-2 h-8 text-sm"
+          autoFocus
+        />
+        <div className="grid grid-cols-7 gap-1 max-h-40 overflow-y-auto">
+          {filteredIcons.map(([name, Icon]) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => onSelectIcon(name)}
+              className={cn(
+                "flex items-center justify-center h-8 w-8 rounded hover:bg-accent transition-colors",
+                (icon ?? DEFAULT_PROJECT_ICON) === name && "bg-accent ring-1 ring-primary",
+              )}
+              title={name}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
+          {filteredIcons.length === 0 && (
+            <p className="col-span-7 text-xs text-muted-foreground text-center py-2">
+              {t("projectDetail.noIconsMatch", { defaultValue: "No icons match" })}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="text-xs font-medium text-muted-foreground mb-2">
+            {t("projectDetail.color", { defaultValue: "Color" })}
+          </p>
           <div className="grid grid-cols-5 gap-1.5">
             {/* Neutral / reset-to-gray option */}
             <button
@@ -158,8 +203,8 @@ function ProjectTilePicker({
                   ? "ring-2 ring-foreground ring-offset-1 ring-offset-background rounded-md"
                   : ""
               }`}
-              aria-label="Reset to neutral gray"
-              title="Neutral (default)"
+              aria-label={t("projectDetail.resetToNeutralGray", { defaultValue: "Reset to neutral gray" })}
+              title={t("projectDetail.neutralDefault", { defaultValue: "Neutral (default)" })}
             >
               <ProjectTile color={null} size="sm" />
             </button>
@@ -173,10 +218,10 @@ function ProjectTilePicker({
                     ? "ring-2 ring-foreground ring-offset-1 ring-offset-background"
                     : "hover:ring-2 hover:ring-foreground/30"
                 }`}
-                style={{ backgroundColor: color }}
+                style={{ backgroundColor: swatch }}
                 aria-label={t("Select color {{color}}", {
-                  color,
-                  defaultValue: `Select color ${color}`,
+                  color: swatch,
+                  defaultValue: `Select color ${swatch}`,
                 })}
               />
             ))}

@@ -2326,11 +2326,15 @@ export function CompanySkills() {
       setInstallDialogState((current) => ({ ...current, open: false, error: null }));
       pushToast({
         tone: "success",
-        title: result.action === "created" ? "Skill installed" : result.action === "updated" ? "Skill updated" : "Skill is up to date",
+        title: result.action === "created"
+          ? t("companySkills.skillInstalled")
+          : result.action === "updated"
+            ? t("companySkills.skillUpdated")
+            : t("companySkills.skillIsUpToDate"),
         body: result.skill.name,
       });
       if (result.warnings[0]) {
-        pushToast({ tone: "warn", title: "Install warnings", body: result.warnings[0] });
+        pushToast({ tone: "warn", title: t("companySkills.installWarnings"), body: result.warnings[0] });
       }
       if (result.action === "created") {
         setViewParam("installed");
@@ -2395,10 +2399,18 @@ export function CompanySkills() {
         else current.delete(skillKey);
         await attachAgentsMutation.mutateAsync({ agentId, desiredSkills: Array.from(current) });
       }
-      pushToast({ tone: "success", title: "Agents updated", body: `${nextAgentIds.length} agent(s) attached.` });
+      pushToast({
+        tone: "success",
+        title: t("companySkills.agentsUpdated"),
+        body: t("companySkills.agentsAttached", { count: nextAgentIds.length }),
+      });
       setAttachPopoverOpen(false);
     } catch (error) {
-      pushToast({ tone: "error", title: "Update failed", body: error instanceof Error ? error.message : "Failed to update agent skills." });
+      pushToast({
+        tone: "error",
+        title: t("companySkills.updateFailed"),
+        body: error instanceof Error ? error.message : t("companySkills.failedToUpdateAgentSkills"),
+      });
     }
   }
 

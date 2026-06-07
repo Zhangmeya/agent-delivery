@@ -1,4 +1,4 @@
-import type { IssueRecoveryAction } from "@penclipai/shared";
+import type { IssueRecoveryAction, IssueRecoveryActionKind } from "@penclipai/shared";
 import { Eye, OctagonAlert, RefreshCw, TriangleAlert } from "lucide-react";
 
 export type RecoveryDisplayState =

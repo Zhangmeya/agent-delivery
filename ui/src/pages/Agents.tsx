@@ -19,7 +19,7 @@ import { relativeTime, cn, agentRouteRef, agentUrl } from "../lib/utils";
 import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Bot, Plus, List, GitBranch, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, Bot, Plus, List, GitBranch, SlidersHorizontal } from "lucide-react";
 import type { Agent } from "@penclipai/shared";
 import {
   resourceMembershipState,
@@ -51,6 +51,17 @@ function filterAgents(agents: Agent[], tab: FilterTab): Agent[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function hiddenAgentStatuses(showTerminated: boolean): Set<string> {
+  return showTerminated ? new Set(["pending_approval"]) : HIDDEN_AGENT_STATUSES;
+}
+
+function filterAgentsWithTerminated(agents: Agent[], tab: FilterTab, showTerminated: boolean): Agent[] {
+  const hidden = hiddenAgentStatuses(showTerminated);
+  return agents
+    .filter((a) => !hidden.has(a.status) && matchesFilter(a.status, tab))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function getConfiguredModel(agent: Agent): string | null {
   const value = agent.adapterConfig?.model;
   if (typeof value !== "string") return null;
@@ -76,6 +87,23 @@ function filterOrgTree(nodes: OrgNode[], tab: FilterTab): OrgNode[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function filterOrgTreeWithTerminated(nodes: OrgNode[], tab: FilterTab, showTerminated: boolean): OrgNode[] {
+  const hidden = hiddenAgentStatuses(showTerminated);
+  return nodes
+    .reduce<OrgNode[]>((acc, node) => {
+      const filteredReports = filterOrgTreeWithTerminated(node.reports, tab, showTerminated);
+      if (hidden.has(node.status)) {
+        acc.push(...filteredReports);
+        return acc;
+      }
+      if (matchesFilter(node.status, tab) || filteredReports.length > 0) {
+        acc.push({ ...node, reports: filteredReports });
+      }
+      return acc;
+    }, [])
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function Agents() {
   const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
@@ -87,6 +115,8 @@ export function Agents() {
   const pathSegment = location.pathname.split("/").pop() ?? "all";
   const tab: FilterTab = (pathSegment === "all" || pathSegment === "active" || pathSegment === "paused" || pathSegment === "error") ? pathSegment : "all";
   const [view, setView] = useState<"list" | "org">("org");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [showTerminated, setShowTerminated] = useState(false);
   const forceListView = isMobile;
   const effectiveView: "list" | "org" = forceListView ? "list" : view;
 
@@ -144,8 +174,8 @@ export function Agents() {
     return <PageSkeleton variant="list" />;
   }
 
-  const filtered = filterAgents(agents ?? [], tab);
-  const filteredOrg = filterOrgTree(orgTree ?? [], tab);
+  const filtered = filterAgentsWithTerminated(agents ?? [], tab, showTerminated);
+  const filteredOrg = filterOrgTreeWithTerminated(orgTree ?? [], tab, showTerminated);
 
   return (
     <div className="space-y-4">
@@ -255,7 +285,7 @@ export function Agents() {
                   resourceMembershipState(membershipsQuery.data, "agent", agent.id) === "left" ? "text-foreground/55" : "",
                 )}
                 leading={hasInvalidOrgChain ? (
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" aria-label="Invalid reporting chain" />
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" aria-label={t("agentDetail.invalidReportingChain")} />
                 ) : (
                   <AgentStatusCapsule status={agent.status} />
                 )}
@@ -415,7 +445,7 @@ function OrgTreeNode({
         )}
       >
         {hasInvalidOrgChain ? (
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Invalid reporting chain" />
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label={t("agentDetail.invalidReportingChain")} />
         ) : (
           <AgentStatusCapsule status={node.status} />
         )}

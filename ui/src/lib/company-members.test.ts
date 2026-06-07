@@ -6,7 +6,7 @@ import {
   buildCompanyUserProfileMap,
   buildMarkdownMentionOptions,
 } from "./company-members";
-import type { AgentOrgChainHealth } from "@paperclipai/shared";
+import type { AgentOrgChainHealth } from "@penclipai/shared";
 
 const activeMember = (overrides: Partial<CompanyMember>): CompanyMember => ({
   id: overrides.id ?? "member-1",

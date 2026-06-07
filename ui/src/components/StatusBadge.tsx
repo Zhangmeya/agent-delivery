@@ -1,6 +1,14 @@
 import { useTranslation } from "react-i18next";
 import { cn } from "../lib/utils";
-import { statusBadge, statusBadgeDefault } from "../lib/status-colors";
+import {
+  statusBadge,
+  statusBadgeDefault,
+  agentStatusColor,
+  agentStatusColorDefault,
+  agentStatusBadge,
+  agentStatusCapsule,
+  agentStatusMotion,
+} from "../lib/status-colors";
 import { translateStatusLabel } from "../lib/i18n-labels";
 
 export function StatusBadge({ status }: { status: string }) {
@@ -25,6 +33,7 @@ export function StatusBadge({ status }: { status: string }) {
  * renders as "idle" (alias for dead code).
  */
 export function AgentStatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const color = agentStatusColor[status] ?? agentStatusColorDefault;
   const label = status === "active" ? "idle" : status;
   return (
@@ -34,7 +43,7 @@ export function AgentStatusBadge({ status }: { status: string }) {
         agentStatusBadge[color]
       )}
     >
-      {label.replace(/_/g, " ")}
+      {translateStatusLabel(t, label)}
     </span>
   );
 }

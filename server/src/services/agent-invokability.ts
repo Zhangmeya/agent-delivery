@@ -1,6 +1,6 @@
-import type { Db } from "@paperclipai/db";
-import { agents } from "@paperclipai/db";
-import { getAgentWorkEligibility, type AgentEligibilityAgent, type AgentOrgChainHealth } from "@paperclipai/shared";
+import type { Db } from "@penclipai/db";
+import { agents } from "@penclipai/db";
+import { getAgentWorkEligibility, type AgentEligibilityAgent, type AgentOrgChainHealth } from "@penclipai/shared";
 import { eq } from "drizzle-orm";
 
 type AgentStatus = (typeof agents.$inferSelect)["status"];

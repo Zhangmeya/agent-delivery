@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Package, Search, X } from "lucide-react";
-import { artifactsApi, type ArtifactKindFilter } from "../api/artifacts";
+import { ArrowLeft, Check, Layers, Package, Search, X } from "lucide-react";
+import type { To } from "react-router-dom";
+import {
+  artifactsApi,
+  type ArtifactGroupBy,
+  type ArtifactKindFilter,
+} from "../api/artifacts";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -25,19 +30,19 @@ import { Button } from "@/components/ui/button";
 const ARTIFACTS_PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 250;
 
-const KIND_FILTERS: { value: ArtifactKindFilter; labelKey: string }[] = [
-  { value: "all", labelKey: "artifacts.filter.all" },
-  { value: "image", labelKey: "artifacts.filter.images" },
-  { value: "video", labelKey: "artifacts.filter.videos" },
-  { value: "document", labelKey: "artifacts.filter.documents" },
-  { value: "text", labelKey: "artifacts.filter.text" },
-  { value: "file", labelKey: "artifacts.filter.files" },
+export const ARTIFACT_KIND_FILTERS: { value: ArtifactKindFilter; label: string; labelKey: string }[] = [
+  { value: "all", label: "All", labelKey: "artifacts.filter.all" },
+  { value: "image", label: "Images", labelKey: "artifacts.filter.images" },
+  { value: "video", label: "Videos", labelKey: "artifacts.filter.videos" },
+  { value: "document", label: "Documents", labelKey: "artifacts.filter.documents" },
+  { value: "text", label: "Text", labelKey: "artifacts.filter.text" },
+  { value: "file", label: "Files", labelKey: "artifacts.filter.files" },
 ];
 
-export const ARTIFACT_GROUP_OPTIONS: { value: ArtifactGroupBy; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "task", label: "Task" },
-  { value: "parent_task", label: "Parent task" },
+export const ARTIFACT_GROUP_OPTIONS: { value: ArtifactGroupBy; label: string; labelKey: string }[] = [
+  { value: "none", label: "None", labelKey: "artifacts.group.none" },
+  { value: "task", label: "Task", labelKey: "artifacts.group.task" },
+  { value: "parent_task", label: "Parent task", labelKey: "artifacts.group.parentTask" },
 ];
 
 const KIND_VALUES = new Set(ARTIFACT_KIND_FILTERS.map((filter) => filter.value));
@@ -57,6 +62,10 @@ export function artifactGroupByLabel(value: ArtifactGroupBy): string {
   return ARTIFACT_GROUP_OPTIONS.find((option) => option.value === value)?.label ?? "None";
 }
 
+function artifactGroupByTranslationKey(value: ArtifactGroupBy): string {
+  return ARTIFACT_GROUP_OPTIONS.find((option) => option.value === value)?.labelKey ?? "artifacts.group.none";
+}
+
 export function Artifacts() {
   const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
@@ -71,9 +80,9 @@ export function Artifacts() {
   const [draftQuery, setDraftQuery] = useState(query);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    setBreadcrumbs([{ label: t("artifacts.title") }]);
-  }, [setBreadcrumbs, t]);
+  const grouping = groupBy !== "none";
+  const viewingStackList = grouping && !groupIssueId;
+  const viewingSelectedStack = grouping && !!groupIssueId;
 
   // Keep the search box in sync when the committed query changes from outside
   // (e.g. back/forward navigation or a shared URL), without clobbering in-flight
@@ -215,13 +224,13 @@ export function Artifacts() {
   useEffect(() => {
     if (viewingSelectedStack && selectedGroup) {
       setBreadcrumbs([
-        { label: "Artifacts", href: "/artifacts" },
+        { label: t("artifacts.title"), href: "/artifacts" },
         { label: `${selectedGroup.issue.identifier} · ${selectedGroup.title}` },
       ]);
     } else {
-      setBreadcrumbs([{ label: "Artifacts" }]);
+      setBreadcrumbs([{ label: t("artifacts.title") }]);
     }
-  }, [setBreadcrumbs, viewingSelectedStack, selectedGroup]);
+  }, [setBreadcrumbs, t, viewingSelectedStack, selectedGroup]);
 
   if (!selectedCompanyId) {
     return <EmptyState icon={Package} message={t("artifacts.selectCompany")} />;
@@ -232,15 +241,15 @@ export function Artifacts() {
 
   const emptyMessage = showGroupCards
     ? searching
-      ? "No artifact stacks match this search."
-      : "No artifact stacks yet."
+      ? t("artifacts.emptyStackSearch")
+      : t("artifacts.emptyStacks")
     : searching
-      ? "No artifacts match this search."
+      ? t("artifacts.emptySearch")
       : viewingSelectedStack
-        ? "No artifacts in this stack match the current filters."
+        ? t("artifacts.emptySelectedStack")
         : kind === "all"
-          ? "No artifacts yet. Outputs attached to issues will appear here."
-          : "No artifacts of this type yet.";
+          ? t("artifacts.emptyAll")
+          : t("artifacts.emptyKind");
 
   return (
     <div className="w-full max-w-6xl space-y-5">
@@ -266,24 +275,61 @@ export function Artifacts() {
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label={t("artifacts.filterAria")}>
-          {KIND_FILTERS.map((filter) => (
-            <button
-              key={filter.value}
-              type="button"
-              role="tab"
-              aria-selected={kind === filter.value}
-              onClick={() => setKind(filter.value)}
-              className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                kind === filter.value
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              )}
-            >
-              {t(filter.labelKey)}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label={t("artifacts.groupAria", {
+                  group: t(artifactGroupByTranslationKey(groupBy)),
+                  defaultValue: "Group artifacts (currently {{group}})",
+                })}
+                title={t("artifacts.groupTitle")}
+                data-testid="artifact-group-control"
+                data-group-by={groupBy}
+                className={cn("h-8 w-8 shrink-0", grouping && "bg-accent")}
+              >
+                <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuLabel>{t("artifacts.groupBy")}</DropdownMenuLabel>
+              {ARTIFACT_GROUP_OPTIONS.map((option) => (
+                <DropdownMenuItem
+                  key={option.value}
+                  data-testid={`artifact-group-option-${option.value}`}
+                  aria-selected={groupBy === option.value}
+                  onSelect={() => selectGroupBy(option.value)}
+                  className="justify-between"
+                >
+                  {t(option.labelKey)}
+                  {groupBy === option.value ? <Check className="h-3.5 w-3.5" /> : null}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label={t("artifacts.filterAria")}>
+            {ARTIFACT_KIND_FILTERS.map((filter) => (
+              <button
+                key={filter.value}
+                type="button"
+                role="tab"
+                aria-selected={kind === filter.value}
+                onClick={() => selectKind(filter.value)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  kind === filter.value
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+                {t(filter.labelKey)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -295,7 +341,7 @@ export function Artifacts() {
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-            All stacks
+            {t("artifacts.allStacks")}
           </Link>
           {selectedGroup ? (
             <span className="truncate text-muted-foreground">
@@ -310,17 +356,8 @@ export function Artifacts() {
 
       {isLoading ? (
         <PageSkeleton variant="list" />
-      ) : artifacts.length === 0 ? (
-        <EmptyState
-          icon={Package}
-          message={
-            searching
-              ? t("artifacts.emptySearch")
-              : kind === "all"
-                ? t("artifacts.emptyAll")
-                : t("artifacts.emptyKind")
-          }
-        />
+      ) : items.length === 0 ? (
+        <EmptyState icon={showGroupCards ? Layers : Package} message={emptyMessage} />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">

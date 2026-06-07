@@ -4,6 +4,7 @@ import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 import { translateRuntimeErrorMessage } from "./error-i18n";
 import {
+  translateRunEventStream,
   translateSystemGeneratedMarkdownText,
   translateSystemGeneratedText,
 } from "./system-generated-message-i18n";
@@ -22,6 +23,14 @@ const zhTranslations: Record<string, string> = {
   "systemGenerated.runEvent.queuedRetryAfterOrphanedProcess": "已确认孤立子进程结束，已排队自动重试",
   "systemGenerated.runEvent.cancelledDependenciesBlocked": "已取消：任务依赖仍被阻塞；阻塞解除后 Paperclip 会唤醒负责人",
   "systemGenerated.runEvent.cancelledTerminalStatusBeforeStart": "已取消：任务已在排队运行开始前进入终态（{{status}}）",
+  "systemGenerated.runEvent.runStarted": "运行已开始",
+  "systemGenerated.runEvent.adapterInvocation": "适配器调用",
+  "systemGenerated.runEvent.runSucceeded": "运行成功",
+  "systemGenerated.runEvent.runFailed": "运行失败",
+  "systemGenerated.runEvent.runTimedOut": "运行超时",
+  "systemGenerated.runEvent.stream.system": "系统",
+  "systemGenerated.runEvent.boundedRetryExhausted": "有界重试已耗尽：已进行 {{attempts}} 次定时尝试，不会再排队自动重试",
+  "systemGenerated.runEvent.scheduledBoundedRetry": "已定时有界重试 {{attempt}}/{{maxAttempts}}，时间：{{dueAt}}",
   "status.done": "已完成",
 };
 
@@ -100,5 +109,29 @@ describe("system-generated message i18n", () => {
         "Cancelled because issue reached terminal status (done) before the queued run could start",
       ),
     ).toBe("已取消：任务已在排队运行开始前进入终态（已完成）");
+  });
+
+  it("translates known run event list labels while preserving unknown streams", () => {
+    expect(translateRunEventStream(t, "system")).toBe("系统");
+    expect(translateRunEventStream(t, "stdout")).toBe("stdout");
+    expect(translateSystemGeneratedText(t, "run started")).toBe("运行已开始");
+    expect(translateSystemGeneratedText(t, "adapter invocation")).toBe("适配器调用");
+    expect(translateSystemGeneratedText(t, "run succeeded")).toBe("运行成功");
+    expect(translateSystemGeneratedText(t, "run failed")).toBe("运行失败");
+    expect(translateSystemGeneratedText(t, "run timed_out")).toBe("运行超时");
+    expect(
+      translateSystemGeneratedText(
+        t,
+        "Bounded retry exhausted after 2 scheduled attempts; no further automatic retry will be queued",
+      ),
+    ).toBe("有界重试已耗尽：已进行 2 次定时尝试，不会再排队自动重试");
+    expect(translateSystemGeneratedText(t, "Scheduled bounded retry 1/3 for 2026-06-07T12:00:00.000Z")).toBe(
+      "已定时有界重试 1/3，时间：2026-06-07T12:00:00.000Z",
+    );
+  });
+
+  it("preserves issue titles because they are content, not UI chrome", () => {
+    expect(translateSystemGeneratedText(t, "Review productivity for PEA-1")).toBe("Review productivity for PEA-1");
+    expect(translateSystemGeneratedText(t, "Phase 1 - Candidate Sourcing")).toBe("Phase 1 - Candidate Sourcing");
   });
 });

@@ -408,11 +408,11 @@ describe("IssueProperties", () => {
     });
     await flush();
 
-    expect(container.textContent).toContain("Sub-tasks");
-    expect(container.textContent).toContain("Add sub-task");
+    expect(container.textContent).toContain("Sub-issues");
+    expect(container.textContent).toContain("Add sub-issue");
 
     const addButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Add sub-task"));
+      .find((button) => button.textContent?.includes("Add sub-issue"));
     expect(addButton).not.toBeUndefined();
 
     await act(async () => {
@@ -480,7 +480,7 @@ describe("IssueProperties", () => {
     expect(blockerLink?.textContent).toContain("PAP-2");
     expect(blockerLink?.closest("button")).toBeNull();
     expect(container.textContent).toContain("Add blocker");
-    expect(container.querySelector('input[placeholder="Search tasks..."]')).toBeNull();
+    expect(container.querySelector('input[placeholder="Search issues..."]')).toBeNull();
 
     const addButton = Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("Add blocker"));
@@ -491,7 +491,7 @@ describe("IssueProperties", () => {
     });
     await flush();
 
-    expect(container.querySelector('input[placeholder="Search tasks..."]')).not.toBeNull();
+    expect(container.querySelector('input[placeholder="Search issues..."]')).not.toBeNull();
 
     const candidateButton = Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("PAP-3 New blocker"));
@@ -532,7 +532,7 @@ describe("IssueProperties", () => {
     });
     await flush();
 
-    const searchInput = container.querySelector('input[aria-label="Search tasks to add as blockers"]') as HTMLInputElement | null;
+    const searchInput = container.querySelector('input[aria-label="Search issues to add as blockers"]') as HTMLInputElement | null;
     expect(searchInput).not.toBeNull();
 
     await act(async () => {
@@ -599,7 +599,7 @@ describe("IssueProperties", () => {
     });
     await flush();
 
-    expect(document.body.textContent).toContain("Remove PAP-2: Existing blocker as a blocker for this task.");
+    expect(document.body.textContent).toContain("Remove PAP-2: Existing blocker as a blocker for this issue.");
     const confirmButton = Array.from(document.body.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("Remove blocker"));
     expect(confirmButton).not.toBeUndefined();
