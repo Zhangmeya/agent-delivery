@@ -121,15 +121,101 @@ jobs:
           const manifestPath = "packages/desktop-electron/release/desktop-artifacts.json";
           const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
           const releaseAssetPaths = Array.isArray(manifest.releaseAssetPaths) ? manifest.releaseAssetPaths : [];
+          const sizeAuditPaths = Array.isArray(manifest.sizeAuditPaths) ? manifest.sizeAuditPaths : [];
           if (releaseAssetPaths.length === 0) {
             throw new Error(`No desktop release assets were listed in ${manifestPath}.`);
           }
           console.log("artifact_paths<<EOF");
-          console.log([manifestPath, ...releaseAssetPaths].join("\n"));
+          console.log([manifestPath, ...sizeAuditPaths, ...releaseAssetPaths].join("\n"));
           console.log("EOF");
           console.log("release_asset_paths<<EOF");
           console.log(releaseAssetPaths.join("\n"));
           console.log("EOF");
+          console.log("size_audit_paths<<EOF");
+          console.log(sizeAuditPaths.join("\n"));
+          console.log("EOF");
+          console.log(`release_asset_bytes=${manifest.sizeAudit?.releaseAssetBytes ?? ""}`);
+          console.log(`unpacked_bytes=${manifest.sizeAudit?.unpackedBytes ?? ""}`);
+          console.log(`app_runtime_bytes=${manifest.sizeAudit?.appRuntimeBytes ?? ""}`);
+          console.log(`app_runtime_files=${manifest.sizeAudit?.appRuntimeFiles ?? ""}`);
+          NODE
+
+      - name: Warn on Windows desktop size budget
+        if: matrix.platform == 'win'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_TAG: ${{ inputs.github_release_tag }}
+          CURRENT_BYTES: ${{ steps.manifest.outputs.release_asset_bytes }}
+          APP_RUNTIME_BYTES: ${{ steps.manifest.outputs.app_runtime_bytes }}
+          APP_RUNTIME_FILES: ${{ steps.manifest.outputs.app_runtime_files }}
+        run: |
+          node - <<'NODE'
+          const { execFileSync } = require("node:child_process");
+
+          const currentTag = process.env.CURRENT_TAG || "";
+          const currentBytes = Number(process.env.CURRENT_BYTES || 0);
+          const appRuntimeBytes = Number(process.env.APP_RUNTIME_BYTES || 0);
+          const appRuntimeFiles = Number(process.env.APP_RUNTIME_FILES || 0);
+          const installerBudgetDelta = 10 * 1024 * 1024;
+          const appRuntimeByteBudget = 950 * 1024 * 1024;
+          const appRuntimeFileBudget = 50000;
+
+          function warn(message) {
+            console.log(`::warning title=Desktop size budget::${message}`);
+          }
+
+          if (!Number.isFinite(currentBytes) || currentBytes <= 0) {
+            warn("Windows installer size was not available in desktop-artifacts.json.");
+          }
+
+          if (appRuntimeBytes > appRuntimeByteBudget) {
+            warn(`Packaged app-runtime is ${(appRuntimeBytes / 1024 / 1024).toFixed(2)} MiB, above the ${(appRuntimeByteBudget / 1024 / 1024).toFixed(0)} MiB warning budget.`);
+          }
+
+          if (appRuntimeFiles > appRuntimeFileBudget) {
+            warn(`Packaged app-runtime has ${appRuntimeFiles} files, above the ${appRuntimeFileBudget} file warning budget.`);
+          }
+
+          if (!currentTag || !process.env.GH_TOKEN || !currentBytes) {
+            process.exit(0);
+          }
+
+          const releases = JSON.parse(execFileSync("gh", [
+            "release",
+            "list",
+            "--repo",
+            process.env.GITHUB_REPOSITORY,
+            "--limit",
+            "20",
+            "--json",
+            "tagName,isPrerelease,isDraft",
+          ], { encoding: "utf8" }));
+          const previous = releases.find((release) =>
+            release.tagName !== currentTag && !release.isPrerelease && !release.isDraft);
+          if (!previous) {
+            process.exit(0);
+          }
+
+          const release = JSON.parse(execFileSync("gh", [
+            "release",
+            "view",
+            previous.tagName,
+            "--repo",
+            process.env.GITHUB_REPOSITORY,
+            "--json",
+            "assets",
+          ], { encoding: "utf8" }));
+          const previousWinAsset = (release.assets || []).find((asset) =>
+            /-x64\.exe$/i.test(asset.name));
+          if (!previousWinAsset?.size) {
+            process.exit(0);
+          }
+
+          const delta = currentBytes - previousWinAsset.size;
+          if (delta > installerBudgetDelta) {
+            warn(`Windows installer grew by ${(delta / 1024 / 1024).toFixed(2)} MiB versus ${previous.tagName}; threshold is 10 MiB.`);
+          }
           NODE
 
       - name: Upload desktop artifact bundle

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { injectPaperclipRuntimePromptLayersIntoContext } from "../adapters/prompt-context.js";
 
 describe("injectPaperclipRuntimePromptLayersIntoContext", () => {
-  it("keeps handoff and localization guidance as separate prompt layers", () => {
+  it("appends localization guidance to the final handoff prompt layer", () => {
     const context = {
       paperclipSessionHandoffMarkdown: "Session handoff note.",
       paperclipLocalizationPromptMarkdown: "Runtime note.",
@@ -10,9 +10,22 @@ describe("injectPaperclipRuntimePromptLayersIntoContext", () => {
     };
     const nextContext = injectPaperclipRuntimePromptLayersIntoContext(context);
 
-    expect(nextContext).toBe(context);
-    expect(nextContext.paperclipSessionHandoffMarkdown).toBe("Session handoff note.");
-    expect(nextContext.paperclipLocalizationPromptMarkdown).toBe("Runtime note.");
+    expect(nextContext).not.toBe(context);
+    expect(nextContext.paperclipSessionHandoffMarkdown).toBe("Session handoff note.\n\nRuntime note.");
+    expect(nextContext).not.toHaveProperty("paperclipLocalizationPromptMarkdown");
+    expect(nextContext.other).toBe("value");
+  });
+
+  it("promotes localization guidance even when no handoff prompt exists yet", () => {
+    const context = {
+      paperclipLocalizationPromptMarkdown: "Runtime note.",
+      other: "value",
+    };
+
+    const nextContext = injectPaperclipRuntimePromptLayersIntoContext(context);
+
+    expect(nextContext.paperclipSessionHandoffMarkdown).toBe("Runtime note.");
+    expect(nextContext).not.toHaveProperty("paperclipLocalizationPromptMarkdown");
     expect(nextContext.other).toBe("value");
   });
 

@@ -15,6 +15,9 @@ const HARNESS_GROUPS = {
     "server/src/__tests__/error-handler.test.ts",
   ],
   localeAndI18nInfrastructure: [
+    "server/src/__tests__/adapter-prompt-context.test.ts",
+    "server/src/__tests__/agent-runtime-localization.test.ts",
+    "server/src/__tests__/heartbeat-runtime-locale.test.ts",
     "server/src/__tests__/i18n.test.ts",
     "server/src/__tests__/locale-middleware.test.ts",
     "server/src/__tests__/ui-locale.test.ts",
