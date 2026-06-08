@@ -980,7 +980,9 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     expect(runs).toHaveLength(2);
 
     const failedRun = runs.find((row) => row.id === runId);
-    const retryRun = runs.find((row) => row.id !== runId);
+    const retryRuns = runs.filter((row) => row.retryOfRunId === runId);
+    expect(retryRuns).toHaveLength(1);
+    const retryRun = retryRuns[0];
     expect(failedRun?.status).toBe("failed");
     expect(failedRun?.errorCode).toBe("process_lost");
     expect(failedRun?.livenessState).toBe("failed");
@@ -995,11 +997,16 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     expect(retryRun?.processLossRetryCount).toBe(1);
     expect(retryRun?.contextSnapshot as Record<string, unknown>).not.toHaveProperty("modelProfile");
 
-    const issue = await db
-      .select()
-      .from(issues)
-      .where(eq(issues.id, issueId))
-      .then((rows) => rows[0] ?? null);
+    const issue = await waitForValue(async () =>
+      db
+        .select()
+        .from(issues)
+        .where(eq(issues.id, issueId))
+        .then((rows) => {
+          const row = rows[0] ?? null;
+          return row?.executionRunId === retryRun?.id ? row : null;
+        })
+    );
     expect(issue?.executionRunId).toBe(retryRun?.id ?? null);
     expect([runId, retryRun?.id]).toContain(issue?.checkoutRunId);
   });
@@ -1401,8 +1408,11 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     });
     expect(recoveryAction?.nextAction).toContain("Repair the source issue workspace link");
 
-    const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
-    expect(comments.some((comment) => comment.body.includes("workspace failed validation"))).toBe(true);
+    const workspaceValidationComment = await waitForValue(async () => {
+      const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
+      return comments.find((comment) => comment.body.includes("workspace failed validation")) ?? null;
+    });
+    expect(workspaceValidationComment).not.toBeNull();
   });
 
   it("queues one finish-handoff wake when a successful run leaves in-progress work without a next action", async () => {

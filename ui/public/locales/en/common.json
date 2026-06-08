@@ -353,6 +353,8 @@
   "agentDetail.actionFailed": "Action failed",
   "agentDetail.runCrumb": "Run {{id}}",
   "agentActions.couldNotDuplicate": "Could not duplicate agent",
+  "agentActions.clearError": "Clear error",
+  "agentActions.clearErrorAria": "Clear error and return agent to idle",
   "agentActions.duplicateConfirm": "Duplicate {{name}} as {{nextName}}?",
   "agentActions.duplicateFailed": "Failed to duplicate agent",
   "agentActions.duplicated": "Agent duplicated",

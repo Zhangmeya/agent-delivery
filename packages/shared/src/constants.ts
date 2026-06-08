@@ -980,6 +980,7 @@ export const PLUGIN_RESERVED_COMPANY_SETTINGS_ROUTE_SEGMENTS = [
   "members",
   "invites",
   "secrets",
+  "instance",
 ] as const;
 export type PluginReservedCompanySettingsRouteSegment =
   (typeof PLUGIN_RESERVED_COMPANY_SETTINGS_ROUTE_SEGMENTS)[number];
@@ -1144,6 +1145,7 @@ export const PLUGIN_EVENT_TYPES = [
   "agent.created",
   "agent.updated",
   "agent.status_changed",
+  "agent.error_cleared",
   "agent.run.started",
   "agent.run.finished",
   "agent.run.failed",

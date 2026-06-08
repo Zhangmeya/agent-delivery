@@ -31,6 +31,7 @@ function PropertyRow({ label, children }: { label: string; children: React.React
 export function AgentProperties({ agent, runtimeState }: AgentPropertiesProps) {
   const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
+  const lastErrorIsActive = agent.status === "error";
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -70,8 +71,18 @@ export function AgentProperties({ agent, runtimeState }: AgentPropertiesProps) {
           </PropertyRow>
         )}
         {runtimeState?.lastError && (
-          <PropertyRow label={t("Last error", { defaultValue: "Last error" })}>
-            <span className="text-xs text-red-600 dark:text-red-400 break-words min-w-0">
+          <PropertyRow
+            label={lastErrorIsActive
+              ? t("Last error", { defaultValue: "Last error" })
+              : t("Last run error", { defaultValue: "Last run error" })}
+          >
+            <span
+              className={
+                lastErrorIsActive
+                  ? "text-xs text-red-600 dark:text-red-400 break-words min-w-0"
+                  : "text-xs text-muted-foreground break-words min-w-0"
+              }
+            >
               {translateRuntimeErrorMessage(t, runtimeState.lastError)}
             </span>
           </PropertyRow>

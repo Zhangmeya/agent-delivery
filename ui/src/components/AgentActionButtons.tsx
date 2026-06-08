@@ -10,6 +10,7 @@ import {
   Copy,
   RotateCcw,
   Trash2,
+  CheckCircle2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,36 @@ export function PauseResumeButton({
     <Button variant="outline" size={size} onClick={onPause} disabled={disabled}>
       <Pause className="h-3.5 w-3.5 sm:mr-1" />
       <span className="hidden sm:inline">{t("Pause", { defaultValue: "Pause" })}</span>
+    </Button>
+  );
+}
+
+export function ClearErrorButton({
+  onClick,
+  disabled,
+  size = "sm",
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  size?: "sm" | "default";
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <Button
+      variant="outline"
+      size={size}
+      onClick={onClick}
+      disabled={disabled}
+      className="border-destructive/60 text-destructive hover:bg-destructive/10 hover:text-destructive dark:border-destructive/50"
+      aria-label={t("agentActions.clearErrorAria", {
+        defaultValue: "Clear error and return agent to idle",
+      })}
+    >
+      <CheckCircle2 className="h-3.5 w-3.5 sm:mr-1" />
+      <span className="hidden sm:inline">
+        {t("agentActions.clearError", { defaultValue: "Clear error" })}
+      </span>
     </Button>
   );
 }
@@ -171,6 +202,7 @@ export function AgentActionButtons({
   const assignButtonLabel = assignLabel === "Assign Task"
     ? t("agentDetail.assignTask")
     : t(assignLabel, { defaultValue: assignLabel });
+  const isError = agent.status === "error";
 
   const reportError = useCallback(
     (message: string) => {
@@ -196,11 +228,12 @@ export function AgentActionButtons({
   }, [agent.id, canonicalAgentRef, queryClient, resolvedCompanyId]);
 
   const agentAction = useMutation({
-    mutationFn: async (action: "invoke" | "pause" | "resume" | "approve" | "terminate") => {
+    mutationFn: async (action: "invoke" | "pause" | "resume" | "clear_error" | "approve" | "terminate") => {
       switch (action) {
         case "invoke": return agentsApi.invoke(agent.id, resolvedCompanyId ?? undefined);
         case "pause": return agentsApi.pause(agent.id, resolvedCompanyId ?? undefined);
         case "resume": return agentsApi.resume(agent.id, resolvedCompanyId ?? undefined);
+        case "clear_error": return agentsApi.clearError(agent.id, resolvedCompanyId ?? undefined);
         case "approve": return agentsApi.approve(agent.id, resolvedCompanyId ?? undefined);
         case "terminate": return agentsApi.terminate(agent.id, resolvedCompanyId ?? undefined);
       }
@@ -277,6 +310,7 @@ export function AgentActionButtons({
   const disabled = actionsDisabled || agentAction.isPending;
   const assignAndRunDisabled = disabled || isPendingApproval || workActionsDisabled;
   const pauseResumeDisabled = disabled || isPendingApproval || (isPaused && workActionsDisabled);
+  const clearErrorDisabled = disabled;
 
   return (
     <div className={className ?? "flex items-center gap-1 sm:gap-2 shrink-0"}>
@@ -296,13 +330,21 @@ export function AgentActionButtons({
         label={runLabel}
         size={size}
       />
-      <PauseResumeButton
-        isPaused={isPaused}
-        onPause={() => agentAction.mutate("pause")}
-        onResume={() => agentAction.mutate("resume")}
-        disabled={pauseResumeDisabled}
-        size={size}
-      />
+      {isError ? (
+        <ClearErrorButton
+          onClick={() => agentAction.mutate("clear_error")}
+          disabled={clearErrorDisabled}
+          size={size}
+        />
+      ) : (
+        <PauseResumeButton
+          isPaused={isPaused}
+          onPause={() => agentAction.mutate("pause")}
+          onResume={() => agentAction.mutate("resume")}
+          disabled={pauseResumeDisabled}
+          size={size}
+        />
+      )}
       {showStatus && (
         <span className="hidden sm:inline">
           <AgentStatusBadge status={agent.status} />

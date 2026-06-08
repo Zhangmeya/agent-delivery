@@ -34,7 +34,8 @@ export function InstanceAccess() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: t("Instance Settings", { defaultValue: "Instance Settings" }), href: "/instance/settings/general" },
+      { label: t("Settings", { defaultValue: "Settings" }), href: "/company/settings" },
+      { label: t("Instance settings", { defaultValue: "Instance settings" }), href: "/company/settings/instance/general" },
       { label: t("Access", { defaultValue: "Access" }) },
     ]);
   }, [setBreadcrumbs, t]);

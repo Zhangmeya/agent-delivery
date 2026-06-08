@@ -353,6 +353,8 @@
   "agentDetail.actionFailed": "操作失败",
   "agentDetail.runCrumb": "运行 {{id}}",
   "agentActions.couldNotDuplicate": "无法复制智能体",
+  "agentActions.clearError": "清除错误",
+  "agentActions.clearErrorAria": "清除错误并将智能体恢复为空闲",
   "agentActions.duplicateConfirm": "将 {{name}} 复制为 {{nextName}}？",
   "agentActions.duplicateFailed": "复制智能体失败",
   "agentActions.duplicated": "智能体已复制",
