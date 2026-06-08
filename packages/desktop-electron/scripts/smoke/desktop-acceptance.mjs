@@ -873,7 +873,7 @@ async function runAcceptanceFlow({ page, origin, company, project, issue, agent,
     throw new Error("File Browser example plugin was not installed.");
   }
   await verifyDesktopRoute(page, `${origin}/${companyPrefix}/projects/${project.id}`, "project detail after file-browser install");
-  await page.locator("text=Files").first().waitFor({ timeout: 30_000 });
+  await page.getByRole("tab", { name: /^(Files|文件)$/ }).waitFor({ timeout: 30_000 });
 
   const kitchenSinkPlugin = installedExamples.find((plugin) => plugin.packageName === "@penclipai/plugin-kitchen-sink-example");
   if (!kitchenSinkPlugin) {

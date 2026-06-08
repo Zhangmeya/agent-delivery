@@ -41,6 +41,23 @@ const standaloneBundledPluginInstallEnv = {
   NPM_CONFIG_PRODUCTION: "false",
   npm_config_production: "false",
 };
+const runtimeNodeModulePruneRules = [
+  {
+    label: "Vite runtime peer spillover",
+    topLevelEntries: ["vite", "@vitejs"],
+    pnpmPackagePrefixes: ["vite@", "@vitejs+"],
+  },
+  {
+    label: "Vitest runtime peer spillover",
+    topLevelEntries: ["vitest", "@vitest"],
+    pnpmPackagePrefixes: ["vitest@", "@vitest+"],
+  },
+  {
+    label: "Storybook build-only packages",
+    topLevelEntries: ["storybook", "@storybook"],
+    pnpmPackagePrefixes: ["storybook@", "@storybook+"],
+  },
+];
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
@@ -294,6 +311,58 @@ function copyBundledPluginDependencies(sourcePackageRoot, stagedPluginRoot) {
   }
 }
 
+function removeIfExists(targetPath) {
+  if (!existsSync(targetPath)) return false;
+  rmSync(targetPath, { recursive: true, force: true });
+  return true;
+}
+
+function pruneRuntimeNodeModules() {
+  if (!existsSync(appRuntimeNodeModulesDir)) {
+    return;
+  }
+
+  const pnpmStoreDir = path.resolve(appRuntimeNodeModulesDir, ".pnpm");
+  const removedEntries = [];
+
+  for (const rule of runtimeNodeModulePruneRules) {
+    for (const entryName of rule.topLevelEntries) {
+      const entryPath = path.resolve(appRuntimeNodeModulesDir, entryName);
+      if (removeIfExists(entryPath)) {
+        removedEntries.push(`${rule.label}: ${entryName}`);
+      }
+    }
+
+    if (!existsSync(pnpmStoreDir)) {
+      continue;
+    }
+
+    for (const entry of readdirSync(pnpmStoreDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      if (!rule.pnpmPackagePrefixes.some((prefix) => entry.name.startsWith(prefix))) {
+        continue;
+      }
+
+      const entryPath = path.resolve(pnpmStoreDir, entry.name);
+      if (removeIfExists(entryPath)) {
+        removedEntries.push(`${rule.label}: .pnpm/${entry.name}`);
+      }
+    }
+  }
+
+  if (removedEntries.length === 0) {
+    console.log("[desktop-stage] No build/test-only runtime packages needed pruning.");
+    return;
+  }
+
+  console.log(
+    `[desktop-stage] Pruned ${removedEntries.length} build/test-only runtime package entries from staged node_modules.`,
+  );
+  for (const entry of removedEntries) {
+    console.log(`[desktop-stage]   - ${entry}`);
+  }
+}
+
 console.log("[desktop-stage] Building server workspace and dependencies...");
 runPnpm(["--dir", repoRoot, "--filter", "@penclipai/server...", "build"], {
   cwd: repoRoot,
@@ -410,5 +479,7 @@ console.log("[desktop-stage] Preparing bundled plugin runtime dependencies...");
 for (const { sourceRoot, stagedRoot } of stagedPluginRoots) {
   copyBundledPluginDependencies(sourceRoot, stagedRoot);
 }
+
+pruneRuntimeNodeModules();
 
 console.log("[desktop-stage] Packaged runtime ready in .stage/app-runtime.");

@@ -45,7 +45,8 @@ export function ProfileSettings() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: t("Instance Settings", { defaultValue: "Instance Settings" }) },
+      { label: t("Settings", { defaultValue: "Settings" }), href: "/company/settings" },
+      { label: t("Instance settings", { defaultValue: "Instance settings" }), href: "/company/settings/instance/general" },
       { label: t("Profile", { defaultValue: "Profile" }) },
     ]);
   }, [setBreadcrumbs, t]);

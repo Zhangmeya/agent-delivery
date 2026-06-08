@@ -14,6 +14,7 @@ import {
 import type { DeploymentMode } from "@penclipai/shared";
 import { Link } from "@/lib/router";
 import { authApi } from "@/api/auth";
+import { DEFAULT_INSTANCE_SETTINGS_PATH } from "@/lib/instance-settings";
 import { queryKeys } from "@/lib/queryKeys";
 import { useSidebar } from "../context/SidebarContext";
 import { useTheme } from "../context/ThemeContext";
@@ -22,12 +23,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { cn } from "../lib/utils";
 
-const PROFILE_SETTINGS_PATH = "/instance/settings/profile";
+const PROFILE_SETTINGS_PATH = "/company/settings/instance/profile";
 const DOCS_URL = "https://docs.paperclip.ing/";
 
 interface SidebarAccountMenuProps {
   deploymentMode?: DeploymentMode;
-  instanceSettingsTarget: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   version?: string | null;
@@ -105,7 +105,6 @@ function MenuAction({ label, description, icon: Icon, onClick, href, external = 
 
 export function SidebarAccountMenu({
   deploymentMode,
-  instanceSettingsTarget,
   open: controlledOpen,
   onOpenChange,
   version,
@@ -223,7 +222,7 @@ export function SidebarAccountMenu({
                   defaultValue: "Jump back to the last settings page you opened.",
                 })}
                 icon={Settings}
-                href={instanceSettingsTarget}
+                href={DEFAULT_INSTANCE_SETTINGS_PATH}
                 onClick={closeNavigationChrome}
               />
               <MenuAction

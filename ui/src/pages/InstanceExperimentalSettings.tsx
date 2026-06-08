@@ -129,7 +129,8 @@ export function InstanceExperimentalSettings() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: t("Instance Settings") },
+      { label: t("Settings"), href: "/company/settings" },
+      { label: t("Instance settings", { defaultValue: "Instance settings" }), href: "/company/settings/instance/general" },
       { label: t("Experimental") },
     ]);
   }, [setBreadcrumbs, t]);
@@ -305,9 +306,11 @@ export function InstanceExperimentalSettings() {
       <section className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <h2 className="text-sm font-semibold">{t("Issue Plan Decomposition Panel")}</h2>
+            <h2 className="text-sm font-semibold">
+              {t("instanceExperimentalSettings.issuePlanDecompositionPanelTitle")}
+            </h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              {t("Show accepted-plan decomposition history on issue detail pages. Intended for debugging and validating subtask creation behavior while the presentation is still being refined.")}
+              {t("instanceExperimentalSettings.issuePlanDecompositionPanelDescription")}
             </p>
           </div>
           <ToggleSwitch
@@ -318,7 +321,7 @@ export function InstanceExperimentalSettings() {
               })
             }
             disabled={toggleMutation.isPending}
-            aria-label={t("Toggle issue plan decomposition panel experimental setting")}
+            aria-label={t("instanceExperimentalSettings.issuePlanDecompositionPanelToggle")}
           />
         </div>
       </section>

@@ -43,7 +43,8 @@ export function InstanceGeneralSettings() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: t("Instance Settings", { defaultValue: "Instance Settings" }) },
+      { label: t("Settings", { defaultValue: "Settings" }), href: "/company/settings" },
+      { label: t("Instance settings", { defaultValue: "Instance settings" }) },
       { label: t("General", { defaultValue: "General" }) },
     ]);
   }, [setBreadcrumbs, t]);

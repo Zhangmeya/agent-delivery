@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useNavigate, useNavigationType, useParams } from "@/lib/router";
 import { Sidebar } from "./Sidebar";
-import { InstanceSidebar } from "./InstanceSidebar";
 import { CompanySettingsSidebar } from "./CompanySettingsSidebar";
 import { CompanySettingsNav } from "./access/CompanySettingsNav";
 import { BreadcrumbBar } from "./BreadcrumbBar";
@@ -32,10 +31,6 @@ import { healthApi } from "../api/health";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { shouldSyncCompanySelectionFromRoute } from "../lib/company-selection";
 import {
-  DEFAULT_INSTANCE_SETTINGS_PATH,
-  normalizeRememberedInstanceSettingsPath,
-} from "../lib/instance-settings";
-import {
   resetNavigationScroll,
   shouldResetScrollOnNavigation,
 } from "../lib/navigation-scroll";
@@ -45,23 +40,12 @@ import { cn } from "../lib/utils";
 import { NotFoundPage } from "../pages/NotFound";
 import { PluginSlotMount, resolveRouteSidebarSlot, usePluginSlots } from "../plugins/slots";
 
-const INSTANCE_SETTINGS_MEMORY_KEY = "paperclip.lastInstanceSettingsPath";
-
 function getCompanyRouteSegment(pathname: string, companyPrefix: string | undefined): string | null {
   if (!companyPrefix) return null;
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length < 2) return null;
   if (segments[0]?.toUpperCase() !== companyPrefix.toUpperCase()) return null;
   return segments[1]?.toLowerCase() ?? null;
-}
-
-function readRememberedInstanceSettingsPath(): string {
-  if (typeof window === "undefined") return DEFAULT_INSTANCE_SETTINGS_PATH;
-  try {
-    return normalizeRememberedInstanceSettingsPath(window.localStorage.getItem(INSTANCE_SETTINGS_MEMORY_KEY));
-  } catch {
-    return DEFAULT_INSTANCE_SETTINGS_PATH;
-  }
 }
 
 export function Layout() {
@@ -84,14 +68,12 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const navigationType = useNavigationType();
-  const isInstanceSettingsRoute = location.pathname.startsWith("/instance/");
   const isCompanySettingsRoute = location.pathname.includes("/company/settings");
   const onboardingTriggered = useRef(false);
   const lastMainScrollTop = useRef(0);
   const previousPathname = useRef<string | null>(null);
   const mainContentRef = useRef<HTMLElement | null>(null);
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
-  const [instanceSettingsTarget, setInstanceSettingsTarget] = useState<string>(() => readRememberedInstanceSettingsPath());
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const matchedCompany = useMemo(() => {
     if (!companyPrefix) return null;
@@ -316,21 +298,6 @@ export function Layout() {
   }, [isMobile]);
 
   useEffect(() => {
-    if (!location.pathname.startsWith("/instance/settings/")) return;
-
-    const nextPath = normalizeRememberedInstanceSettingsPath(
-      `${location.pathname}${location.search}${location.hash}`,
-    );
-    setInstanceSettingsTarget(nextPath);
-
-    try {
-      window.localStorage.setItem(INSTANCE_SETTINGS_MEMORY_KEY, nextPath);
-    } catch {
-      // Ignore storage failures in restricted environments.
-    }
-  }, [location.hash, location.pathname, location.search]);
-
-  useEffect(() => {
     if (typeof document === "undefined") return;
     const mainContent = mainContentRef.current;
     return scheduleMainContentFocus(mainContent);
@@ -387,9 +354,7 @@ export function Layout() {
           >
             <div className="flex flex-1 min-h-0 overflow-hidden">
               <div className="w-60 shrink-0 overflow-hidden">
-                {isInstanceSettingsRoute ? (
-                  <InstanceSidebar />
-                ) : isCompanySettingsRoute ? (
+                {isCompanySettingsRoute ? (
                   <CompanySettingsSidebar />
                 ) : (
                   companySidebar
@@ -398,7 +363,6 @@ export function Layout() {
             </div>
             <SidebarAccountMenu
               deploymentMode={health?.deploymentMode}
-              instanceSettingsTarget={instanceSettingsTarget}
               version={health?.version}
             />
           </div>
@@ -406,9 +370,7 @@ export function Layout() {
           <div className="flex h-full flex-col shrink-0">
             <div className="flex flex-1 min-h-0">
               <ResizableSidebarPane open={sidebarOpen} resizable className="h-full shrink-0">
-                {isInstanceSettingsRoute ? (
-                  <InstanceSidebar />
-                ) : isCompanySettingsRoute ? (
+                {isCompanySettingsRoute ? (
                   <CompanySettingsSidebar />
                 ) : (
                   companySidebar
@@ -417,7 +379,6 @@ export function Layout() {
             </div>
             <SidebarAccountMenu
               deploymentMode={health?.deploymentMode}
-              instanceSettingsTarget={instanceSettingsTarget}
               version={health?.version}
             />
           </div>

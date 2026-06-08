@@ -24,6 +24,7 @@ const stageAppRuntimeNodeModulesDir = path.resolve(stageAppRuntimeDir, "node_mod
 const stageAppRuntimeSkillsDir = path.resolve(stageAppRuntimeDir, "skills");
 const stageAppRuntimeBundledPluginsDir = path.resolve(stageAppRuntimeDir, "packages", "plugins");
 const prepareStageScript = path.resolve(packageDir, "scripts", "prepare-stage.mjs");
+const desktopSizeAuditScript = path.resolve(packageDir, "scripts", "desktop-size-audit.mjs");
 const desktopReleaseVersion = process.env.PAPERCLIP_DESKTOP_RELEASE_VERSION?.trim() ?? "";
 const desktopArtifactManifestPath = path.resolve(releaseDir, "desktop-artifacts.json");
 const PRODUCT_NAME = "Paperclip CN";
@@ -703,6 +704,7 @@ async function run() {
   }
 
   writeDesktopArtifactManifest(targetConfig, appLayout, releaseAssetPaths);
+  runNodeScript(desktopSizeAuditScript, [], { cwd: packageDir });
   console.log(`[desktop-dist] Wrote desktop artifact manifest: ${desktopArtifactManifestPath}`);
 }
 
