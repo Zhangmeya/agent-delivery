@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   BookOpen,
   LogOut,
+  Megaphone,
   type LucideIcon,
   Moon,
   Settings,
@@ -21,10 +22,11 @@ import { useTheme } from "../context/ThemeContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LanguageSwitcher } from "./LanguageSwitcher";
-import { cn } from "../lib/utils";
+import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 
 const PROFILE_SETTINGS_PATH = "/company/settings/instance/profile";
 const DOCS_URL = "https://docs.paperclip.ing/";
+const FEEDBACK_URL = "https://paperclip.ing/feedback";
 
 interface SidebarAccountMenuProps {
   deploymentMode?: DeploymentMode;
@@ -112,7 +114,8 @@ export function SidebarAccountMenu({
   const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const queryClient = useQueryClient();
-  const { isMobile, setSidebarOpen } = useSidebar();
+  const { isMobile, setSidebarOpen, collapsed, peeking } = useSidebar();
+  const rail = collapsed && !peeking;
   const { theme, toggleTheme } = useTheme();
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
@@ -163,7 +166,7 @@ export function SidebarAccountMenu({
               {session?.user.image ? <AvatarImage src={session.user.image} alt={displayName} /> : null}
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
-            <span className="min-w-0 flex-1 truncate">{displayName}</span>
+            <span className={cn("min-w-0 flex-1 truncate", rail && SIDEBAR_RAIL_HIDDEN_LABEL)}>{displayName}</span>
           </button>
         </PopoverTrigger>
         <PopoverContent
@@ -189,7 +192,7 @@ export function SidebarAccountMenu({
                   </span>
                 </div>
                 <p className="truncate text-sm text-muted-foreground">{secondaryLabel}</p>
-              {version ? (
+                {version ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t("Paperclip v{{version}}", { defaultValue: "Paperclip v{{version}}", version })}
                   </p>
@@ -232,6 +235,16 @@ export function SidebarAccountMenu({
                 })}
                 icon={BookOpen}
                 href={DOCS_URL}
+                external
+                onClick={() => setOpen(false)}
+              />
+              <MenuAction
+                label={t("Feedback", { defaultValue: "Feedback" })}
+                description={t("Share feedback or report an issue.", {
+                  defaultValue: "Share feedback or report an issue.",
+                })}
+                icon={Megaphone}
+                href={FEEDBACK_URL}
                 external
                 onClick={() => setOpen(false)}
               />

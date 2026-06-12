@@ -20,9 +20,8 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useTranslation } from "react-i18next";
-import { Link, useLocation, useNavigate } from "@/lib/router";
 import type { Company } from "@penclipai/shared";
+import { Link, useLocation, useNavigate } from "@/lib/router";
 import { authApi } from "@/api/auth";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,11 +33,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCompany } from "@/context/CompanyContext";
+import { useConferenceRoomChatEnabled } from "@/hooks/useConferenceRoomChatEnabled";
 import { useDialogActions } from "@/context/DialogContext";
 import { useCompanyOrder } from "@/hooks/useCompanyOrder";
 import { queryKeys } from "@/lib/queryKeys";
-import { buildDndAccessibility } from "@/lib/dnd-accessibility";
-import { cn } from "@/lib/utils";
+import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "@/lib/utils";
 import { useSidebar } from "../context/SidebarContext";
 import { CompanyPatternIcon } from "./CompanyPatternIcon";
 
@@ -78,7 +77,6 @@ function SortableCompanyItem({
     transition,
     isDragging,
   } = useSortable({ id: company.id, disabled: !isEditing });
-  const { t } = useTranslation();
 
   return (
     <DropdownMenuItem
@@ -108,10 +106,7 @@ function SortableCompanyItem({
         <button
           type="button"
           ref={setActivatorNodeRef}
-          aria-label={t("Reorder {{name}}", {
-            defaultValue: "Reorder {{name}}",
-            name: company.name,
-          })}
+          aria-label={`Reorder ${company.name}`}
           className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-ring"
           onClick={(event) => {
             event.preventDefault();
@@ -135,13 +130,16 @@ function SortableCompanyItem({
 }
 
 export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompanyMenuProps = {}) {
-  const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const [isEditingOrder, setIsEditingOrder] = useState(false);
   const queryClient = useQueryClient();
   const { companies, selectedCompany, setSelectedCompanyId } = useCompany();
+  // Team-centric copy (PAP-67) ships behind the Conference Room Chat flag
+  // (PAP-139); OFF keeps master's "Add company...".
+  const { enabled: conferenceRoomChatEnabled } = useConferenceRoomChatEnabled();
   const { openOnboarding } = useDialogActions();
-  const { isMobile, setSidebarOpen } = useSidebar();
+  const { isMobile, setSidebarOpen, collapsed, peeking } = useSidebar();
+  const rail = collapsed && !peeking;
   const location = useLocation();
   const navigate = useNavigate();
   const open = controlledOpen ?? internalOpen;
@@ -154,7 +152,6 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
       activationConstraint: { delay: 180, tolerance: 6 },
     }),
   );
-  const dndAccessibility = useMemo(() => buildDndAccessibility(t), [t]);
   const sidebarCompanies = useMemo(
     () => companies.filter((company) => company.status !== "archived"),
     [companies],
@@ -232,27 +229,27 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="h-9 flex-1 justify-start gap-2 px-2 text-left"
-          aria-label={selectedCompany
-            ? t("Open {{name}} menu", {
-              defaultValue: "Open {{name}} workspace switcher",
-              name: selectedCompany.name,
-            })
-            : t("Open workspace switcher", { defaultValue: "Open workspace switcher" })}
+          // `px-3` (not px-2) so the logo's left edge lines up with the nav icon
+          // column (nav px-3 + item px-3) and, crucially, stays put between states:
+          // the Button's default size adds `has-[>svg]:px-3`, so with the chevron
+          // svg present (expanded) it was already 12px but without it (rail) it fell
+          // back to 8px — a 4px horizontal jump on collapse (PAP-10676).
+          className="h-9 flex-1 justify-start gap-2 px-3 text-left"
+          aria-label={selectedCompany ? `Open ${selectedCompany.name} workspace switcher` : "Open workspace switcher"}
         >
           <span className="flex min-w-0 flex-1 items-center gap-2">
             {selectedCompany ? <WorkspaceIcon company={selectedCompany} /> : null}
-            <span className="truncate text-sm font-bold text-foreground">
-              {selectedCompany?.name ?? t("Select workspace", { defaultValue: "Select workspace" })}
+            <span className={cn("truncate text-sm font-bold text-foreground", rail && SIDEBAR_RAIL_HIDDEN_LABEL)}>
+              {selectedCompany?.name ?? "Select workspace"}
             </span>
           </span>
-          <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+          {!rail && <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={8} className="w-64 p-1">
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <DropdownMenuLabel className="p-0 text-[11px] font-semibold uppercase text-muted-foreground">
-            {t("Switch workspace", { defaultValue: "Switch workspace" })}
+            Switch workspace
           </DropdownMenuLabel>
           <button
             type="button"
@@ -263,16 +260,13 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
             }}
             className="rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            {isEditingOrder
-              ? t("Done", { defaultValue: "Done" })
-              : t("Edit", { defaultValue: "Edit" })}
+            {isEditingOrder ? "Done" : "Edit"}
           </button>
         </div>
         <div className="max-h-96 overflow-y-auto">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
-            accessibility={dndAccessibility}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
@@ -291,9 +285,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
             </SortableContext>
           </DndContext>
           {orderedCompanies.length === 0 ? (
-            <DropdownMenuItem disabled>
-              {t("No workspaces", { defaultValue: "No workspaces" })}
-            </DropdownMenuItem>
+            <DropdownMenuItem disabled>No workspaces</DropdownMenuItem>
           ) : null}
         </div>
         <DropdownMenuSeparator />
@@ -303,7 +295,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
           disabled={isEditingOrder}
         >
           <Plus className="size-4" />
-          <span>{t("app.addCompany", { defaultValue: "Add Company" })}</span>
+          <span>{conferenceRoomChatEnabled ? "Create new team..." : "Add company..."}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild disabled={isEditingOrder}>
@@ -319,12 +311,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
           >
             <UserPlus className="size-4" />
             <span className="truncate">
-              {selectedCompany
-                ? t("Invite people to {{name}}", {
-                  defaultValue: "Invite people to {{name}}",
-                  name: selectedCompany.name,
-                })
-                : t("Invite people", { defaultValue: "Invite people" })}
+              {selectedCompany ? `Invite people to ${selectedCompany.name}` : "Invite people"}
             </span>
           </Link>
         </DropdownMenuItem>
@@ -340,7 +327,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
             }}
           >
             <Settings className="size-4" />
-            <span>{t("Company settings", { defaultValue: "Company settings" })}</span>
+            <span>Company settings</span>
           </Link>
         </DropdownMenuItem>
         {session?.session ? (
@@ -352,11 +339,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
               disabled={isEditingOrder || signOutMutation.isPending}
             >
               <LogOut className="size-4" />
-              <span>
-                {signOutMutation.isPending
-                  ? t("Signing out...", { defaultValue: "Signing out..." })
-                  : t("Sign out", { defaultValue: "Sign out" })}
-              </span>
+              <span>{signOutMutation.isPending ? "Signing out..." : "Sign out"}</span>
             </DropdownMenuItem>
           </>
         ) : null}

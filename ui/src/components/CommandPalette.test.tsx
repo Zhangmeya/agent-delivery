@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
 
-import { act, useEffect } from "react";
 import type { KeyboardEventHandler, ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandPalette } from "./CommandPalette";
+import { queryKeys } from "../lib/queryKeys";
+
+function act(callback: () => void | Promise<void>) {
+  let result: void | Promise<void> | undefined;
+  flushSync(() => {
+    result = callback();
+  });
+  return result;
+}
 
 const companyState = vi.hoisted(() => ({
   selectedCompanyId: "company-1",
@@ -33,8 +42,8 @@ const mockProjectsApi = vi.hoisted(() => ({
   list: vi.fn(),
 }));
 
-const commandInputState = vi.hoisted(() => ({
-  onValueChange: null as null | ((value: string) => void),
+const mockInstanceSettingsApi = vi.hoisted(() => ({
+  getExperimental: vi.fn(),
 }));
 
 vi.mock("../context/CompanyContext", () => ({
@@ -53,9 +62,13 @@ vi.mock("../context/SidebarContext", () => ({
 const navigateState = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
+const locationState = vi.hoisted(() => ({
+  location: { pathname: "/", search: "", hash: "" },
+}));
 
 vi.mock("@/lib/router", () => ({
   useNavigate: () => navigateState.navigate,
+  useLocation: () => locationState.location,
 }));
 
 vi.mock("../api/issues", () => ({
@@ -70,24 +83,16 @@ vi.mock("../api/projects", () => ({
   projectsApi: mockProjectsApi,
 }));
 
+vi.mock("../api/instanceSettings", () => ({
+  instanceSettingsApi: mockInstanceSettingsApi,
+}));
+
 vi.mock("./Identity", () => ({
   Identity: ({ name }: { name: string }) => <span>{name}</span>,
 }));
 
 vi.mock("@/components/ui/command", () => ({
-  CommandDialog: ({
-    children,
-    onOpenChange,
-  }: {
-    open: boolean;
-    children: ReactNode;
-    onOpenChange?: (open: boolean) => void;
-  }) => {
-    useEffect(() => {
-      onOpenChange?.(true);
-    }, [onOpenChange]);
-    return <div>{children}</div>;
-  },
+  CommandDialog: ({ open, children }: { open: boolean; children: ReactNode }) => (open ? <div>{children}</div> : null),
   CommandEmpty: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   CommandGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   CommandInput: ({
@@ -98,20 +103,17 @@ vi.mock("@/components/ui/command", () => ({
     value: string;
     onValueChange: (value: string) => void;
     onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
-  }) => {
-    commandInputState.onValueChange = onValueChange;
-    return (
-      <div>
-        <input
-          aria-label="Command search"
-          value={value}
-          onChange={(event) => onValueChange(event.currentTarget.value)}
-          onKeyDown={onKeyDown}
-        />
-        <button type="button" aria-label="Set query" onClick={() => onValueChange("pull/3303")} />
-      </div>
-    );
-  },
+  }) => (
+    <div>
+      <input
+        aria-label="Command search"
+        value={value}
+        onChange={(event) => onValueChange(event.currentTarget.value)}
+        onKeyDown={onKeyDown}
+      />
+      <button type="button" aria-label="Set query" onClick={() => onValueChange("pull/3303")} />
+    </div>
+  ),
   CommandItem: ({
     children,
     onSelect,
@@ -152,7 +154,11 @@ async function waitForAssertion(assertion: () => void, attempts = 20) {
   throw lastError;
 }
 
-function renderWithQueryClient(node: ReactNode, container: HTMLDivElement) {
+function renderWithQueryClient(
+  node: ReactNode,
+  container: HTMLDivElement,
+  seedQueryClient?: (queryClient: QueryClient) => void,
+) {
   const root = createRoot(container);
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -161,6 +167,7 @@ function renderWithQueryClient(node: ReactNode, container: HTMLDivElement) {
       },
     },
   });
+  seedQueryClient?.(queryClient);
 
   act(() => {
     root.render(
@@ -185,37 +192,89 @@ describe("CommandPalette", () => {
     mockIssuesApi.list.mockReset();
     mockAgentsApi.list.mockReset();
     mockProjectsApi.list.mockReset();
+    mockInstanceSettingsApi.getExperimental.mockReset();
     navigateState.navigate.mockReset();
+    locationState.location.pathname = "/";
+    locationState.location.search = "";
+    locationState.location.hash = "";
     mockIssuesApi.list.mockResolvedValue([]);
     mockAgentsApi.list.mockResolvedValue([]);
     mockProjectsApi.list.mockResolvedValue([]);
-    commandInputState.onValueChange = null;
+    mockInstanceSettingsApi.getExperimental.mockResolvedValue({
+      enableExperimentalFileViewer: false,
+    });
   });
 
   afterEach(() => {
     container.remove();
   });
 
-  it.skip("includes routine execution issues in search queries", async () => {
+  it("includes routine execution issues in search queries", async () => {
     const { root } = renderWithQueryClient(<CommandPalette />, container);
 
     act(() => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
     });
-    await flush();
+
+    const setQueryButton = container.querySelector('button[aria-label="Set query"]');
+    expect(setQueryButton).not.toBeNull();
+
+    act(() => {
+      setQueryButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
 
     await waitForAssertion(() => {
-      expect(commandInputState.onValueChange).not.toBeNull();
-
-      act(() => {
-        commandInputState.onValueChange!("pull/3303");
-      });
-
       expect(mockIssuesApi.list).toHaveBeenCalledWith("company-1", {
         q: "pull/3303",
         limit: 10,
         includeRoutineExecutions: true,
       });
+    });
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("hides the issue file viewer command by default", async () => {
+    locationState.location.pathname = "/issues/PAP-1";
+    const { root } = renderWithQueryClient(<CommandPalette />, container);
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+    });
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain("Create new task");
+    });
+    expect(container.textContent).not.toContain("Open file in this issue");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("shows the issue file viewer command when the experimental flag is enabled", async () => {
+    locationState.location.pathname = "/issues/PAP-1";
+    mockInstanceSettingsApi.getExperimental.mockResolvedValue({
+      enableExperimentalFileViewer: true,
+    });
+    const { root } = renderWithQueryClient(
+      <CommandPalette />,
+      container,
+      (queryClient) => {
+        queryClient.setQueryData(queryKeys.instance.experimentalSettings, {
+          enableExperimentalFileViewer: true,
+        });
+      },
+    );
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+    });
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain("Open file in this issue");
     });
 
     act(() => {

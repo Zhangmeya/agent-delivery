@@ -140,6 +140,11 @@
     "publishFromCi": true
   },
   {
+    "dir": "packages/plugins/sandbox-providers/kubernetes",
+    "name": "@penclipai/plugin-kubernetes",
+    "publishFromCi": false
+  },
+  {
     "dir": "ui",
     "name": "@penclipai/ui",
     "publishFromCi": true

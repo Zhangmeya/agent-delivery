@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import type { IssueBlockerAttention } from "@penclipai/shared";
 import { cn } from "../lib/utils";
-import { issueStatusIcon, issueStatusIconDefault } from "../lib/status-colors";
+import { issueStatusIcon, issueStatusIconClassic, issueStatusIconDefault } from "../lib/status-colors";
+import { useConferenceRoomChatEnabled } from "../hooks/useConferenceRoomChatEnabled";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { translateStatusLabel } from "../lib/i18n-labels";
@@ -19,9 +20,7 @@ interface StatusIconProps {
 }
 
 function blockedAttentionLabel(t: TFunction, blockerAttention: IssueBlockerAttention | null | undefined) {
-  if (!blockerAttention || blockerAttention.state === "none") {
-    return translateStatusLabel(t, "blocked");
-  }
+  if (!blockerAttention || blockerAttention.state === "none") return translateStatusLabel(t, "blocked");
 
   if (blockerAttention.reason === "active_child") {
     const count = blockerAttention.coveredBlockerCount;
@@ -109,8 +108,12 @@ function blockedAttentionLabel(t: TFunction, blockerAttention: IssueBlockerAtten
 }
 
 export function StatusIcon({ status, blockerAttention, onChange, className, showLabel }: StatusIconProps) {
-  const [open, setOpen] = useState(false);
   const { t } = useTranslation(undefined, { useSuspense: false });
+  const [open, setOpen] = useState(false);
+  // PAP-75 brand hues (todo → amber, in_progress → blue) ship behind the
+  // Conference Room Chat flag (PAP-139); OFF keeps master's palette.
+  const { enabled: conferenceRoomChatEnabled } = useConferenceRoomChatEnabled();
+  const statusIconPalette = conferenceRoomChatEnabled ? issueStatusIcon : issueStatusIconClassic;
   const isCoveredBlocked = status === "blocked" && blockerAttention?.state === "covered";
   const isStalledBlocked = status === "blocked" && blockerAttention?.state === "stalled";
   const isAttentionBlocked = status === "blocked" && blockerAttention?.state === "needs_attention";
@@ -119,7 +122,7 @@ export function StatusIcon({ status, blockerAttention, onChange, className, show
     ? "text-cyan-600 border-cyan-600 dark:text-cyan-400 dark:border-cyan-400"
     : isStalledBlocked
       ? "text-amber-600 border-amber-600 dark:text-amber-400 dark:border-amber-400"
-      : issueStatusIcon[status] ?? issueStatusIconDefault;
+      : statusIconPalette[status] ?? issueStatusIconDefault;
   const isDone = status === "done";
   const label = status === "blocked" ? blockedAttentionLabel(t, blockerAttention) : translateStatusLabel(t, status);
   const ariaLabel = label;

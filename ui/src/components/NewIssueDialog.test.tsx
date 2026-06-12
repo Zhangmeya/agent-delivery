@@ -892,4 +892,62 @@ describe("NewIssueDialog", () => {
 
     act(() => root.unmount());
   });
+
+  // PAP-139/PAP-140: work-mode labels and status hues branch on the Conference
+  // Room Chat experimental flag — OFF (default) must match master exactly.
+  describe("Conference Room Chat flag parity (PAP-140)", () => {
+    function workModeOption(value: string) {
+      return container.querySelector(`[data-issue-work-mode="${value}"]`);
+    }
+
+    async function openStatusMenu() {
+      const trigger = container.querySelector('[data-testid="new-issue-status-chip"]') as HTMLButtonElement | null;
+      expect(trigger).toBeTruthy();
+      await act(async () => {
+        trigger!.click();
+      });
+      await flush();
+    }
+
+    function statusOptionIconClass(value: string) {
+      const button = container.querySelector(`[data-issue-status="${value}"]`) as HTMLButtonElement | null;
+      return button?.querySelector("svg")?.getAttribute("class") ?? "";
+    }
+
+    it("uses master's work-mode labels and status hues when the flag is off (default)", async () => {
+      const { root } = renderDialog(container);
+      await flush();
+
+      expect(workModeOption("standard")?.textContent).toContain("Standard");
+      expect(workModeOption("standard")?.textContent).not.toContain("Agent mode");
+      expect(workModeOption("planning")?.textContent).toContain("Planning");
+      expect(workModeOption("planning")?.textContent).not.toContain("Plan mode");
+
+      await openStatusMenu();
+
+      // Master palette: todo → blue, in_progress → yellow.
+      expect(statusOptionIconClass("todo")).toContain("text-blue-600");
+      expect(statusOptionIconClass("in_progress")).toContain("text-yellow-600");
+
+      act(() => root.unmount());
+    });
+
+    it("uses NUX work-mode labels and brand status hues when the flag is on", async () => {
+      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableConferenceRoomChat: true });
+
+      const { root } = renderDialog(container);
+      await flush();
+
+      expect(workModeOption("standard")?.textContent).toContain("Agent mode");
+      expect(workModeOption("planning")?.textContent).toContain("Plan mode");
+
+      await openStatusMenu();
+
+      // PAP-75 brand palette: todo → amber, in_progress → blue.
+      expect(statusOptionIconClass("todo")).toContain("text-amber-600");
+      expect(statusOptionIconClass("in_progress")).toContain("text-blue-600");
+
+      act(() => root.unmount());
+    });
+  });
 });

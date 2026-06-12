@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import path from "node:path";
 
 const { execFileMock } = vi.hoisted(() => ({
   execFileMock: vi.fn(),
@@ -58,9 +59,12 @@ describe("terminateLocalService", () => {
     );
 
     expect(killSpy).toHaveBeenCalledWith(4321, 0);
+    const taskkillCommand = process.env.SystemRoot
+      ? path.join(process.env.SystemRoot, "System32", "taskkill.exe")
+      : "taskkill.exe";
     expect(execFileMock).toHaveBeenCalledWith(
-      process.env.comspec ?? "cmd.exe",
-      ["/d", "/s", "/c", "taskkill", "/PID", "4321", "/T", "/F"],
+      taskkillCommand,
+      ["/PID", "4321", "/T", "/F"],
       expect.objectContaining({ windowsHide: true }),
       expect.any(Function),
     );

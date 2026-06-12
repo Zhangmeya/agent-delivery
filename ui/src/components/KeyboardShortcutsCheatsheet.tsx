@@ -1,10 +1,23 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useTranslation } from "react-i18next";
 
 interface ShortcutEntry {
   keys: string[];
   label: string;
+  /** Render keys as a simultaneous chord (joined with "+") rather than a
+   *  "then" sequence. */
+  combo?: boolean;
 }
+
+// Platform-appropriate label for the Cmd/Ctrl modifier so the cheatsheet shows
+// the same key the user actually presses (re-pointed in the collapsible sidebar
+// work — Cmd/Ctrl+B toggles the rail).
+function getPlatformLabel() {
+  if (typeof navigator === "undefined") return "";
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+  return nav.userAgentData?.platform || navigator.userAgent || "";
+}
+
+const META_KEY = /Mac|iPhone|iPad|iPod/.test(getPlatformLabel()) ? "⌘" : "Ctrl";
 
 interface ShortcutSection {
   title: string;
@@ -42,6 +55,7 @@ const sections: ShortcutSection[] = [
       { keys: ["/"], label: "Search current page or quick search" },
       { keys: ["c"], label: "New task" },
       { keys: ["["], label: "Toggle sidebar" },
+      { keys: [META_KEY, "B"], label: "Collapse or expand sidebar", combo: true },
       { keys: ["]"], label: "Toggle panel" },
       { keys: ["?"], label: "Show keyboard shortcuts" },
     ],
@@ -57,15 +71,13 @@ function KeyCap({ children }: { children: string }) {
 }
 
 export function KeyboardShortcutsCheatsheetContent() {
-  const { t } = useTranslation();
-
   return (
     <>
       <div className="divide-y divide-border border-t border-border">
         {sections.map((section) => (
           <div key={section.title} className="px-5 py-3">
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {t(section.title, { defaultValue: section.title })}
+              {section.title}
             </h3>
             <div className="space-y-1.5">
               {section.shortcuts.map((shortcut) => (
@@ -73,15 +85,13 @@ export function KeyboardShortcutsCheatsheetContent() {
                   key={shortcut.label + shortcut.keys.join()}
                   className="flex items-center justify-between gap-4"
                 >
-                  <span className="text-sm text-foreground/90">
-                    {t(shortcut.label, { defaultValue: shortcut.label })}
-                  </span>
+                  <span className="text-sm text-foreground/90">{shortcut.label}</span>
                   <div className="flex items-center gap-1">
                     {shortcut.keys.map((key, i) => (
                       <span key={key} className="flex items-center gap-1">
                         {i > 0 && (
                           <span className="text-xs text-muted-foreground">
-                            {t("keyboardShortcuts.then", { defaultValue: "then" })}
+                            {shortcut.combo ? "+" : "then"}
                           </span>
                         )}
                         <KeyCap>{key}</KeyCap>
@@ -96,9 +106,7 @@ export function KeyboardShortcutsCheatsheetContent() {
       </div>
       <div className="border-t border-border px-5 py-3">
         <p className="text-xs text-muted-foreground">
-          {t("keyboardShortcuts.press", { defaultValue: "Press" })} <KeyCap>Esc</KeyCap> {t("keyboardShortcuts.toClose", { defaultValue: "to close" })}
-          {" · "}
-          {t("keyboardShortcuts.disabledInTextFields", { defaultValue: "Shortcuts are disabled in text fields" })}
+          Press <KeyCap>Esc</KeyCap> to close &middot; Shortcuts are disabled in text fields
         </p>
       </div>
     </>
@@ -112,15 +120,11 @@ export function KeyboardShortcutsCheatsheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { t } = useTranslation();
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md gap-0 p-0 overflow-hidden" showCloseButton={false}>
         <DialogHeader className="px-5 pt-5 pb-3">
-          <DialogTitle className="text-base">
-            {t("Keyboard shortcuts", { defaultValue: "Keyboard shortcuts" })}
-          </DialogTitle>
+          <DialogTitle className="text-base">Keyboard shortcuts</DialogTitle>
         </DialogHeader>
         <KeyboardShortcutsCheatsheetContent />
       </DialogContent>

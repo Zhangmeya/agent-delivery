@@ -388,6 +388,37 @@ describe("adapter skill snapshots", () => {
 });
 
 describe("runChildProcess", () => {
+  it("runs extensionless Node shebang scripts", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-shebang-"));
+    const commandPath = path.join(root, "fake-cli");
+    await fs.writeFile(
+      commandPath,
+      "#!/usr/bin/env node\nprocess.stdout.write(process.argv.slice(2).join('|'));\n",
+      "utf8",
+    );
+    await fs.chmod(commandPath, 0o755);
+
+    try {
+      const result = await runChildProcess(
+        randomUUID(),
+        commandPath,
+        ["hello", "world"],
+        {
+          cwd: root,
+          env: {},
+          timeoutSec: 5,
+          graceSec: 1,
+          onLog: async () => {},
+        },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe("hello|world");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("does not arm a timeout when timeoutSec is 0", async () => {
     const result = await runChildProcess(
       randomUUID(),

@@ -65,7 +65,8 @@ import {
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { extractProviderIdWithFallback } from "../lib/model-utils";
-import { issueStatusText, issueStatusTextDefault, priorityColor, priorityColorDefault } from "../lib/status-colors";
+import { issueStatusText, issueStatusTextClassic, issueStatusTextDefault, priorityColor, priorityColorDefault } from "../lib/status-colors";
+import { useConferenceRoomChatEnabled } from "../hooks/useConferenceRoomChatEnabled";
 import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "./MarkdownEditor";
 import { AgentIcon } from "./AgentIconPicker";
 import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySelector";
@@ -143,14 +144,18 @@ function isIssueWorkMode(value: unknown): value is IssueWorkMode {
   return value === "standard" || value === "planning";
 }
 
-const ISSUE_WORK_MODE_OPTIONS: ReadonlyArray<{
+// "Agent mode"/"Plan mode" relabels ship behind the Conference Room Chat flag
+// (PAP-132/PAP-139); OFF keeps master's "Standard"/"Planning".
+function issueWorkModeOptions(conferenceRoomChat: boolean): ReadonlyArray<{
   value: IssueWorkMode;
   label: string;
   icon: typeof Hammer;
-}> = [
-  { value: "standard", label: "Standard", icon: Hammer },
-  { value: "planning", label: "Planning", icon: ClipboardList },
-];
+}> {
+  return [
+    { value: "standard", label: conferenceRoomChat ? "Agent mode" : "Standard", icon: Hammer },
+    { value: "planning", label: conferenceRoomChat ? "Plan mode" : "Planning", icon: ClipboardList },
+  ];
+}
 
 function loadDraft(): IssueDraft | null {
   try {
@@ -223,23 +228,30 @@ function formatFileSize(file: File) {
   return `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const statuses: ReadonlyArray<{ value: string; label: string; color: string; description?: string }> = [
-  {
-    value: "backlog",
-    label: "Backlog",
-    color: issueStatusText.backlog ?? issueStatusTextDefault,
-    description: "Parked — assignee will not be woken",
-  },
-  {
-    value: "todo",
-    label: "Todo",
-    color: issueStatusText.todo ?? issueStatusTextDefault,
-    description: "Executable — assignee will be woken",
-  },
-  { value: "in_progress", label: "In Progress", color: issueStatusText.in_progress ?? issueStatusTextDefault },
-  { value: "in_review", label: "In Review", color: issueStatusText.in_review ?? issueStatusTextDefault },
-  { value: "done", label: "Done", color: issueStatusText.done ?? issueStatusTextDefault },
-];
+// PAP-75 brand hues ship behind the Conference Room Chat flag (PAP-139); OFF
+// keeps master's palette (`issueStatusTextClassic`).
+function buildStatusOptions(
+  conferenceRoomChat: boolean,
+): ReadonlyArray<{ value: string; label: string; color: string; description?: string }> {
+  const palette = conferenceRoomChat ? issueStatusText : issueStatusTextClassic;
+  return [
+    {
+      value: "backlog",
+      label: "Backlog",
+      color: palette.backlog ?? issueStatusTextDefault,
+      description: "Parked — assignee will not be woken",
+    },
+    {
+      value: "todo",
+      label: "Todo",
+      color: palette.todo ?? issueStatusTextDefault,
+      description: "Executable — assignee will be woken",
+    },
+    { value: "in_progress", label: "In Progress", color: palette.in_progress ?? issueStatusTextDefault },
+    { value: "in_review", label: "In Review", color: palette.in_review ?? issueStatusTextDefault },
+    { value: "done", label: "Done", color: palette.done ?? issueStatusTextDefault },
+  ];
+}
 
 const statusTranslationKeys: Record<string, string> = {
   backlog: "status.backlog",
@@ -418,6 +430,10 @@ export function NewIssueDialog() {
   const { t } = useTranslation();
   const { newIssueOpen, newIssueDefaults, closeNewIssue } = useDialog();
   const { companies, selectedCompanyId, selectedCompany } = useCompany();
+  // Conference Room Chat flag (PAP-139): selects work-mode labels + status hues.
+  const { enabled: conferenceRoomChatEnabled } = useConferenceRoomChatEnabled();
+  const workModeOptions = useMemo(() => issueWorkModeOptions(conferenceRoomChatEnabled), [conferenceRoomChatEnabled]);
+  const statuses = useMemo(() => buildStatusOptions(conferenceRoomChatEnabled), [conferenceRoomChatEnabled]);
   const queryClient = useQueryClient();
   const { pushToast } = useToastActions();
   const [title, setTitle] = useState("");
@@ -1088,7 +1104,10 @@ export function NewIssueDialog() {
   const currentPriority = priorities.find((p) => p.value === priority);
   const translateStatus = (value: string) => t(statusTranslationKeys[value] ?? value);
   const translatePriority = (value: string) => t(`priority.${value}`);
-  const translateWorkMode = (value: IssueWorkMode) => t(`newIssue.workMode.${value}`);
+  const translateWorkMode = (value: IssueWorkMode, defaultLabel: string) =>
+    t(conferenceRoomChatEnabled ? `newIssue.workMode.conferenceRoom.${value}` : `newIssue.workMode.${value}`, {
+      defaultValue: defaultLabel,
+    });
   const currentAssignee = selectedAssigneeAgentId
     ? (agents ?? []).find((a) => a.id === selectedAssigneeAgentId)
     : null;
@@ -1208,7 +1227,7 @@ export function NewIssueDialog() {
     },
     [assigneeAdapterModels],
   );
-  const currentWorkMode = ISSUE_WORK_MODE_OPTIONS[workMode === "planning" ? 1 : 0]!;
+  const currentWorkMode = workModeOptions[workMode === "planning" ? 1 : 0]!;
   const CurrentWorkModeIcon = currentWorkMode.icon;
 
   return (
@@ -1862,7 +1881,11 @@ export function NewIssueDialog() {
           {/* Status chip */}
           <Popover open={statusOpen} onOpenChange={setStatusOpen}>
             <PopoverTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
+              <button
+                type="button"
+                data-testid="new-issue-status-chip"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors"
+              >
                 <CircleDot className={cn("h-3 w-3", currentStatus.color)} />
                 {translateStatus(currentStatus.value)}
               </button>
@@ -1871,6 +1894,7 @@ export function NewIssueDialog() {
               {statuses.map((s) => (
                 <button
                   key={s.value}
+                  data-issue-status={s.value}
                   className={cn(
                     "flex w-full items-start gap-2 px-2 py-1.5 text-xs rounded hover:bg-accent/50",
                     s.value === status && "bg-accent"
@@ -1964,11 +1988,11 @@ export function NewIssueDialog() {
                 )}
               >
                 <CurrentWorkModeIcon className="h-3 w-3" />
-                {translateWorkMode(currentWorkMode.value)}
+                {translateWorkMode(currentWorkMode.value, currentWorkMode.label)}
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-36 p-1" align="start">
-              {ISSUE_WORK_MODE_OPTIONS.map((option) => {
+              {workModeOptions.map((option) => {
                 const Icon = option.icon;
                 return (
                   <button
@@ -1985,7 +2009,7 @@ export function NewIssueDialog() {
                     }}
                   >
                     <Icon className="h-3 w-3" />
-                    {translateWorkMode(option.value)}
+                    {translateWorkMode(option.value, option.label)}
                   </button>
                 );
               })}

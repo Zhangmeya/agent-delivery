@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { pickTextColorForPillBg } from "@/lib/color-contrast";
 import { Link } from "@/lib/router";
-import type { Issue, IssueLabel, IssueRelationIssueSummary, Project, WorkspaceRuntimeService } from "@penclipai/shared";
+import type { Issue, IssueLabel, Project, WorkspaceRuntimeService } from "@penclipai/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AdapterModel } from "../api/agents";
 import { accessApi } from "../api/access";
@@ -18,14 +17,12 @@ import { ISSUE_OVERRIDE_ADAPTER_TYPES, type IssueModelLane } from "../lib/issue-
 import { useProjectOrder } from "../hooks/useProjectOrder";
 import {
   getRecentAssigneeIds,
-  getRecentAssigneeSelectionIds,
   sortAgentsByRecency,
   trackRecentAssignee,
   trackRecentAssigneeUser,
 } from "../lib/recent-assignees";
 import { getRecentProjectIds, trackRecentProject } from "../lib/recent-projects";
 import { orderItemsBySelectedAndRecent } from "../lib/recent-selections";
-import { displaySeededName } from "../lib/seeded-display";
 import { formatAssigneeUserLabel } from "../lib/assignees";
 import { buildExecutionPolicy, stageParticipantValues } from "../lib/issue-execution-policy";
 import { formatMonitorOffset } from "../lib/issue-monitor";
@@ -55,6 +52,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { User, Hexagon, ArrowUpRight, Tag, Plus, GitBranch, FolderOpen, Check, ExternalLink, X, Clock, RotateCcw, Loader2, CheckCircle2 } from "lucide-react";
 import { AgentIcon } from "./AgentIconPicker";
 import { InlineEntitySelector, type InlineEntityOption } from "./InlineEntitySelector";
+import {
+  AssigneeRunningBanner,
+  InterruptAssignConfirm,
+  type HandoffChipResolvers,
+} from "./interrupt-handoff/InterruptHandoffViews";
+import { describeReassignInterrupt } from "../lib/interrupt-handoff";
 
 function TruncatedCopyable({ value, icon: Icon }: { value: string; icon: React.ComponentType<{ className?: string }> }) {
   const { t } = useTranslation();
@@ -77,9 +80,7 @@ function TruncatedCopyable({ value, icon: Icon }: { value: string; icon: React.C
         type="button"
         className="text-sm font-mono min-w-0 break-all text-left cursor-pointer hover:text-foreground transition-colors"
         onClick={handleCopy}
-        title={copied
-          ? t("Copied!", { defaultValue: "Copied!" })
-          : t("Copy", { defaultValue: "Copy" })}
+        title={copied ? t("Copied!", { defaultValue: "Copied!" }) : t("Click to copy", { defaultValue: "Click to copy" })}
       >
         {value}
       </button>
@@ -149,6 +150,9 @@ interface IssuePropertiesProps {
   onAddSubIssue?: () => void;
   onUpdate: (data: Record<string, unknown>) => void;
   inline?: boolean;
+  /** Whether an agent run is currently in flight on this issue, so the assignee
+   * picker can warn that reassigning will interrupt it. */
+  hasActiveRun?: boolean;
 }
 
 const ISSUE_BLOCKER_SEARCH_LIMIT = 50;
@@ -188,16 +192,6 @@ const ISSUE_THINKING_EFFORT_OPTIONS = {
   ],
 } as const;
 
-const ISSUE_THINKING_EFFORT_TRANSLATION_KEYS: Record<string, string> = {
-  "": "agentConfig.default",
-  low: "agentConfig.low",
-  medium: "agentConfig.medium",
-  high: "agentConfig.high",
-  minimal: "agentConfig.minimal",
-  xhigh: "agentConfig.xhigh",
-  max: "agentConfig.max",
-};
-
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -214,12 +208,6 @@ function thinkingEffortOptionsFor(adapterType: string | null | undefined) {
   if (adapterType === "codex_local") return ISSUE_THINKING_EFFORT_OPTIONS.codex_local;
   if (adapterType === "opencode_local") return ISSUE_THINKING_EFFORT_OPTIONS.opencode_local;
   return ISSUE_THINKING_EFFORT_OPTIONS.claude_local;
-}
-
-function translateIssueThinkingEffortOption(t: TFunction, option: { value: string; label: string }) {
-  return t(ISSUE_THINKING_EFFORT_TRANSLATION_KEYS[option.value] ?? option.label, {
-    defaultValue: option.label,
-  });
 }
 
 function thinkingEffortKeyFor(adapterType: string | null | undefined) {
@@ -415,6 +403,7 @@ export function IssueProperties({
   onAddSubIssue,
   onUpdate,
   inline,
+  hasActiveRun = false,
 }: IssuePropertiesProps) {
   const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
@@ -422,6 +411,14 @@ export function IssueProperties({
   const companyId = issue.companyId ?? selectedCompanyId;
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState("");
+  /** When a run is live, a selection is staged here until the operator confirms
+   * the interrupt rather than applying it immediately. */
+  const [pendingAssignee, setPendingAssignee] = useState<{
+    assigneeAgentId: string | null;
+    assigneeUserId: string | null;
+    label: string;
+    track?: () => void;
+  } | null>(null);
   const [projectOpen, setProjectOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
   const [blockedByOpen, setBlockedByOpen] = useState(false);
@@ -530,9 +527,9 @@ export function IssueProperties({
   };
 
   const projectName = (id: string | null) => {
-    if (!id) return t("No project", { defaultValue: "No project" });
+    if (!id) return id?.slice(0, 8) ?? "None";
     const project = orderedProjects.find((p) => p.id === id);
-    return project ? displaySeededName(project.name) : id.slice(0, 8);
+    return project?.name ?? id.slice(0, 8);
   };
   const currentProject = issue.projectId
     ? orderedProjects.find((project) => project.id === issue.projectId) ?? null
@@ -578,14 +575,9 @@ export function IssueProperties({
   };
 
   const recentAssigneeIds = useMemo(() => getRecentAssigneeIds(), [assigneeOpen]);
-  const recentAssigneeSelectionIds = useMemo(() => getRecentAssigneeSelectionIds(), [assigneeOpen]);
   const sortedAgents = useMemo(
     () => sortAgentsByRecency((agents ?? []).filter(isAgentTaskTarget), recentAssigneeIds),
     [agents, recentAssigneeIds],
-  );
-  const recentAssigneeValues = useMemo(
-    () => recentAssigneeSelectionIds,
-    [recentAssigneeSelectionIds],
   );
   const recentProjectIds = useMemo(() => getRecentProjectIds(), [projectOpen]);
   const userLabelMap = useMemo(
@@ -730,11 +722,7 @@ export function IssueProperties({
     <div className="w-full space-y-3 p-2">
       <div className="space-y-1.5">
         <div className="text-xs text-muted-foreground">{t("newIssue.modelLane.title", { defaultValue: "Model lane" })}</div>
-        <div
-          className="flex w-full overflow-hidden rounded-md border border-border"
-          role="radiogroup"
-          aria-label={t("newIssue.modelLane.title", { defaultValue: "Model lane" })}
-        >
+        <div className="flex w-full overflow-hidden rounded-md border border-border" role="radiogroup" aria-label={t("newIssue.modelLane.title", { defaultValue: "Model lane" })}>
           {(["primary", ...(assigneeSupportsCheapLane ? (["cheap"] as const) : ([] as const)), "custom"] as const).map((lane) => (
             <button
               key={lane}
@@ -757,12 +745,12 @@ export function IssueProperties({
         </div>
         {assigneeOverrideLane === "cheap" ? (
           <p className="text-[11px] text-muted-foreground">
-            {t("newIssue.modelLane.cheapSendsPrefix", { defaultValue: "Sends" })} <code>modelProfile: "cheap"</code>{" "}
+            Sends <code>modelProfile: "cheap"</code>{" "}
             {assigneeCheapProfile?.adapterConfig && typeof (assigneeCheapProfile.adapterConfig as Record<string, unknown>).model === "string"
-              ? <>{t("newIssue.modelLane.adapterDefaultPrefix", { defaultValue: "· adapter default" })} <code>{String((assigneeCheapProfile.adapterConfig as Record<string, unknown>).model)}</code></>
+              ? <>· adapter default <code>{String((assigneeCheapProfile.adapterConfig as Record<string, unknown>).model)}</code></>
               : assigneeCheapProfile
-                ? <>{t("newIssue.modelLane.usesCheapProfile", { defaultValue: "· uses the agent's configured cheap profile" })}</>
-                : <>{t("newIssue.modelLane.fallsBackToPrimary", { defaultValue: "· falls back to the primary model if no cheap profile is configured" })}</>}
+                ? <>· uses the agent&apos;s configured cheap profile</>
+                : <>· falls back to the primary model if no cheap profile is configured</>}
           </p>
         ) : null}
       </div>
@@ -793,16 +781,14 @@ export function IssueProperties({
                   )}
                   onClick={() => updateAssigneeOverrideThinkingEffort(option.value)}
                 >
-                  {translateIssueThinkingEffortOption(t, option)}
+                  {option.label}
                 </button>
               ))}
             </div>
           </div>
           {assigneeAdapterType === "claude_local" ? (
             <div className="flex items-center justify-between rounded-md border border-border px-2 py-1.5">
-              <div className="text-xs text-muted-foreground">
-                {t("issueProperties.enableChromeFlag", { defaultValue: "Enable Chrome (--chrome)" })}
-              </div>
+              <div className="text-xs text-muted-foreground">{t("issueProperties.enableChromeFlag", { defaultValue: "Enable Chrome (--chrome)" })}</div>
               <ToggleSwitch
                 checked={assigneeOverrideChrome}
                 onCheckedChange={(next) => updateAssigneeOverrideConfig({ chrome: next ? true : undefined })}
@@ -814,15 +800,15 @@ export function IssueProperties({
     </div>
   ) : (
     <div className="w-full space-y-2 p-2">
-      <p className="text-xs text-muted-foreground">
-        {assignee
-          ? t("issueProperties.noEditableIssueOverrides", {
-            defaultValue: "This assignee's adapter does not expose editable issue overrides.",
-          })
-          : t("issueProperties.selectCompatibleAssigneeForOverrides", {
-            defaultValue: "Select a compatible agent assignee to edit these overrides.",
-          })}
-      </p>
+        <p className="text-xs text-muted-foreground">
+          {assignee
+            ? t("issueProperties.noEditableIssueOverrides", {
+              defaultValue: "This assignee's adapter does not expose editable issue overrides.",
+            })
+            : t("issueProperties.selectCompatibleAssigneeForOverrides", {
+              defaultValue: "Select a compatible agent assignee to edit these overrides.",
+            })}
+        </p>
       <button
         type="button"
         className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
@@ -842,6 +828,51 @@ export function IssueProperties({
     : issue.assigneeUserId
       ? `user:${issue.assigneeUserId}`
       : "";
+
+  // --- Interrupt-handoff clarity for the assignee picker (design surface 2) ---
+  const handoffResolvers: HandoffChipResolvers = useMemo(
+    () => ({
+      agentMap: new Map((agents ?? []).map((agent) => [agent.id, { name: agent.name, icon: agent.icon }])),
+      resolveUserLabel: (id) => userLabel(id),
+    }),
+    // userLabel closes over userLabelMap + currentUserId, both reflected here.
+    [agents, userLabelMap, currentUserId],
+  );
+  const reassignInterruptCopy = useMemo(
+    () => describeReassignInterrupt({ runningAgentName: assignee?.name ?? null }),
+    [assignee?.name],
+  );
+  const closeAssigneePicker = () => {
+    setAssigneeOpen(false);
+    setAssigneeSearch("");
+    setPendingAssignee(null);
+  };
+  const applyAssignee = (next: { assigneeAgentId: string | null; assigneeUserId: string | null }, track?: () => void) => {
+    track?.();
+    onUpdate(next);
+    closeAssigneePicker();
+  };
+  /** Apply a selection immediately, or stage it for confirmation while a run is live. */
+  const selectAssignee = (
+    next: { assigneeAgentId: string | null; assigneeUserId: string | null },
+    label: string,
+    track?: () => void,
+  ) => {
+    const nextValue = next.assigneeAgentId
+      ? `agent:${next.assigneeAgentId}`
+      : next.assigneeUserId
+        ? `user:${next.assigneeUserId}`
+        : "";
+    if (nextValue === selectedAssigneeValue) {
+      closeAssigneePicker();
+      return;
+    }
+    if (hasActiveRun) {
+      setPendingAssignee({ ...next, label, track });
+      return;
+    }
+    applyAssignee(next, track);
+  };
   const updateExecutionPolicy = (nextReviewers: string[], nextApprovers: string[]) => {
     onUpdate({
       executionPolicy: buildExecutionPolicy({
@@ -866,16 +897,16 @@ export function IssueProperties({
       return agentName(value.slice("agent:".length)) ?? value.slice("agent:".length, "agent:".length + 8);
     }
     if (value.startsWith("user:")) {
-      return userLabel(value.slice("user:".length)) ?? t("User", { defaultValue: "User" });
+      return userLabel(value.slice("user:".length)) ?? "User";
     }
     return value;
   };
   const reviewerTrigger = reviewerValues.length > 0
     ? <span className="text-sm break-words min-w-0">{reviewerValues.map((value) => executionParticipantLabel(value)).join(", ")}</span>
-    : <span className="text-sm text-muted-foreground">{t("None", { defaultValue: "None" })}</span>;
+    : <span className="text-sm text-muted-foreground">None</span>;
   const approverTrigger = approverValues.length > 0
     ? <span className="text-sm break-words min-w-0">{approverValues.map((value) => executionParticipantLabel(value)).join(", ")}</span>
-    : <span className="text-sm text-muted-foreground">{t("None", { defaultValue: "None" })}</span>;
+    : <span className="text-sm text-muted-foreground">None</span>;
   const nextRunnableExecutionStage = (() => {
     if (issue.executionState?.status === "changes_requested" && issue.executionState.currentStageType) {
       return issue.executionState.currentStageType;
@@ -892,17 +923,13 @@ export function IssueProperties({
         className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         onClick={() => onUpdate({ status: "in_review" })}
       >
-        {stageType === "review"
-          ? t("Run review now", { defaultValue: "Run review now" })
-          : t("Run approval now", { defaultValue: "Run approval now" })}
+        {stageType === "review" ? "Run review now" : "Run approval now"}
       </button>
     </PropertyRow>
   );
   const currentExecutionLabel = (() => {
     if (!issue.executionState?.currentStageType) return null;
-      const stageLabel = issue.executionState.currentStageType === "review"
-        ? t("Review", { defaultValue: "Review" })
-        : t("Approval", { defaultValue: "Approval" });
+    const stageLabel = issue.executionState.currentStageType === "review" ? "Review" : "Approval";
     const participant = issue.executionState.currentParticipant;
     const participantLabel = participant
       ? (participant.type === "agent"
@@ -968,21 +995,15 @@ export function IssueProperties({
   };
   const currentMonitorLabel = (() => {
     if (issue.executionPolicy?.monitor?.nextCheckAt) {
-      return t("issueProperties.nextCheckAt", {
-        date: formatDate(new Date(issue.executionPolicy.monitor.nextCheckAt)),
-        defaultValue: "Next check {{date}}",
-      });
+      return `Next check ${formatDate(new Date(issue.executionPolicy.monitor.nextCheckAt))}`;
     }
     if (issue.executionState?.monitor?.status === "cleared") {
-      return t("issueProperties.monitorCleared", { defaultValue: "Cleared" });
+      return "Cleared";
     }
     if (issue.monitorLastTriggeredAt) {
-      return t("issueProperties.lastTriggered", {
-        time: timeAgo(issue.monitorLastTriggeredAt),
-        defaultValue: "Last triggered {{time}}",
-      });
+      return `Last triggered ${timeAgo(issue.monitorLastTriggeredAt)}`;
     }
-    return t("Not scheduled", { defaultValue: "Not scheduled" });
+    return "Not scheduled";
   })();
   const monitorNextCheckAt = issue.executionPolicy?.monitor?.nextCheckAt ?? null;
   const monitorTrigger = (
@@ -997,12 +1018,7 @@ export function IssueProperties({
         )}
         title={monitorNextCheckAt ? currentMonitorLabel : undefined}
       >
-        {monitorNextCheckAt
-          ? t("issueProperties.nextCheckOffset", {
-              offset: formatMonitorOffset(monitorNextCheckAt),
-              defaultValue: "Next check {{offset}}",
-            })
-          : currentMonitorLabel}
+        {monitorNextCheckAt ? `Next check ${formatMonitorOffset(monitorNextCheckAt)}` : currentMonitorLabel}
       </span>
       {monitorNextCheckAt ? (
         <span className="text-xs text-muted-foreground" title={currentMonitorLabel}>
@@ -1013,10 +1029,7 @@ export function IssueProperties({
   );
   const monitorAttemptBadge = issue.monitorAttemptCount && issue.monitorAttemptCount > 0 ? (
     <span className="text-xs text-muted-foreground">
-      {t("issueProperties.attemptCount", {
-        count: issue.monitorAttemptCount,
-        defaultValue: "Attempt {{count}}",
-      })}
+      Attempt {issue.monitorAttemptCount}
     </span>
   ) : null;
 
@@ -1035,7 +1048,7 @@ export function IssueProperties({
   const scheduledRetryShortDate = scheduledRetry?.scheduledRetryAt
     ? formatDate(new Date(scheduledRetry.scheduledRetryAt))
     : null;
-  const scheduledRetryReasonLabel = formatRetryReason(scheduledRetry?.scheduledRetryReason, t);
+  const scheduledRetryReasonLabel = formatRetryReason(scheduledRetry?.scheduledRetryReason);
   const scheduledRetryAttempt =
     typeof scheduledRetry?.scheduledRetryAttempt === "number"
     && Number.isFinite(scheduledRetry.scheduledRetryAttempt)
@@ -1045,30 +1058,15 @@ export function IssueProperties({
   const scheduledRetryIsContinuation =
     scheduledRetry?.scheduledRetryReason === "max_turns_continuation";
   const scheduledRetryRelativeLabel = (() => {
-    if (!scheduledRetryRelative) {
-      return t("issueScheduledRetry.pendingScheduleTitle", { defaultValue: "Pending schedule" });
-    }
-    const action = scheduledRetryIsContinuation
-      ? t("issueScheduledRetry.shortAction.continuation", { defaultValue: "Continuation" })
-      : t("issueScheduledRetry.shortAction.retry", { defaultValue: "Retry" });
-    if (scheduledRetryRelative === "now") {
-      return t("issueScheduledRetry.relativeDueNow", {
-        action,
-        defaultValue: "{{action}} due now",
-      });
-    }
-    return t("issueScheduledRetry.relativeWithOffset", {
-      action,
-      offset: scheduledRetryRelative,
-      defaultValue: "{{action}} {{offset}}",
-    });
+    if (!scheduledRetryRelative) return "Pending schedule";
+    const action = scheduledRetryIsContinuation ? "Continuation" : "Retry";
+    if (scheduledRetryRelative === "now") return `${action} due now`;
+    return `${action} ${scheduledRetryRelative}`;
   })();
   const scheduledRetryRetryNowSuccess = retryNow.isSuccess
     && (retryNow.data?.outcome === "promoted" || retryNow.data?.outcome === "already_promoted");
   const scheduledRetryAttemptBadge = scheduledRetryAttempt !== null ? (
-    <span className="text-xs text-muted-foreground">
-      {t("issueScheduledRetry.attempt", { count: scheduledRetryAttempt, defaultValue: "Attempt {{count}}" })}
-    </span>
+    <span className="text-xs text-muted-foreground">Attempt {scheduledRetryAttempt}</span>
   ) : null;
   const scheduledRetryTrigger = (
     <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
@@ -1090,26 +1088,24 @@ export function IssueProperties({
     <div className="flex w-full flex-col gap-2 p-2 text-xs">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-foreground">
-          {scheduledRetryIsContinuation
-            ? t("issueScheduledRetry.scheduledContinuation", { defaultValue: "Scheduled continuation" })
-            : t("issueScheduledRetry.scheduledRetry", { defaultValue: "Scheduled retry" })}
+          {scheduledRetryIsContinuation ? "Scheduled continuation" : "Scheduled retry"}
         </span>
         {scheduledRetryAttempt !== null ? (
           <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-xs text-muted-foreground">
-            {t("issueScheduledRetry.attempt", { count: scheduledRetryAttempt, defaultValue: "Attempt {{count}}" })}
+            Attempt {scheduledRetryAttempt}
           </span>
         ) : null}
       </div>
       <dl className="grid grid-cols-[6rem_1fr] gap-y-1">
         {scheduledRetryReasonLabel ? (
           <>
-            <dt className="text-muted-foreground">{t("issueScheduledRetry.reason", { defaultValue: "Reason" })}</dt>
+            <dt className="text-muted-foreground">Reason</dt>
             <dd className="text-foreground">{scheduledRetryReasonLabel}</dd>
           </>
         ) : null}
         {scheduledRetryAbsolute ? (
           <>
-            <dt className="text-muted-foreground">{t("issueScheduledRetry.nextAttempt", { defaultValue: "Next attempt" })}</dt>
+            <dt className="text-muted-foreground">Next attempt</dt>
             <dd className="text-foreground">
               {scheduledRetryAbsolute}
               {scheduledRetryRelative ? (
@@ -1120,7 +1116,7 @@ export function IssueProperties({
         ) : null}
         {scheduledRetry.retryOfRunId ? (
           <>
-            <dt className="text-muted-foreground">{t("issueScheduledRetry.replacesRun", { defaultValue: "Replaces run" })}</dt>
+            <dt className="text-muted-foreground">Replaces run</dt>
             <dd className="text-foreground">
               <Link
                 to={`/agents/${scheduledRetry.agentId}/runs/${scheduledRetry.retryOfRunId}`}
@@ -1133,7 +1129,7 @@ export function IssueProperties({
         ) : null}
         {scheduledRetry.agentName ? (
           <>
-            <dt className="text-muted-foreground">{t("Agent", { defaultValue: "Agent" })}</dt>
+            <dt className="text-muted-foreground">Agent</dt>
             <dd className="text-foreground">
               <Link
                 to={`/agents/${scheduledRetry.agentId}`}
@@ -1146,7 +1142,7 @@ export function IssueProperties({
         ) : null}
         {scheduledRetry.error ? (
           <>
-            <dt className="text-muted-foreground">{t("issueScheduledRetry.lastError", { defaultValue: "Last error" })}</dt>
+            <dt className="text-muted-foreground">Last error</dt>
             <dd className="text-foreground break-words">{scheduledRetry.error}</dd>
           </>
         ) : null}
@@ -1171,32 +1167,30 @@ export function IssueProperties({
           {retryNow.isPending ? (
             <span className="inline-flex items-center gap-1.5">
               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-              {t("issueScheduledRetry.retrying", { defaultValue: "Retrying..." })}
+              Retrying…
             </span>
           ) : scheduledRetryRetryNowSuccess ? (
             <span className="inline-flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-              {retryNow.data?.outcome === "already_promoted"
-                ? t("issueScheduledRetry.alreadyPromoted", { defaultValue: "Already promoted" })
-                : t("issueScheduledRetry.promoted", { defaultValue: "Promoted" })}
+              {retryNow.data?.outcome === "already_promoted" ? "Already promoted" : "Promoted"}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5">
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-              {t("issueScheduledRetry.retryNow", { defaultValue: "Retry now" })}
+              Retry now
             </span>
           )}
         </Button>
         <span className="text-right text-xs text-muted-foreground">
           {retryNow.isPending
-            ? t("issueScheduledRetry.helper.promotingScheduledRetry", { defaultValue: "Promoting scheduled retry" })
+            ? "Promoting scheduled retry"
             : scheduledRetryRetryNowSuccess
               ? retryNow.data?.outcome === "already_promoted"
-                ? t("issueScheduledRetry.helper.alreadyPromotedRunStarting", { defaultValue: "Already promoted - run starting" })
-                : t("issueScheduledRetry.helper.promotedRunStarting", { defaultValue: "Promoted - run starting" })
+                ? "Already promoted — run starting"
+                : "Promoted — run starting"
               : scheduledRetryIsContinuation
-                ? t("issueScheduledRetry.helper.pullContinuationForward", { defaultValue: "Pulls continuation forward immediately" })
-                : t("issueScheduledRetry.helper.pullRetryForward", { defaultValue: "Pulls retry forward immediately" })}
+                ? "Pulls continuation forward immediately"
+                : "Pulls retry forward immediately"}
         </span>
       </div>
     </div>
@@ -1213,7 +1207,7 @@ export function IssueProperties({
         <input
           type="text"
           className="min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 py-1 text-xs"
-          placeholder={t("issueProperties.monitorNotesPlaceholder", { defaultValue: "What should the agent re-check?" })}
+          placeholder="What should the agent re-check?"
           value={monitorNotesInput}
           onChange={(e) => setMonitorNotesInput(e.target.value)}
         />
@@ -1380,50 +1374,125 @@ export function IssueProperties({
     </>
   );
 
-  const assigneePickerOptions = orderItemsBySelectedAndRecent(
-    [
-      { id: "", kind: "none" as const, label: t("No assignee", { defaultValue: "No assignee" }), searchText: "" },
-      ...(currentUserId
-        ? [{
-            id: `user:${currentUserId}`,
-            kind: "user" as const,
-            userId: currentUserId,
-            label: t("Assign to me", { defaultValue: "Assign to me" }),
-            searchText: userLabel(currentUserId) ?? "",
-          }]
-        : []),
-      ...(issue.createdByUserId && issue.createdByUserId !== currentUserId
-        ? [{
-            id: `user:${issue.createdByUserId}`,
-            kind: "user" as const,
-            userId: issue.createdByUserId,
-            label: creatorUserLabel
-              ? t("Assign to {{name}}", { defaultValue: "Assign to {{name}}", name: creatorUserLabel })
-              : t("Assign to requester", { defaultValue: "Assign to requester" }),
-            searchText: creatorUserLabel ?? "requester",
-          }]
-        : []),
-      ...otherUserOptions.map((option) => ({
-        id: option.id,
-        kind: "user" as const,
-        userId: option.id.slice("user:".length),
-        label: option.label,
-        searchText: option.searchText ?? "",
-      })),
-      ...sortedAgents.map((agent) => ({
-        id: `agent:${agent.id}`,
-        kind: "agent" as const,
-        agent,
-        label: agent.name,
-        searchText: `${agent.name} ${agent.role} ${agent.title ?? ""}`,
-      })),
-    ],
-    selectedAssigneeValue,
-    recentAssigneeValues,
+  // Grouped picker options (design surface 2): a board-users section and an
+  // agents section, plus the "No assignee" reset. Agents stay recency-sorted
+  // within their group via `sortedAgents`.
+  const userAssigneeOptions = [
+    ...(currentUserId
+      ? [{
+          kind: "user" as const,
+          value: `user:${currentUserId}`,
+          userId: currentUserId,
+          label: t("Assign to me", { defaultValue: "Assign to me" }),
+          searchText: userLabel(currentUserId) ?? "",
+        }]
+      : []),
+    ...(issue.createdByUserId && issue.createdByUserId !== currentUserId
+      ? [{
+          kind: "user" as const,
+          value: `user:${issue.createdByUserId}`,
+          userId: issue.createdByUserId,
+          label: creatorUserLabel
+            ? t("Assign to {{name}}", { defaultValue: "Assign to {{name}}", name: creatorUserLabel })
+            : t("Assign to requester", { defaultValue: "Assign to requester" }),
+          searchText: creatorUserLabel ?? "requester",
+        }]
+      : []),
+    ...otherUserOptions.map((option) => ({
+      kind: "user" as const,
+      value: option.id,
+      userId: option.id.slice("user:".length),
+      label: option.label,
+      searchText: option.searchText ?? "",
+    })),
+  ];
+  const agentAssigneeOptions = sortedAgents.map((agent) => ({
+    kind: "agent" as const,
+    value: `agent:${agent.id}`,
+    agent,
+    label: agent.name,
+    searchText: `${agent.name} ${agent.role} ${agent.title ?? ""}`,
+  }));
+
+  const matchesAssigneeSearch = (label: string, searchText: string) => {
+    if (!assigneeSearch.trim()) return true;
+    return `${label} ${searchText}`.toLowerCase().includes(assigneeSearch.toLowerCase());
+  };
+
+  type AssigneeOptionLike =
+    | { kind: "none"; value: string; label: string; searchText: string }
+    | { kind: "user"; value: string; userId: string; label: string; searchText: string }
+    | { kind: "agent"; value: string; agent: (typeof agentAssigneeOptions)[number]["agent"]; label: string; searchText: string };
+
+  const renderAssigneeOption = (option: AssigneeOptionLike) => (
+    <button
+      key={option.value || "__none__"}
+      className={cn(
+        "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-left",
+        option.value === selectedAssigneeValue && "bg-accent",
+      )}
+      onClick={() => {
+        if (option.kind === "agent") {
+          selectAssignee({ assigneeAgentId: option.agent.id, assigneeUserId: null }, option.label, () =>
+            trackRecentAssignee(option.agent.id),
+          );
+        } else if (option.kind === "user") {
+          selectAssignee({ assigneeAgentId: null, assigneeUserId: option.userId }, option.label, () =>
+            trackRecentAssigneeUser(option.userId),
+          );
+        } else {
+          selectAssignee({ assigneeAgentId: null, assigneeUserId: null }, option.label);
+        }
+      }}
+    >
+      {option.kind === "agent" ? (
+        <AgentIcon icon={option.agent.icon} className="shrink-0 h-3 w-3 text-muted-foreground" />
+      ) : option.kind === "user" ? (
+        <User className="h-3 w-3 shrink-0 text-muted-foreground" />
+      ) : null}
+      <span className="min-w-0 flex-1 truncate">{option.label}</span>
+      {option.value === selectedAssigneeValue ? (
+        <Check className="ml-auto h-3.5 w-3.5 shrink-0 text-foreground" aria-hidden="true" />
+      ) : null}
+    </button>
   );
 
-  const assigneeContent = (
+  const visibleUserOptions = userAssigneeOptions.filter((option) =>
+    matchesAssigneeSearch(option.label, option.searchText),
+  );
+  const visibleAgentOptions = agentAssigneeOptions.filter((option) =>
+    matchesAssigneeSearch(option.label, option.searchText),
+  );
+  const noAssigneeLabel = t("No assignee", { defaultValue: "No assignee" });
+  const showNoAssigneeOption = matchesAssigneeSearch(noAssigneeLabel, "");
+  const sectionHeader = (text: string) => (
+    <div className="px-2 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      {text}
+    </div>
+  );
+
+  const assigneeContent = pendingAssignee ? (
+    <div className="space-y-2 p-1">
+      <InterruptAssignConfirm
+        copy={reassignInterruptCopy}
+        to={{ agentId: pendingAssignee.assigneeAgentId, userId: pendingAssignee.assigneeUserId }}
+        resolvers={handoffResolvers}
+        onConfirm={() =>
+          applyAssignee(
+            { assigneeAgentId: pendingAssignee.assigneeAgentId, assigneeUserId: pendingAssignee.assigneeUserId },
+            pendingAssignee.track,
+          )
+        }
+        onCancel={() => setPendingAssignee(null)}
+      />
+    </div>
+  ) : (
     <>
+      {hasActiveRun ? (
+        <div className="px-1 pt-1">
+          <AssigneeRunningBanner copy={reassignInterruptCopy} />
+        </div>
+      ) : null}
       <input
         className="w-full px-2 py-1.5 text-xs bg-transparent outline-none border-b border-border mb-1 placeholder:text-muted-foreground/50"
         placeholder={t("Search assignees...", { defaultValue: "Search assignees..." })}
@@ -1431,41 +1500,25 @@ export function IssueProperties({
         onChange={(e) => setAssigneeSearch(e.target.value)}
         autoFocus={!inline}
       />
-      <div className="max-h-48 overflow-y-auto overscroll-contain">
-        {assigneePickerOptions
-          .filter((option) => {
-            if (!assigneeSearch.trim()) return true;
-            const q = assigneeSearch.toLowerCase();
-            return `${option.label} ${option.searchText}`.toLowerCase().includes(q);
-          })
-          .map((option) => (
-            <button
-              key={option.id || "__none__"}
-              className={cn(
-                "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50",
-                option.id === selectedAssigneeValue && "bg-accent",
-              )}
-              onClick={() => {
-                if (option.kind === "agent") {
-                  trackRecentAssignee(option.agent.id);
-                  onUpdate({ assigneeAgentId: option.agent.id, assigneeUserId: null });
-                } else if (option.kind === "user") {
-                  trackRecentAssigneeUser(option.userId);
-                  onUpdate({ assigneeAgentId: null, assigneeUserId: option.userId });
-                } else {
-                  onUpdate({ assigneeAgentId: null, assigneeUserId: null });
-                }
-                setAssigneeOpen(false);
-              }}
-            >
-              {option.kind === "agent" ? (
-                <AgentIcon icon={option.agent.icon} className="shrink-0 h-3 w-3 text-muted-foreground" />
-              ) : option.kind === "user" ? (
-                <User className="h-3 w-3 shrink-0 text-muted-foreground" />
-              ) : null}
-              {option.label}
-            </button>
-          ))}
+      <div className="max-h-56 overflow-y-auto overscroll-contain">
+        {showNoAssigneeOption
+          ? renderAssigneeOption({ kind: "none", value: "", label: noAssigneeLabel, searchText: "" })
+          : null}
+        {visibleAgentOptions.length > 0 ? (
+          <>
+            {sectionHeader(t("Agents", { defaultValue: "Agents" }))}
+            {visibleAgentOptions.map((option) => renderAssigneeOption(option))}
+          </>
+        ) : null}
+        {visibleUserOptions.length > 0 ? (
+          <>
+            {sectionHeader(t("Board users", { defaultValue: "Board users" }))}
+            {visibleUserOptions.map((option) => renderAssigneeOption(option))}
+          </>
+        ) : null}
+        {!showNoAssigneeOption && visibleAgentOptions.length === 0 && visibleUserOptions.length === 0 ? (
+          <div className="px-2 py-2 text-xs text-muted-foreground">{t("No matches.", { defaultValue: "No matches." })}</div>
+        ) : null}
       </div>
     </>
   );
@@ -1480,9 +1533,11 @@ export function IssueProperties({
     <>
       <input
         className="w-full px-2 py-1.5 text-xs bg-transparent outline-none border-b border-border mb-1 placeholder:text-muted-foreground/50"
-        placeholder={stageType === "review"
-          ? t("Search reviewers...", { defaultValue: "Search reviewers..." })
-          : t("Search approvers...", { defaultValue: "Search approvers..." })}
+        placeholder={
+          stageType === "review"
+            ? t("Search reviewers...", { defaultValue: "Search reviewers..." })
+            : t("Search approvers...", { defaultValue: "Search approvers..." })
+        }
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         autoFocus={!inline}
@@ -1587,7 +1642,7 @@ export function IssueProperties({
         id: project.id,
         kind: "project" as const,
         project,
-        name: displaySeededName(project.name),
+        name: project.name,
         color: project.color ?? null,
       })),
     ],
@@ -1892,7 +1947,7 @@ export function IssueProperties({
           inline={inline}
           label={t("Assignee", { defaultValue: "Assignee" })}
           open={assigneeOpen}
-          onOpenChange={(open) => { setAssigneeOpen(open); if (!open) setAssigneeSearch(""); }}
+          onOpenChange={(open) => { setAssigneeOpen(open); if (!open) { setAssigneeSearch(""); setPendingAssignee(null); } }}
           triggerContent={assigneeTrigger}
           popoverClassName="w-52"
           extra={issue.assigneeAgentId ? (

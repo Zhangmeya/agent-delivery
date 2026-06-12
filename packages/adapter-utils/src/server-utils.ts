@@ -87,11 +87,7 @@ const PAPERCLIP_SKILL_ROOT_RELATIVE_CANDIDATES = [
   "../../skills",
   "../../../../../skills",
 ];
-const BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX = "penclipai/paperclip-cn/";
-const LEGACY_BUNDLED_PAPERCLIP_SKILL_KEY_PREFIXES = [
-  "paperclipai/paperclip/",
-  "penclipai/paperclip/",
-] as const;
+const PAPERCLIP_CN_SKILL_KEY_PREFIX = "penclipai/paperclip-cn";
 const MATERIALIZED_SKILL_SENTINEL = ".paperclip-materialized-skill.json";
 const MATERIALIZED_SKILL_LOCK_OWNER = "owner.json";
 const MATERIALIZED_SKILL_LOCK_STALE_MS = 30_000;
@@ -138,10 +134,17 @@ export interface PaperclipSkillEntry {
   key: string;
   runtimeName: string;
   source: string;
+  versionId?: string | null;
+  currentVersionId?: string | null;
   sourceStatus?: "available" | "missing";
   missingDetail?: string | null;
   required?: boolean;
   requiredReason?: string | null;
+}
+
+export interface PaperclipDesiredSkillEntry {
+  key: string;
+  versionId: string | null;
 }
 
 export interface InstalledSkillTarget {
@@ -168,19 +171,6 @@ interface PersistentSkillSnapshotOptions {
   warnings?: string[];
 }
 
-function canonicalizeBundledPaperclipSkillKey(value: string | null | undefined) {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith(BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX)) return trimmed;
-  for (const legacyPrefix of LEGACY_BUNDLED_PAPERCLIP_SKILL_KEY_PREFIXES) {
-    if (trimmed.startsWith(legacyPrefix)) {
-      return `${BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX}${trimmed.slice(legacyPrefix.length)}`;
-    }
-  }
-  return trimmed;
-}
-
 interface RuntimeMountedSkillSnapshotOptions {
   adapterType: string;
   availableEntries: PaperclipSkillEntry[];
@@ -199,28 +189,6 @@ interface RuntimeMountedSkillSnapshotOptions {
 
 function normalizePathSlashes(value: string): string {
   return value.replaceAll("\\", "/");
-}
-
-function stripWindowsPathNamespacePrefix(value: string): string {
-  if (process.platform !== "win32") return value;
-  if (value.startsWith("\\\\?\\UNC\\")) {
-    return `\\\\${value.slice("\\\\?\\UNC\\".length)}`;
-  }
-  if (value.startsWith("\\\\?\\")) {
-    return value.slice("\\\\?\\".length);
-  }
-  return value;
-}
-
-function normalizeResolvedPath(value: string): string {
-  return path.normalize(stripWindowsPathNamespacePrefix(value));
-}
-
-function resolveLinkedTargetPath(target: string, linkedPath: string): string {
-  const resolved = path.isAbsolute(linkedPath)
-    ? linkedPath
-    : path.resolve(path.dirname(target), linkedPath);
-  return normalizeResolvedPath(resolved);
 }
 
 function isMaintainerOnlySkillTarget(candidate: string): boolean {
@@ -280,7 +248,7 @@ function resolveInstalledEntryTarget(
   const fullPath = path.join(skillsHome, entryName);
   if (dirent.isSymbolicLink()) {
     return {
-      targetPath: linkedPath ? resolveLinkedTargetPath(fullPath, linkedPath) : null,
+      targetPath: linkedPath ? path.resolve(path.dirname(fullPath), linkedPath) : null,
       kind: "symlink",
     };
   }
@@ -1272,54 +1240,10 @@ export async function resolveCommandForLogs(
   return (await resolveCommandPath(command, cwd, env)) ?? command;
 }
 
-async function readShebangTokens(executable: string): Promise<string[] | null> {
-  try {
-    const handle = await fs.open(executable, "r");
-    try {
-      const buffer = Buffer.alloc(512);
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-      const firstLine = buffer.toString("utf8", 0, bytesRead).split(/\r?\n/u, 1)[0]?.trim() ?? "";
-      if (!firstLine.startsWith("#!")) return null;
-      const shebang = firstLine.slice(2).trim();
-      return shebang ? shebang.split(/\s+/u).filter(Boolean) : null;
-    } finally {
-      await handle.close();
-    }
-  } catch {
-    return null;
-  }
-}
-
-async function resolveShebangSpawnTarget(
-  executable: string,
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-): Promise<SpawnTarget | null> {
-  const tokens = await readShebangTokens(executable);
-  if (!tokens || tokens.length === 0) return null;
-
-  let [interpreter, ...interpreterArgs] = tokens;
-  const interpreterBase = path.posix.basename(interpreter).toLowerCase();
-  if (interpreterBase === "env" || interpreterBase === "env.exe") {
-    if (interpreterArgs[0] === "-S") interpreterArgs = interpreterArgs.slice(1);
-    interpreter = interpreterArgs.shift() ?? "";
-  }
-
-  const normalizedBase = path.posix.basename(interpreter).toLowerCase().replace(/\.exe$/u, "");
-  const resolvedInterpreter =
-    normalizedBase === "node"
-      ? process.execPath
-      : normalizedBase === "sh"
-        ? await resolveCommandPath("bash", cwd, env)
-        : normalizedBase
-          ? await resolveCommandPath(normalizedBase, cwd, env)
-          : null;
-
-  if (!resolvedInterpreter) return null;
-  return {
-    command: resolvedInterpreter,
-    args: [...interpreterArgs, executable],
-  };
+function quoteForCmd(arg: string) {
+  if (!arg.length) return '""';
+  const escaped = arg.replace(/"/g, '""');
+  return /[\s"&<>|^()]/.test(escaped) ? `"${escaped}"` : escaped;
 }
 
 export function sanitizeSshRemoteEnv(
@@ -1332,6 +1256,37 @@ export function sanitizeSshRemoteEnv(
 function resolveWindowsCmdShell(env: NodeJS.ProcessEnv): string {
   const fallbackRoot = env.SystemRoot || process.env.SystemRoot || "C:\\Windows";
   return path.join(fallbackRoot, "System32", "cmd.exe");
+}
+
+async function resolveWindowsShebangSpawnTarget(executable: string, args: string[]): Promise<SpawnTarget | null> {
+  if (process.platform !== "win32") return null;
+  if (path.extname(executable)) return null;
+
+  let firstLine = "";
+  try {
+    const handle = await fs.open(executable, "r");
+    try {
+      const buffer = Buffer.alloc(256);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      firstLine = buffer.toString("utf8", 0, bytesRead).split(/\r?\n/, 1)[0]?.trim() ?? "";
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return null;
+  }
+
+  if (!firstLine.startsWith("#!")) return null;
+  const shebang = firstLine.slice(2).trim();
+  const invokesNode =
+    /^\/usr\/bin\/env\s+(?:-S\s+)?node(?:\s|$)/.test(shebang) ||
+    /(?:^|[\\/])node(?:\.exe)?(?:\s|$)/i.test(shebang);
+  if (!invokesNode) return null;
+
+  return {
+    command: process.execPath,
+    args: [executable, ...args],
+  };
 }
 
 async function resolveSpawnTarget(
@@ -1377,19 +1332,15 @@ async function resolveSpawnTarget(
     // Always use cmd.exe for .cmd/.bat wrappers. Some environments override
     // ComSpec to PowerShell, which breaks cmd-specific flags like /d /s /c.
     const shell = resolveWindowsCmdShell(env);
+    const commandLine = [quoteForCmd(executable), ...args.map(quoteForCmd)].join(" ");
     return {
       command: shell,
-      args: ["/d", "/s", "/c", executable, ...args],
+      args: ["/d", "/s", "/c", commandLine],
     };
   }
 
-  const shebangTarget = await resolveShebangSpawnTarget(executable, cwd, env);
-  if (shebangTarget) {
-    return {
-      command: shebangTarget.command,
-      args: [...shebangTarget.args, ...args],
-    };
-  }
+  const shebangTarget = await resolveWindowsShebangSpawnTarget(executable, args);
+  if (shebangTarget) return shebangTarget;
 
   return { command: executable, args };
 }
@@ -1485,7 +1436,7 @@ export async function listPaperclipSkillEntries(
       const skillDir = path.join(root, entry.name);
       const required = await readSkillRequired(skillDir);
       return {
-        key: `${BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX}${entry.name}`,
+        key: `${PAPERCLIP_CN_SKILL_KEY_PREFIX}/${entry.name}`,
         runtimeName: entry.name,
         source: skillDir,
         required,
@@ -1527,23 +1478,18 @@ export function buildRuntimeMountedSkillSnapshot(
   } = options;
   const supported = options.supported ?? mode !== "unsupported";
   const availableByKey = new Map(availableEntries.map((entry) => [entry.key, entry]));
-  const canonicalDesiredSkills = Array.from(
-    new Set(
-      desiredSkills
-        .map((desiredSkill) => canonicalizeBundledPaperclipSkillKey(desiredSkill))
-        .filter((desiredSkill): desiredSkill is string => Boolean(desiredSkill)),
-    ),
-  );
-  const desiredSet = new Set(canonicalDesiredSkills);
+  const desiredSet = new Set(desiredSkills);
   const entries: AdapterSkillEntry[] = [];
   const warnings = [...(options.warnings ?? [])];
 
   for (const available of availableEntries) {
-    const desired = desiredSet.has(canonicalizeBundledPaperclipSkillKey(available.key) ?? available.key);
+    const desired = desiredSet.has(available.key);
     if (isPaperclipSkillSourceMissing(available)) {
       entries.push({
         key: available.key,
         runtimeName: available.runtimeName,
+        versionId: available.versionId ?? null,
+        currentVersionId: available.currentVersionId ?? null,
         desired,
         managed: true,
         state: "missing",
@@ -1561,6 +1507,8 @@ export function buildRuntimeMountedSkillSnapshot(
     entries.push({
       key: available.key,
       runtimeName: available.runtimeName,
+      versionId: available.versionId ?? null,
+      currentVersionId: available.currentVersionId ?? null,
       desired,
       managed: true,
       state: configured ? "configured" : "available",
@@ -1581,7 +1529,7 @@ export function buildRuntimeMountedSkillSnapshot(
     });
   }
 
-  for (const desiredSkill of canonicalDesiredSkills) {
+  for (const desiredSkill of desiredSkills) {
     if (availableByKey.has(desiredSkill)) continue;
     warnings.push(`Desired skill "${desiredSkill}" is not available from the Paperclip skills directory.`);
     entries.push({
@@ -1625,7 +1573,11 @@ export function buildRuntimeMountedSkillSnapshot(
     adapterType,
     supported,
     mode,
-    desiredSkills: canonicalDesiredSkills,
+    desiredSkills,
+    desiredSkillEntries: desiredSkills.map((key) => ({
+      key,
+      versionId: availableByKey.get(key)?.versionId ?? null,
+    })),
     entries,
     warnings,
   };
@@ -1646,32 +1598,20 @@ export function buildPersistentSkillSnapshot(
     externalConflictDetail,
     externalDetail,
   } = options;
-  const canonicalDesiredSkills = Array.from(
-    new Set(
-      desiredSkills
-        .map((desiredSkill) => canonicalizeBundledPaperclipSkillKey(desiredSkill))
-        .filter((desiredSkill): desiredSkill is string => Boolean(desiredSkill)),
-    ),
-  );
-  const availableByKey = new Map(
-    availableEntries.flatMap((entry) => {
-      const canonicalKey = canonicalizeBundledPaperclipSkillKey(entry.key) ?? entry.key;
-      return canonicalKey === entry.key
-        ? [[entry.key, entry] as const]
-        : [[entry.key, entry] as const, [canonicalKey, entry] as const];
-    }),
-  );
-  const desiredSet = new Set(canonicalDesiredSkills);
+  const availableByKey = new Map(availableEntries.map((entry) => [entry.key, entry]));
+  const desiredSet = new Set(desiredSkills);
   const entries: AdapterSkillEntry[] = [];
   const warnings = [...(options.warnings ?? [])];
 
   for (const available of availableEntries) {
     const installedEntry = installed.get(available.runtimeName) ?? null;
-    const desired = desiredSet.has(canonicalizeBundledPaperclipSkillKey(available.key) ?? available.key);
+    const desired = desiredSet.has(available.key);
     if (isPaperclipSkillSourceMissing(available)) {
       entries.push({
         key: available.key,
         runtimeName: available.runtimeName,
+        versionId: available.versionId ?? null,
+        currentVersionId: available.currentVersionId ?? null,
         desired,
         managed: true,
         state: "missing",
@@ -1707,6 +1647,8 @@ export function buildPersistentSkillSnapshot(
     entries.push({
       key: available.key,
       runtimeName: available.runtimeName,
+      versionId: available.versionId ?? null,
+      currentVersionId: available.currentVersionId ?? null,
       desired,
       managed,
       state,
@@ -1719,7 +1661,7 @@ export function buildPersistentSkillSnapshot(
     });
   }
 
-  for (const desiredSkill of canonicalDesiredSkills) {
+  for (const desiredSkill of desiredSkills) {
     if (availableByKey.has(desiredSkill)) continue;
     warnings.push(`Desired skill "${desiredSkill}" is not available from the Paperclip skills directory.`);
     entries.push({
@@ -1761,7 +1703,11 @@ export function buildPersistentSkillSnapshot(
     adapterType,
     supported: true,
     mode: "persistent",
-    desiredSkills: canonicalDesiredSkills,
+    desiredSkills,
+    desiredSkillEntries: desiredSkills.map((key) => ({
+      key,
+      versionId: availableByKey.get(key)?.versionId ?? null,
+    })),
     entries,
     warnings,
   };
@@ -1772,7 +1718,7 @@ function normalizeConfiguredPaperclipRuntimeSkills(value: unknown): PaperclipSki
   const out: PaperclipSkillEntry[] = [];
   for (const rawEntry of value) {
     const entry = parseObject(rawEntry);
-    const key = canonicalizeBundledPaperclipSkillKey(asString(entry.key, asString(entry.name, ""))) ?? "";
+    const key = asString(entry.key, asString(entry.name, "")).trim();
     const runtimeName = asString(entry.runtimeName, asString(entry.name, "")).trim();
     const source = asString(entry.source, "").trim();
     if (!key || !runtimeName || !source) continue;
@@ -1780,6 +1726,14 @@ function normalizeConfiguredPaperclipRuntimeSkills(value: unknown): PaperclipSki
       key,
       runtimeName,
       source,
+      versionId:
+        typeof entry.versionId === "string" && entry.versionId.trim().length > 0
+          ? entry.versionId.trim()
+          : null,
+      currentVersionId:
+        typeof entry.currentVersionId === "string" && entry.currentVersionId.trim().length > 0
+          ? entry.currentVersionId.trim()
+          : null,
       sourceStatus: entry.sourceStatus === "missing" ? "missing" : "available",
       missingDetail:
         typeof entry.missingDetail === "string" && entry.missingDetail.trim().length > 0
@@ -1826,22 +1780,41 @@ export async function readPaperclipSkillMarkdown(
 export function readPaperclipSkillSyncPreference(config: Record<string, unknown>): {
   explicit: boolean;
   desiredSkills: string[];
+  desiredSkillEntries: PaperclipDesiredSkillEntry[];
 } {
   const raw = config.paperclipSkillSync;
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    return { explicit: false, desiredSkills: [] };
+    return { explicit: false, desiredSkills: [], desiredSkillEntries: [] };
   }
   const syncConfig = raw as Record<string, unknown>;
   const desiredValues = syncConfig.desiredSkills;
   const desired = Array.isArray(desiredValues)
-    ? desiredValues
-        .filter((value): value is string => typeof value === "string")
-        .map((value) => value.trim())
-        .filter(Boolean)
+    ? desiredValues.flatMap((value): PaperclipDesiredSkillEntry[] => {
+        if (typeof value === "string") {
+          const key = value.trim();
+          return key ? [{ key, versionId: null }] : [];
+        }
+        if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+          const record = value as Record<string, unknown>;
+          const key = typeof record.key === "string" ? record.key.trim() : "";
+          if (!key) return [];
+          const versionId = typeof record.versionId === "string" && record.versionId.trim()
+            ? record.versionId.trim()
+            : null;
+          return [{ key, versionId }];
+        }
+        return [];
+      })
     : [];
+  const byKey = new Map<string, PaperclipDesiredSkillEntry>();
+  for (const entry of desired) {
+    if (!byKey.has(entry.key)) byKey.set(entry.key, entry);
+  }
+  const desiredSkillEntries = Array.from(byKey.values());
   return {
     explicit: Object.prototype.hasOwnProperty.call(raw, "desiredSkills"),
-    desiredSkills: Array.from(new Set(desired)),
+    desiredSkills: desiredSkillEntries.map((entry) => entry.key),
+    desiredSkillEntries,
   };
 }
 
@@ -1851,29 +1824,22 @@ function canonicalizeDesiredPaperclipSkillReference(
 ): string {
   const normalizedReference = reference.trim().toLowerCase();
   if (!normalizedReference) return "";
-
-  const canonicalBundledReference = canonicalizeBundledPaperclipSkillKey(normalizedReference);
-  if (canonicalBundledReference) {
-    const exactCanonicalKey = availableEntries.find(
-      (entry) => entry.key.trim().toLowerCase() === canonicalBundledReference,
-    );
-    if (exactCanonicalKey) return exactCanonicalKey.key;
-  }
+  const normalizedReferenceSlug = normalizedReference.split("/").pop() ?? normalizedReference;
 
   const exactKey = availableEntries.find((entry) => entry.key.trim().toLowerCase() === normalizedReference);
   if (exactKey) return exactKey.key;
 
   const byRuntimeName = availableEntries.filter((entry) =>
-    typeof entry.runtimeName === "string" && entry.runtimeName.trim().toLowerCase() === normalizedReference,
+    typeof entry.runtimeName === "string" && entry.runtimeName.trim().toLowerCase() === normalizedReferenceSlug,
   );
   if (byRuntimeName.length === 1) return byRuntimeName[0]!.key;
 
   const slugMatches = availableEntries.filter((entry) =>
-    entry.key.trim().toLowerCase().split("/").pop() === normalizedReference,
+    entry.key.trim().toLowerCase().split("/").pop() === normalizedReferenceSlug,
   );
   if (slugMatches.length === 1) return slugMatches[0]!.key;
 
-  return canonicalBundledReference ?? normalizedReference;
+  return normalizedReference;
 }
 
 export function resolvePaperclipDesiredSkillNames(
@@ -1895,7 +1861,7 @@ export function resolvePaperclipDesiredSkillNames(
 
 export function writePaperclipSkillSyncPreference(
   config: Record<string, unknown>,
-  desiredSkills: string[],
+  desiredSkills: Array<string | PaperclipDesiredSkillEntry>,
 ): Record<string, unknown> {
   const next = { ...config };
   const raw = next.paperclipSkillSync;
@@ -1903,105 +1869,68 @@ export function writePaperclipSkillSyncPreference(
     typeof raw === "object" && raw !== null && !Array.isArray(raw)
       ? { ...(raw as Record<string, unknown>) }
       : {};
-  current.desiredSkills = Array.from(
-    new Set(
-      desiredSkills
-        .map((value) => value.trim())
-        .filter(Boolean),
-    ),
-  );
+  const entries = desiredSkills.flatMap((value): PaperclipDesiredSkillEntry[] => {
+    if (typeof value === "string") {
+      const key = value.trim();
+      return key ? [{ key, versionId: null }] : [];
+    }
+    const key = value.key.trim();
+    if (!key) return [];
+    return [{ key, versionId: value.versionId ?? null }];
+  });
+  const byKey = new Map<string, PaperclipDesiredSkillEntry>();
+  for (const entry of entries) {
+    if (!byKey.has(entry.key)) byKey.set(entry.key, entry);
+  }
+  const normalized = Array.from(byKey.values());
+  current.desiredSkills = normalized.some((entry) => entry.versionId)
+    ? normalized
+    : normalized.map((entry) => entry.key);
   next.paperclipSkillSync = current;
   return next;
 }
 
-function isPermissionDeniedError(error: unknown): error is NodeJS.ErrnoException {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "EPERM" || error.code === "EACCES")
-  );
-}
-
-async function materializePaperclipSkillTarget(
-  source: string,
-  target: string,
-  options: {
-    linkSkill?: (source: string, target: string) => Promise<void>;
-    allowCopyFallback?: boolean;
-  } = {},
-): Promise<"linked" | "copied"> {
-  const { linkSkill, allowCopyFallback = false } = options;
-  const sourceStats = await fs.stat(source);
-  const sourceIsDirectory = sourceStats.isDirectory();
-  const tryJunction = async () => {
-    await fs.symlink(path.resolve(source), target, "junction");
-    return "linked" as const;
-  };
-
-  try {
-    if (linkSkill) {
-      await linkSkill(source, target);
-      return "linked";
-    }
-
-    if (process.platform === "win32" && sourceIsDirectory) {
-      await fs.symlink(path.resolve(source), target, "junction");
-      return "linked";
-    }
-
-    if (process.platform === "win32") {
-      await fs.copyFile(source, target);
-      return "copied";
-    }
-
-    await fs.symlink(source, target);
-    return "linked";
-  } catch (error) {
-    if (sourceIsDirectory && process.platform === "win32" && isPermissionDeniedError(error)) {
-      try {
-        return await tryJunction();
-      } catch (junctionError) {
-        if (!allowCopyFallback || !isPermissionDeniedError(junctionError)) {
-          throw junctionError;
-        }
-        await fs.cp(source, target, { recursive: true, force: true });
-        return "copied";
-      }
-    }
-
-    if (!allowCopyFallback || !sourceIsDirectory || !isPermissionDeniedError(error)) {
-      throw error;
-    }
-    await fs.cp(source, target, { recursive: true, force: true });
-    return "copied";
-  }
-}
+type PaperclipSkillLinker = (source: string, target: string) => Promise<void>;
 
 type EnsurePaperclipSkillSymlinkOptions = {
-  linkSkill?: (source: string, target: string) => Promise<void>;
+  linkSkill?: PaperclipSkillLinker;
   allowCopyFallback?: boolean;
 };
 
-function resolveEnsurePaperclipSkillOptions(
-  optionsOrLinkSkill?: EnsurePaperclipSkillSymlinkOptions | ((source: string, target: string) => Promise<void>),
-): EnsurePaperclipSkillSymlinkOptions {
-  if (typeof optionsOrLinkSkill === "function") {
-    return { linkSkill: optionsOrLinkSkill };
+function resolvePaperclipSkillLinkOptions(
+  input?: PaperclipSkillLinker | EnsurePaperclipSkillSymlinkOptions,
+): Required<EnsurePaperclipSkillSymlinkOptions> {
+  if (typeof input === "function") {
+    return { linkSkill: input, allowCopyFallback: false };
   }
-  return optionsOrLinkSkill ?? {};
+  return {
+    linkSkill: input?.linkSkill ?? ((linkSource, linkTarget) => fs.symlink(linkSource, linkTarget)),
+    allowCopyFallback: Boolean(input?.allowCopyFallback),
+  };
+}
+
+async function createPaperclipSkillLinkOrCopy(
+  source: string,
+  target: string,
+  options: Required<EnsurePaperclipSkillSymlinkOptions>,
+): Promise<void> {
+  try {
+    await options.linkSkill(source, target);
+  } catch (err) {
+    if (!options.allowCopyFallback) throw err;
+    await materializePaperclipSkillCopy(source, target);
+  }
 }
 
 export async function ensurePaperclipSkillSymlink(
   source: string,
   target: string,
-  optionsOrLinkSkill?: EnsurePaperclipSkillSymlinkOptions | ((source: string, target: string) => Promise<void>),
+  input?: PaperclipSkillLinker | EnsurePaperclipSkillSymlinkOptions,
 ): Promise<"created" | "repaired" | "skipped"> {
-  const options = resolveEnsurePaperclipSkillOptions(optionsOrLinkSkill);
-  const normalizedSource = normalizeResolvedPath(path.resolve(source));
+  const options = resolvePaperclipSkillLinkOptions(input);
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {
-    await materializePaperclipSkillTarget(source, target, options);
+    await createPaperclipSkillLinkOrCopy(source, target, options);
     return "created";
   }
 
@@ -2012,8 +1941,8 @@ export async function ensurePaperclipSkillSymlink(
   const linkedPath = await fs.readlink(target).catch(() => null);
   if (!linkedPath) return "skipped";
 
-  const resolvedLinkedPath = resolveLinkedTargetPath(target, linkedPath);
-  if (resolvedLinkedPath === normalizedSource) {
+  const resolvedLinkedPath = path.resolve(path.dirname(target), linkedPath);
+  if (resolvedLinkedPath === source) {
     return "skipped";
   }
 
@@ -2023,7 +1952,7 @@ export async function ensurePaperclipSkillSymlink(
   }
 
   await fs.unlink(target);
-  await materializePaperclipSkillTarget(source, target, options);
+  await createPaperclipSkillLinkOrCopy(source, target, options);
   return "repaired";
 }
 
@@ -2229,7 +2158,9 @@ export async function removeMaintainerOnlySkillSymlinks(
       const linkedPath = await fs.readlink(target).catch(() => null);
       if (!linkedPath) continue;
 
-      const resolvedLinkedPath = resolveLinkedTargetPath(target, linkedPath);
+      const resolvedLinkedPath = path.isAbsolute(linkedPath)
+        ? linkedPath
+        : path.resolve(path.dirname(target), linkedPath);
       if (
         !isMaintainerOnlySkillTarget(linkedPath) &&
         !isMaintainerOnlySkillTarget(resolvedLinkedPath)
@@ -2296,7 +2227,7 @@ export async function runChildProcess(
     // Strip Claude Code nesting-guard env vars so spawned `claude` processes
     // don't refuse to start with "cannot be launched inside another session".
     // These vars leak in when the Paperclip server itself is started from
-    // within a Claude Code session (e.g. `npx penclip run` in a terminal
+    // within a Claude Code session (e.g. `npx paperclipai run` in a terminal
     // owned by Claude Code) or when cron inherits a contaminated shell env.
     const CLAUDE_CODE_NESTING_VARS = [
       "CLAUDECODE",
