@@ -238,6 +238,22 @@ pnpm penclip run
 
 `penclip run` does:
 
+> **Note: private npm registry `.npmrc` + first-run onboarding**
+>
+> The first-run experience often starts with `npx penclip onboard --yes` before you have a repo checkout. If your global `~/.npmrc` sets `registry` to a private registry, for example GitHub Packages, `npx` may try to resolve `penclip` from that private registry and fail with `E404`.
+>
+> Diagnostic:
+>
+> ```sh
+> npm config get registry
+> ```
+>
+> Workaround, cross-platform, force the public npm registry for this command:
+>
+> ```sh
+> npx --registry https://registry.npmjs.org penclip onboard --yes
+> ```
+
 1. auto-onboard if config is missing
 2. `penclip doctor` with repair enabled
 3. starts the server when checks pass

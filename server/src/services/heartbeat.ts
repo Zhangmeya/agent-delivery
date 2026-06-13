@@ -2113,6 +2113,37 @@ export function formatRuntimeWorkspaceWarningLog(warning: string) {
   };
 }
 
+/**
+ * A run is a "zombie" if it's marked as running in the DB but has no live
+ * execution tracked in memory. This happens when the server restarts and the
+ * execution is lost, or when the DB row outlives the in-memory run state.
+ *
+ * Queued runs are never zombies — they don't have processes yet.
+ */
+export function isZombieRun(
+  run: { status: string; id: string },
+  tracked: { has(id: string): boolean },
+): boolean {
+  return run.status === "running" && !tracked.has(run.id);
+}
+
+/**
+ * Filter a coalesce target — if it's a zombie run, return null so the
+ * wakeup falls through to create a new queued run instead of coalescing
+ * into the dead process (which would refresh updatedAt and make it immortal).
+ *
+ * Queued runs pass through unchanged (they have no process yet).
+ * Null targets pass through unchanged.
+ */
+export function filterZombieCoalesceTarget<
+  T extends { status: string; id: string },
+>(
+  target: T | null,
+  tracked: { has(id: string): boolean },
+): T | null {
+  return target && isZombieRun(target, tracked) ? null : target;
+}
+
 export function describeSessionResetReason(
   contextSnapshot: Record<string, unknown> | null | undefined,
 ) {
@@ -3094,6 +3125,11 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
   });
   const workspaceOperationsSvc = workspaceOperationService(db);
   const activeRunExecutions = new Set<string>();
+  const liveRunExecutions = {
+    has(id: string) {
+      return runningProcesses.has(id) || activeRunExecutions.has(id);
+    },
+  };
   const budgetHooks = {
     cancelWorkForScope: cancelBudgetScopeWork,
   };
@@ -9543,52 +9579,109 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     const recoveryAgentNameKey = normalizeAgentNameKey(recoveryAgent?.name);
 
     const promotionResult = await db.transaction(async (tx) => {
-      if (contextIssueId) {
-        await tx.execute(
-          sql`select id from issues where company_id = ${run.companyId} and id = ${contextIssueId} for update`,
-        );
-      } else {
-        await tx.execute(
-          sql`select id from issues where company_id = ${run.companyId} and execution_run_id = ${run.id} for update`,
-        );
-      }
+      // Lock the context issue (if any) AND every issue that still references this run.
+      //
+      // A single run can hold execution locks on multiple issues: the caller's context
+      // issue (set via svc.checkout) plus any additional issues stamped by
+      // enqueueWakeup's "legacy run" fallback when the run was the only queued/running
+      // run matching their contextSnapshot.issueId. Historically this function only
+      // resolved and cleared the lock on *one* issue (rows[0]), leaving the others
+      // with an executionRunId pointing at a finalized run. Subsequent checkouts from
+      // the assigned agent then failed with 409 and the issue stayed blocked forever.
+      // `order by id` makes row-lock acquisition deterministic across concurrent
+      // finalizations, which keeps deadlock risk independent of PostgreSQL's plan
+      // choice when multiple issues match.
+      await tx.execute(
+        contextIssueId
+          ? sql`
+              select id from issues
+              where company_id = ${run.companyId}
+                and (
+                  id = ${contextIssueId}
+                  or execution_run_id = ${run.id}
+                  or checkout_run_id = ${run.id}
+                )
+              order by id
+              for update
+            `
+          : sql`
+              select id from issues
+              where company_id = ${run.companyId}
+                and (execution_run_id = ${run.id} or checkout_run_id = ${run.id})
+              order by id
+              for update
+            `,
+      );
 
-      let issue = await tx
+      const candidateIssues = await tx
         .select()
         .from(issues)
         .where(
           and(
             eq(issues.companyId, run.companyId),
-            contextIssueId ? eq(issues.id, contextIssueId) : eq(issues.executionRunId, run.id),
+            contextIssueId
+              ? or(
+                  eq(issues.id, contextIssueId),
+                  eq(issues.executionRunId, run.id),
+                  eq(issues.checkoutRunId, run.id),
+                )
+              : or(eq(issues.executionRunId, run.id), eq(issues.checkoutRunId, run.id)),
           ),
         )
-        .then((rows) => rows[0] ?? null);
+        .orderBy(asc(issues.id));
+
+      // Clear orphaned execution-lock columns that still point at this finalizing
+      // run, across every sibling issue in one statement so it scales with N
+      // orphans without N round-trips. Rows are already held under FOR UPDATE from
+      // the lock query above.
+      //
+      // The two columns are cleared in separate UPDATEs so we never clobber a
+      // retry's executionRunId pointer: when a process-loss or codex-transient
+      // retry is scheduled mid-finalization, it moves `executionRunId` from this
+      // run to the retry run while leaving `checkoutRunId` pinned at this run.
+      // Only the checkout column should be released in that case; the execution
+      // column now belongs to the retry.
+      const promotionUpdateTimestamp = new Date();
+      await tx
+        .update(issues)
+        .set({
+          executionRunId: null,
+          executionAgentNameKey: null,
+          executionLockedAt: null,
+          updatedAt: promotionUpdateTimestamp,
+        })
+        .where(
+          and(eq(issues.companyId, run.companyId), eq(issues.executionRunId, run.id)),
+        );
+      // `checkoutRunId` clear is symmetric to #6008's per-issue self-heal,
+      // extended to all siblings: covers paths where the issue's assignee or
+      // status changed between checkout and termination, which
+      // adoptStaleCheckoutRun's narrow WHERE clause cannot reach.
+      await tx
+        .update(issues)
+        .set({
+          checkoutRunId: null,
+          updatedAt: promotionUpdateTimestamp,
+        })
+        .where(
+          and(eq(issues.companyId, run.companyId), eq(issues.checkoutRunId, run.id)),
+        );
+
+      // Deferred-wake promotion is bound to a single primary issue: the run's context
+      // issue when present, otherwise the first candidate we found (preserves the
+      // legacy rows[0] selection for runs that were not tied to a specific issue).
+      let issue =
+        (contextIssueId
+          ? candidateIssues.find((candidate) => candidate.id === contextIssueId)
+          : candidateIssues[0]) ?? null;
 
       if (!issue) return null;
       if (issue.executionRunId && issue.executionRunId !== run.id) return null;
 
-      // Clear lock columns that point at the terminating run. checkoutRunId is
-      // cleared here in addition to executionRunId so the issue self-heals even
-      // if its assignee or status changed between checkout and termination —
-      // adoptStaleCheckoutRun's narrow WHERE clause cannot cover those paths.
-      if (issue.executionRunId === run.id || issue.checkoutRunId === run.id) {
-        await tx
-          .update(issues)
-          .set({
-            checkoutRunId: null,
-            executionRunId: null,
-            executionAgentNameKey: null,
-            executionLockedAt: null,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(issues.id, issue.id),
-              or(eq(issues.executionRunId, run.id), eq(issues.checkoutRunId, run.id)),
-            ),
-          );
-      }
-
+      // Workspace-validation recovery: if the finalizing run failed workspace
+      // validation, surface the primary issue for the blocked-recovery comment path.
+      // Sibling lock cleanup is already done above; only the primary issue carries
+      // the recovery surface because the comment is attached to a single issue.
       if (
         isWorkspaceValidationFailedRun(run) &&
         (issue.status === "todo" || issue.status === "in_progress") &&
@@ -9603,6 +9696,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           recoveryCause: WORKSPACE_VALIDATION_RECOVERY_CAUSE,
         };
       }
+
 
       while (true) {
         const deferred = await tx
@@ -9695,10 +9789,33 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         }
         const deferredCommentIds = extractWakeCommentIds(deferredContextSeed);
         const deferredWakeReason = readNonEmptyString(deferredContextSeed.wakeReason);
+        // Local-CLI agents post comments under user auth, so a self-comment from
+        // the run that is now ending would otherwise look like a real human
+        // comment and trigger a reopen on the very issue this run just closed.
+        // Suppress reopen only when every referenced comment came from this run;
+        // mixed batches must still reopen because they contain a real follow-up.
+        let deferredCommentWakeIsSelfAuthored = false;
+        if (deferredCommentIds.length > 0) {
+          const deferredComments = await tx
+            .select({ createdByRunId: issueComments.createdByRunId })
+            .from(issueComments)
+            .where(
+              and(
+                eq(issueComments.companyId, issue.companyId),
+                eq(issueComments.issueId, issue.id),
+                inArray(issueComments.id, deferredCommentIds),
+              ),
+            )
+            .then((rows) => rows);
+          deferredCommentWakeIsSelfAuthored =
+            deferredComments.length > 0 &&
+            deferredComments.every((comment) => comment.createdByRunId === run.id);
+        }
         // Only human/comment-reopen interactions should revive completed issues;
         // system follow-ups such as retry or cleanup wakes must not reopen closed work.
         const shouldReopenDeferredCommentWake =
           deferredCommentIds.length > 0 &&
+          !deferredCommentWakeIsSelfAuthored &&
           (issue.status === "done" || issue.status === "cancelled") &&
           (
             deferred.requestedByActorType === "user" ||
@@ -10350,6 +10467,59 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           activeExecutionRun = null;
         }
 
+        // A queued/scheduled run holding the lock for an agent that is
+        // no longer the issue's assignee is stale by design — the issue
+        // has been re-routed (e.g. blocked → in_review with a different
+        // assignee). Cancel it and release the lock; otherwise the new
+        // assignee's wake gets parked in `deferred_issue_execution`
+        // forever, because the original queued holder will never run
+        // (the issue's status / target now belongs to someone else).
+        //
+        // Race guard: pin the cancel UPDATE to the exact non-running
+        // status we read above. A worker could transition the holder
+        // from `queued` → `running` between the SELECT and this UPDATE;
+        // the status predicate ensures we never clobber a freshly-
+        // claimed running run. If zero rows matched, leave
+        // `activeExecutionRun` populated so the defer path runs
+        // normally against the now-running holder.
+        if (
+          activeExecutionRun &&
+          activeExecutionRun.status !== "running" &&
+          issue.assigneeAgentId &&
+          activeExecutionRun.agentId !== issue.assigneeAgentId
+        ) {
+          const cancelled = await tx
+            .update(heartbeatRuns)
+            .set({
+              status: "cancelled",
+              finishedAt: new Date(),
+              error: "Execution lock released after issue reassigned to a different agent",
+              errorCode: "lock_released_on_reassignment",
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(heartbeatRuns.id, activeExecutionRun.id),
+                eq(heartbeatRuns.status, activeExecutionRun.status),
+              ),
+            )
+            .returning({ id: heartbeatRuns.id });
+          if (cancelled.length > 0) {
+            if (activeExecutionRun.wakeupRequestId) {
+              await tx
+                .update(agentWakeupRequests)
+                .set({
+                  status: "cancelled",
+                  finishedAt: new Date(),
+                  error: "Execution lock released after issue reassigned to a different agent",
+                  updatedAt: new Date(),
+                })
+                .where(eq(agentWakeupRequests.id, activeExecutionRun.wakeupRequestId));
+            }
+            activeExecutionRun = null;
+          }
+        }
+
         if (!activeExecutionRun && issue.executionRunId) {
           await tx
             .update(issues)
@@ -10471,6 +10641,9 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             shouldQueueFollowupForRunningIssueWake({ contextSnapshot: enrichedContextSnapshot, wakeCommentId }) &&
             activeExecutionRun.status === "running" &&
             isSameExecutionAgent;
+          const availableActiveExecutionRun = isSameExecutionAgent
+            ? filterZombieCoalesceTarget(activeExecutionRun, liveRunExecutions)
+            : activeExecutionRun;
 
           const canCoalesceWithActiveRunLocale = canCoalesceWithRunLocale({
             existingContextSnapshot: activeExecutionRun.contextSnapshot,
@@ -10483,10 +10656,11 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             isSameExecutionAgent &&
             !shouldDeferFollowupWake &&
             !shouldQueueFollowupForRunningWake &&
-            canCoalesceWithActiveRunLocale
+            canCoalesceWithActiveRunLocale &&
+            availableActiveExecutionRun
           ) {
             const mergedContextSnapshot = mergeCoalescedContextSnapshot(
-              activeExecutionRun.contextSnapshot,
+              availableActiveExecutionRun.contextSnapshot,
               enrichedContextSnapshot,
             );
             const mergedRun = await tx
@@ -10495,9 +10669,9 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
                 contextSnapshot: mergedContextSnapshot,
                 updatedAt: new Date(),
               })
-              .where(eq(heartbeatRuns.id, activeExecutionRun.id))
+              .where(eq(heartbeatRuns.id, availableActiveExecutionRun.id))
               .returning()
-              .then((rows) => rows[0] ?? activeExecutionRun);
+              .then((rows) => rows[0] ?? availableActiveExecutionRun);
 
             await tx.insert(agentWakeupRequests).values({
               companyId: agent.companyId,
@@ -10518,67 +10692,69 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             return { kind: "coalesced" as const, run: mergedRun };
           }
 
-          const deferredPayload = {
-            ...(payload ?? {}),
-            issueId,
-            [DEFERRED_WAKE_CONTEXT_KEY]: enrichedContextSnapshot,
-          };
-
-          const existingDeferred = await tx
-            .select()
-            .from(agentWakeupRequests)
-            .where(
-              and(
-                eq(agentWakeupRequests.companyId, agent.companyId),
-                eq(agentWakeupRequests.agentId, agentId),
-                eq(agentWakeupRequests.status, "deferred_issue_execution"),
-                sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issue.id}`,
-              ),
-            )
-            .orderBy(asc(agentWakeupRequests.requestedAt))
-            .limit(1)
-            .then((rows) => rows[0] ?? null);
-
-          if (existingDeferred) {
-            const existingDeferredPayload = parseObject(existingDeferred.payload);
-            const existingDeferredContext = parseObject(existingDeferredPayload[DEFERRED_WAKE_CONTEXT_KEY]);
-            const mergedDeferredContext = mergeCoalescedContextSnapshot(
-              existingDeferredContext,
-              enrichedContextSnapshot,
-            );
-            const mergedDeferredPayload = {
-              ...existingDeferredPayload,
+          if (availableActiveExecutionRun) {
+            const deferredPayload = {
               ...(payload ?? {}),
               issueId,
-              [DEFERRED_WAKE_CONTEXT_KEY]: mergedDeferredContext,
+              [DEFERRED_WAKE_CONTEXT_KEY]: enrichedContextSnapshot,
             };
 
-            await tx
-              .update(agentWakeupRequests)
-              .set({
-                payload: mergedDeferredPayload,
-                coalescedCount: (existingDeferred.coalescedCount ?? 0) + 1,
-                updatedAt: new Date(),
-              })
-              .where(eq(agentWakeupRequests.id, existingDeferred.id));
+            const existingDeferred = await tx
+              .select()
+              .from(agentWakeupRequests)
+              .where(
+                and(
+                  eq(agentWakeupRequests.companyId, agent.companyId),
+                  eq(agentWakeupRequests.agentId, agentId),
+                  eq(agentWakeupRequests.status, "deferred_issue_execution"),
+                  sql`${agentWakeupRequests.payload} ->> 'issueId' = ${issue.id}`,
+                ),
+              )
+              .orderBy(asc(agentWakeupRequests.requestedAt))
+              .limit(1)
+              .then((rows) => rows[0] ?? null);
+
+            if (existingDeferred) {
+              const existingDeferredPayload = parseObject(existingDeferred.payload);
+              const existingDeferredContext = parseObject(existingDeferredPayload[DEFERRED_WAKE_CONTEXT_KEY]);
+              const mergedDeferredContext = mergeCoalescedContextSnapshot(
+                existingDeferredContext,
+                enrichedContextSnapshot,
+              );
+              const mergedDeferredPayload = {
+                ...existingDeferredPayload,
+                ...(payload ?? {}),
+                issueId,
+                [DEFERRED_WAKE_CONTEXT_KEY]: mergedDeferredContext,
+              };
+
+              await tx
+                .update(agentWakeupRequests)
+                .set({
+                  payload: mergedDeferredPayload,
+                  coalescedCount: (existingDeferred.coalescedCount ?? 0) + 1,
+                  updatedAt: new Date(),
+                })
+                .where(eq(agentWakeupRequests.id, existingDeferred.id));
+
+              return { kind: "deferred" as const };
+            }
+
+            await tx.insert(agentWakeupRequests).values({
+              companyId: agent.companyId,
+              agentId,
+              source,
+              triggerDetail,
+              reason: "issue_execution_deferred",
+              payload: deferredPayload,
+              status: "deferred_issue_execution",
+              requestedByActorType: opts.requestedByActorType ?? null,
+              requestedByActorId: opts.requestedByActorId ?? null,
+              idempotencyKey: opts.idempotencyKey ?? null,
+            });
 
             return { kind: "deferred" as const };
           }
-
-          await tx.insert(agentWakeupRequests).values({
-            companyId: agent.companyId,
-            agentId,
-            source,
-            triggerDetail,
-            reason: "issue_execution_deferred",
-            payload: deferredPayload,
-            status: "deferred_issue_execution",
-            requestedByActorType: opts.requestedByActorType ?? null,
-            requestedByActorId: opts.requestedByActorId ?? null,
-            idempotencyKey: opts.idempotencyKey ?? null,
-          });
-
-          return { kind: "deferred" as const };
         }
 
         const wakeupRequest = await tx
@@ -10682,10 +10858,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       !sameScopeQueuedRun &&
       shouldQueueFollowupForRunningIssueWake({ contextSnapshot: enrichedContextSnapshot, wakeCommentId });
 
-    const coalescedTargetRun =
+    const rawCoalescedTarget =
       sameScopeQueuedRun ??
       sameScopeScheduledRetryRun ??
       (shouldQueueFollowupForRunningWake ? null : sameScopeLocaleCompatibleRunningRun);
+
+    const coalescedTargetRun = filterZombieCoalesceTarget(
+      rawCoalescedTarget,
+      liveRunExecutions,
+    );
 
     if (coalescedTargetRun) {
       const mergedContextSnapshot = mergeCoalescedContextSnapshot(
