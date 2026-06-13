@@ -97,17 +97,17 @@ describe("issue list routes", () => {
     mockIssueService.list.mockResolvedValue([]);
   });
 
-  it("normalizes repeated status query params before calling issueService.list", async () => {
+  it("accepts repeated status query params before calling issueService.list", async () => {
     const res = await request(createApp()).get(
-      "/api/companies/company-1/issues?assigneeAgentId=agent-1&status=todo&status=in_progress&status=blocked",
+      "/api/companies/company-1/issues?assigneeAgentId=00000000-0000-4000-8000-000000000001&status=todo&status=in_progress&status=blocked",
     );
 
     expect(res.status).toBe(200);
     expect(mockIssueService.list).toHaveBeenCalledWith(
       "company-1",
       expect.objectContaining({
-        status: "todo,in_progress,blocked",
-        assigneeAgentId: "agent-1",
+        status: ["todo", "in_progress", "blocked"],
+        assigneeAgentId: "00000000-0000-4000-8000-000000000001",
       }),
     );
   });

@@ -63,6 +63,11 @@ import {
   readCatalogStringList,
   readPortableCatalogProvenance,
 } from "./catalog-provenance.js";
+import {
+  isBundledPaperclipSkillRepo,
+  isBundledPaperclipSkillSourceForKey,
+  isReservedPaperclipSkillKey,
+} from "./bundled-paperclip-skills.js";
 
 type CompanySkillRow = typeof companySkills.$inferSelect;
 type CompanySkillVersionRow = typeof companySkillVersions.$inferSelect;
@@ -211,7 +216,7 @@ function assertImportedSkillSourceAllowed(skill: ImportedSkill) {
 }
 
 function assertImportedSkillKeyAllowed(skill: ImportedSkill) {
-  if (!skill.key.startsWith("paperclipai/paperclip/")) return;
+  if (!isReservedPaperclipSkillKey(skill.key)) return;
   const metadata = isPlainRecord(skill.metadata) ? skill.metadata : null;
   const sourceKind = asString(metadata?.sourceKind);
   if (sourceKind === "paperclip_bundled") return;
@@ -910,9 +915,7 @@ function deriveImportedSkillSource(
         : null);
     const [owner, repoName] = (repo ?? "").split("/");
     if (repo && owner && repoName) {
-      const sourceKind = owner === "paperclipai"
-        && repoName === "paperclip"
-        && canonicalKey?.startsWith("paperclipai/paperclip/")
+      const sourceKind = isBundledPaperclipSkillSourceForKey(repo, canonicalKey)
         ? "paperclip_bundled"
         : "github";
       return {
@@ -4410,8 +4413,7 @@ export function companySkillService(db: Db) {
         existing
         && existingMeta.sourceKind === "paperclip_bundled"
         && incomingKind === "github"
-        && incomingOwner === "paperclipai"
-        && incomingRepo === "paperclip"
+        && isBundledPaperclipSkillRepo(`${incomingOwner}/${incomingRepo}`)
       ) {
         out.push(existing);
         continue;

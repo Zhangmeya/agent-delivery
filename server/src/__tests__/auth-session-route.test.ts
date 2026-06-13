@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { instanceUserRoles } from "@paperclipai/db";
+import { instanceUserRoles } from "@penclipai/db";
 import { actorMiddleware } from "../middleware/auth.js";
 
 function createSelectChain(rows: unknown[]) {

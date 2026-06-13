@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { agents, companies, companyMemberships, createDb, issues, principalPermissionGrants } from "@paperclipai/db";
+import { agents, companies, companyMemberships, createDb, issues, principalPermissionGrants } from "@penclipai/db";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,

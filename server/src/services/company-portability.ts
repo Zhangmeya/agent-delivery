@@ -77,6 +77,11 @@ import {
   readCatalogStringList,
   readPortableCatalogProvenance,
 } from "./catalog-provenance.js";
+import {
+  BUNDLED_PAPERCLIP_SKILL_REPO,
+  BUNDLED_PAPERCLIP_SKILL_REPOS,
+  isBundledPaperclipSkillSourceForKey,
+} from "./bundled-paperclip-skills.js";
 import { normalizePortablePath } from "./portable-path.js";
 
 /** Build OrgNode tree from manifest agent list (slug + reportsToSlug). */
@@ -136,11 +141,6 @@ const DEFAULT_COLLISION_STRATEGY: CompanyPortabilityCollisionStrategy = "rename"
 const IMPORT_FORBIDDEN_ADAPTER_TYPES = new Set(["process", "http"]);
 const execFileAsync = promisify(execFile);
 let bundledSkillsCommitPromise: Promise<string | null> | null = null;
-const BUNDLED_PAPERCLIP_SKILL_REPO = "penclipai/paperclip-cn";
-const LEGACY_BUNDLED_PAPERCLIP_SKILL_REPOS = [
-  "paperclipai/paperclip",
-  "penclipai/paperclip",
-] as const;
 
 function resolveImportMode(options?: ImportBehaviorOptions): ImportMode {
   return options?.mode ?? "board_full";
@@ -219,7 +219,7 @@ function canonicalizeBundledPaperclipSkillKey(value: string | null | undefined) 
   const normalized = normalizeSkillKey(value);
   if (!normalized) return null;
   if (normalized.startsWith(`${BUNDLED_PAPERCLIP_SKILL_REPO}/`)) return normalized;
-  for (const legacyRepo of LEGACY_BUNDLED_PAPERCLIP_SKILL_REPOS) {
+  for (const legacyRepo of BUNDLED_PAPERCLIP_SKILL_REPOS) {
     const legacyPrefix = `${legacyRepo}/`;
     if (normalized.startsWith(legacyPrefix)) {
       return `${BUNDLED_PAPERCLIP_SKILL_REPO}/${normalized.slice(legacyPrefix.length)}`;
@@ -2801,9 +2801,7 @@ function buildManifestFromPackageFiles(
       const sourceHostname = asString(primarySource?.hostname) || "github.com";
       const [owner, repoName] = (repo ?? "").split("/");
       const canonicalKey = readSkillKey(frontmatter);
-      const normalizedSourceKind = owner === "paperclipai"
-        && repoName === "paperclip"
-        && canonicalKey?.startsWith("paperclipai/paperclip/")
+      const normalizedSourceKind = isBundledPaperclipSkillSourceForKey(repo, canonicalKey)
         ? "paperclip_bundled"
         : "github";
       sourceType = "github";

@@ -23,6 +23,7 @@ const execFileAsync = promisify(execFile);
  */
 
 const ENTRYPOINT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "docker-entrypoint.sh");
+const describePosixEntrypoint = process.platform === "win32" ? describe.skip : describe;
 
 let stubDir: string;
 let logFile: string;
@@ -66,7 +67,7 @@ afterEach(() => {
   rmSync(stubDir, { recursive: true, force: true });
 });
 
-describe("docker-entrypoint.sh", () => {
+describePosixEntrypoint("docker-entrypoint.sh", () => {
   it("keeps the root-start gosu flow with default UID/GID (Docker Compose)", async () => {
     installStubs({ uid: 0, gid: 0 });
 

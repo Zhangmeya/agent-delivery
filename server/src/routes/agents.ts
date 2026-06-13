@@ -78,6 +78,8 @@ import {
 } from "../adapters/index.js";
 import { redactEventPayload } from "../redaction.js";
 import { redactCurrentUserValue } from "../log-redaction.js";
+import { resolveExplicitRequestUiLocale } from "../ui-locale.js";
+import { getBundledPaperclipSkillIdentity } from "../services/bundled-paperclip-skills.js";
 import { renderOrgChartSvg, renderOrgChartPng, type OrgNode, type OrgChartStyle, ORG_CHART_STYLES } from "./org-chart-svg.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
 import { runClaudeLogin } from "@penclipai/adapter-claude-local/server";
@@ -1356,6 +1358,10 @@ export function agentRoutes(
     return Array.from(out.values());
   }
 
+  function desiredSkillEntryIdentity(entry: AgentDesiredSkillEntry) {
+    return getBundledPaperclipSkillIdentity(entry.key) ?? entry.key;
+  }
+
   // Legacy hardcoded set — used as fallback when adapter module does not
   // declare requiresMaterializedRuntimeSkills explicitly.
   const LEGACY_MATERIALIZED_SKILLS_SET = new Set([
@@ -1423,7 +1429,9 @@ export function agentRoutes(
     const desiredSkillEntries = [
       ...requiredSkills.map((key) => ({ key, versionId: null })),
       ...resolvedRequestedSkillEntries,
-    ].filter((entry, index, entries) => entries.findIndex((candidate) => candidate.key === entry.key) === index);
+    ].filter((entry, index, entries) =>
+      entries.findIndex((candidate) => desiredSkillEntryIdentity(candidate) === desiredSkillEntryIdentity(entry)) === index
+    );
     const desiredSkills = desiredSkillEntries.map((entry) => entry.key);
 
     return {
@@ -3198,6 +3206,7 @@ export function agentRoutes(
       return;
     }
 
+    const requestedUiLocale = resolveExplicitRequestUiLocale(req);
     const run = await heartbeat.wakeup(id, {
       source: opts.source,
       triggerDetail: req.body.triggerDetail ?? "manual",
@@ -3210,6 +3219,7 @@ export function agentRoutes(
         triggeredBy: req.actor.type,
         actorId: req.actor.type === "agent" ? req.actor.agentId : req.actor.userId,
         forceFreshSession: req.body.forceFreshSession === true,
+        ...(requestedUiLocale ? { requestedUiLocale } : {}),
       },
     });
 
@@ -3283,6 +3293,10 @@ export function agentRoutes(
       triggeredBy: req.actor.type,
       actorId: req.actor.type === "agent" ? req.actor.agentId : req.actor.userId,
     };
+    const requestedUiLocale = resolveExplicitRequestUiLocale(req);
+    if (requestedUiLocale) {
+      contextSnapshot.requestedUiLocale = requestedUiLocale;
+    }
     if (body.forceFreshSession === true) {
       contextSnapshot.forceFreshSession = true;
     }

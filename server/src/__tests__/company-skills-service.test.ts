@@ -667,6 +667,51 @@ describeEmbeddedPostgres("companySkillService.list", () => {
     expect(stored?.markdown).not.toContain("Trojan Paperclip");
   });
 
+  it("accepts reserved Paperclip skill keys from the CN bundled repo", async () => {
+    const companyId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    const imported = await svc.importPackageFiles(companyId, {
+      "skills/paperclip/SKILL.md": [
+        "---",
+        "key: paperclipai/paperclip/paperclip",
+        "slug: paperclip",
+        "name: Paperclip",
+        "description: Official coordination skill.",
+        "metadata:",
+        "  sources:",
+        "    - kind: github-dir",
+        "      repo: penclipai/paperclip-cn",
+        "      path: skills/paperclip",
+        "      commit: 0123456789abcdef0123456789abcdef01234567",
+        "      trackingRef: master",
+        "---",
+        "",
+        "# Official Paperclip",
+        "",
+      ].join("\n"),
+    });
+
+    expect(imported).toHaveLength(1);
+    expect(imported[0]?.skill).toMatchObject({
+      key: "paperclipai/paperclip/paperclip",
+      slug: "paperclip",
+      sourceType: "github",
+      sourceRef: "0123456789abcdef0123456789abcdef01234567",
+      metadata: {
+        sourceKind: "paperclip_bundled",
+        owner: "penclipai",
+        repo: "paperclip-cn",
+        repoSkillDir: "skills/paperclip",
+      },
+    });
+  });
+
   it("clears the missing-source marker when a local-path skill source returns", async () => {
     const companyId = randomUUID();
     const skillId = randomUUID();

@@ -187,11 +187,25 @@ describe("sandbox managed runtime", () => {
     const localWorkspaceDir = path.join(rootDir, "local-workspace");
     const remoteWorkspaceDir = path.join(rootDir, "remote-workspace");
     const localAssetsDir = path.join(rootDir, "local-assets");
+    const runtimeRootDir = path.posix.join(remoteWorkspaceDir, ".paperclip-runtime", "test-adapter");
+    const remoteWorkspaceTar = path.posix.join(runtimeRootDir, "workspace-upload.tar");
+    const remoteAssetDir = path.posix.join(runtimeRootDir, "skills");
+    const remoteAssetTar = path.posix.join(runtimeRootDir, "skills-upload.tar");
     await mkdir(path.join(localWorkspaceDir, "src"), { recursive: true });
     await mkdir(localAssetsDir, { recursive: true });
     await writeFile(path.join(localWorkspaceDir, "README.md"), "ws\n", "utf8");
     await writeFile(path.join(localWorkspaceDir, "src", "main.ts"), "x\n", "utf8");
     await writeFile(path.join(localAssetsDir, "asset.txt"), "a\n", "utf8");
+
+    const removeRemoteWorkspaceContents = async () => {
+      await mkdir(remoteWorkspaceDir, { recursive: true });
+      const preserved = new Set([".paperclip-runtime"]);
+      const entries = await readdir(remoteWorkspaceDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (preserved.has(entry.name)) continue;
+        await rm(path.join(remoteWorkspaceDir, entry.name), { recursive: true, force: true });
+      }
+    };
 
     // Capture every tar uploaded to the sandbox so we can inspect its members.
     const uploadedTars: { remotePath: string; bytes: Buffer }[] = [];
@@ -211,7 +225,26 @@ describe("sandbox managed runtime", () => {
         await rm(remotePath, { recursive: true, force: true });
       },
       run: async (command) => {
-        await execFile("sh", ["-c", command], { maxBuffer: 32 * 1024 * 1024 });
+        if (command.includes("workspace-upload.tar")) {
+          await removeRemoteWorkspaceContents();
+          await execFile("tar", ["-xf", remoteWorkspaceTar, "-C", remoteWorkspaceDir], {
+            maxBuffer: 32 * 1024 * 1024,
+          });
+          await rm(remoteWorkspaceTar, { force: true });
+          return;
+        }
+
+        if (command.includes("skills-upload.tar")) {
+          await rm(remoteAssetDir, { recursive: true, force: true });
+          await mkdir(remoteAssetDir, { recursive: true });
+          await execFile("tar", ["-xf", remoteAssetTar, "-C", remoteAssetDir], {
+            maxBuffer: 32 * 1024 * 1024,
+          });
+          await rm(remoteAssetTar, { force: true });
+          return;
+        }
+
+        throw new Error(`Unexpected sandbox test command: ${command}`);
       },
     };
 
@@ -252,6 +285,8 @@ describe("sandbox managed runtime", () => {
     cleanupDirs.push(rootDir);
     const localWorkspaceDir = path.join(rootDir, "local-workspace");
     const remoteWorkspaceDir = path.join(rootDir, "remote-workspace");
+    const runtimeRootDir = path.posix.join(remoteWorkspaceDir, ".paperclip-runtime", "test-adapter");
+    const remoteWorkspaceTar = path.posix.join(runtimeRootDir, "workspace-upload.tar");
     await mkdir(localWorkspaceDir, { recursive: true });
 
     const client: SandboxManagedRuntimeClient = {
@@ -268,7 +303,19 @@ describe("sandbox managed runtime", () => {
         await rm(remotePath, { recursive: true, force: true });
       },
       run: async (command) => {
-        await execFile("sh", ["-c", command], { maxBuffer: 32 * 1024 * 1024 });
+        if (!command.includes("workspace-upload.tar")) {
+          throw new Error(`Unexpected sandbox test command: ${command}`);
+        }
+        await mkdir(remoteWorkspaceDir, { recursive: true });
+        const entries = await readdir(remoteWorkspaceDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name === ".paperclip-runtime") continue;
+          await rm(path.join(remoteWorkspaceDir, entry.name), { recursive: true, force: true });
+        }
+        await execFile("tar", ["-xf", remoteWorkspaceTar, "-C", remoteWorkspaceDir], {
+          maxBuffer: 32 * 1024 * 1024,
+        });
+        await rm(remoteWorkspaceTar, { force: true });
       },
     };
 

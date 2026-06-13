@@ -10,7 +10,7 @@ import {
   pluginLogs,
   pluginWebhookDeliveries,
   plugins,
-} from "@paperclipai/db";
+} from "@penclipai/db";
 import { buildHostServices, flushPluginLogBuffer } from "../services/plugin-host-services.js";
 import { pluginRegistryService } from "../services/plugin-registry.js";
 import {
