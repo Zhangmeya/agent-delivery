@@ -6,10 +6,8 @@ import {
   LogOut,
   Megaphone,
   type LucideIcon,
-  Moon,
   Settings,
   UserRound,
-  Sun,
   UserRoundPen,
 } from "lucide-react";
 import type { DeploymentMode } from "@penclipai/shared";
@@ -18,11 +16,11 @@ import { authApi } from "@/api/auth";
 import { DEFAULT_INSTANCE_SETTINGS_PATH } from "@/lib/instance-settings";
 import { queryKeys } from "@/lib/queryKeys";
 import { useSidebar } from "../context/SidebarContext";
-import { useTheme } from "../context/ThemeContext";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
+import { ThemeToggle } from "./ThemeToggle";
 
 const PROFILE_SETTINGS_PATH = "/company/settings/instance/profile";
 const DOCS_URL = "https://docs.paperclip.ing/";
@@ -116,7 +114,6 @@ export function SidebarAccountMenu({
   const queryClient = useQueryClient();
   const { isMobile, setSidebarOpen, collapsed, peeking } = useSidebar();
   const rail = collapsed && !peeking;
-  const { theme, toggleTheme } = useTheme();
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const { data: session } = useQuery({
@@ -248,19 +245,7 @@ export function SidebarAccountMenu({
                 external
                 onClick={() => setOpen(false)}
               />
-              <MenuAction
-                label={theme === "dark"
-                  ? t("Switch to light mode", { defaultValue: "Switch to light mode" })
-                  : t("Switch to dark mode", { defaultValue: "Switch to dark mode" })}
-                description={t("Toggle the app appearance.", {
-                  defaultValue: "Toggle the app appearance.",
-                })}
-                icon={theme === "dark" ? Sun : Moon}
-                onClick={() => {
-                  toggleTheme();
-                  setOpen(false);
-                }}
-              />
+              <ThemeToggle variant="menu-action" onAfterToggle={() => setOpen(false)} />
               <LanguageSwitcher
                 variant="inline"
                 onLanguageChange={() => setOpen(false)}
