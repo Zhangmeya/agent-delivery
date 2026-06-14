@@ -91,6 +91,10 @@ function SidebarSectionHeader({
     headerControlVisibilityClassName,
   );
   const translatedLabel = t(label, { defaultValue: label });
+  const translatedMenuLabel = menu?.ariaLabel ? t(menu.ariaLabel, { defaultValue: menu.ariaLabel }) : undefined;
+  const translatedHeaderActionLabel = headerAction
+    ? t(headerAction.ariaLabel, { defaultValue: headerAction.ariaLabel })
+    : undefined;
   const headerContent = <span className={labelClassName}>{translatedLabel}</span>;
   const HeaderActionIcon = headerAction?.icon;
 
@@ -105,7 +109,7 @@ function SidebarSectionHeader({
             "hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
             menuOpen && "bg-accent/50",
           )}
-          aria-label={menu?.ariaLabel ?? t("{{label}} actions", {
+          aria-label={translatedMenuLabel ?? t("{{label}} actions", {
             defaultValue: "{{label}} actions",
             label: translatedLabel,
           })}
@@ -122,7 +126,7 @@ function SidebarSectionHeader({
           const content = (
             <>
               {Icon ? <Icon className="size-4" /> : null}
-              <span>{action.label}</span>
+              <span>{t(action.label, { defaultValue: action.label })}</span>
             </>
           );
           if (action.href) {
@@ -142,11 +146,11 @@ function SidebarSectionHeader({
           <DropdownMenuRadioGroup
             value={menu.radioValue}
             onValueChange={menu.onRadioValueChange}
-            aria-label={menu.radioLabel}
+            aria-label={menu.radioLabel ? t(menu.radioLabel, { defaultValue: menu.radioLabel }) : undefined}
           >
             {menu.radioChoices.map((choice) => (
               <DropdownMenuRadioItem key={choice.value} value={choice.value}>
-                {choice.label}
+                {t(choice.label, { defaultValue: choice.label })}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
@@ -180,7 +184,7 @@ function SidebarSectionHeader({
             variant="ghost"
             size="icon-xs"
             className={actionClassName}
-            aria-label={headerAction.ariaLabel}
+            aria-label={translatedHeaderActionLabel}
             onClick={headerAction.onClick}
           >
             <HeaderActionIcon className="h-3.5 w-3.5" />
@@ -198,9 +202,11 @@ export function SidebarSection({
   menu,
   headerAction,
 }: SidebarSectionProps) {
+  const { t } = useTranslation(undefined, { useSuspense: false });
   const { collapsed, peeking } = useSidebar();
   const forceExpanded = useSidebarNavExpanded();
   const rail = collapsed && !peeking && !forceExpanded;
+  const translatedLabel = t(label, { defaultValue: label });
   const content = <div className="flex flex-col gap-0.5 mt-0.5">{children}</div>;
 
   // Collapsed rail: the section header would only show a clipped sliver of its
@@ -217,7 +223,7 @@ export function SidebarSection({
       <div>
         <div className="px-3 py-1.5 pointer-coarse:py-1">
           <div className="flex min-h-6 items-center">
-            <span className="sr-only">{label}</span>
+            <span className="sr-only">{translatedLabel}</span>
             <div className="h-px w-full bg-border/60" aria-hidden="true" />
           </div>
         </div>

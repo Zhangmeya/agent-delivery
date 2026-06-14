@@ -36,6 +36,7 @@ import {
   resolveShell,
   sanitizeRuntimeServiceBaseEnv,
   startRuntimeServicesForWorkspaceControl,
+  stopRuntimeServicesForTests,
   stopRuntimeServicesForExecutionWorkspace,
   type RealizedExecutionWorkspace,
 } from "../services/workspace-runtime.ts";
@@ -161,6 +162,17 @@ function buildWorkspace(cwd: string): RealizedExecutionWorkspace {
   };
 }
 
+async function waitForLocalServicePortReleased(port: number, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  let ownerPid: number | null = null;
+  while (Date.now() < deadline) {
+    ownerPid = await readLocalServicePortOwner(port);
+    if (!ownerPid) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for port ${port} to be released; owner pid: ${ownerPid ?? "unknown"}`);
+}
+
 function createWorkspaceOperationRecorderDouble() {
   const operations: Array<{
     phase: string;
@@ -224,18 +236,23 @@ function createWorkspaceOperationRecorderDouble() {
 }
 
 afterEach(async () => {
-  await Promise.all(
-    Array.from(leasedRunIds).map(async (runId) => {
-      await releaseRuntimeServicesForRun(runId);
-      leasedRunIds.delete(runId);
-    }),
-  );
-  delete process.env.PAPERCLIP_CONFIG;
-  delete process.env.PAPERCLIP_HOME;
-  delete process.env.PAPERCLIP_INSTANCE_ID;
-  delete process.env.PAPERCLIP_WORKTREES_DIR;
-  delete process.env.DATABASE_URL;
-  await resetRuntimeServicesForTests();
+  try {
+    await Promise.all(
+      Array.from(leasedRunIds).map(async (runId) => {
+        await releaseRuntimeServicesForRun(runId);
+        leasedRunIds.delete(runId);
+      }),
+    );
+  } finally {
+    leasedRunIds.clear();
+    await stopRuntimeServicesForTests();
+    delete process.env.PAPERCLIP_CONFIG;
+    delete process.env.PAPERCLIP_HOME;
+    delete process.env.PAPERCLIP_INSTANCE_ID;
+    delete process.env.PAPERCLIP_WORKTREES_DIR;
+    delete process.env.DATABASE_URL;
+    await resetRuntimeServicesForTests();
+  }
 });
 
 describe("sanitizeRuntimeServiceBaseEnv", () => {
@@ -419,7 +436,7 @@ describe("realizeExecutionWorkspace", () => {
     expect(workspace.baseRefSha).toBe(expectedRemoteHead);
     expect(await readGit(repoRoot, ["rev-parse", "origin/master"])).toBe(expectedRemoteHead);
     expect(await readGit(workspace.cwd, ["rev-parse", "HEAD"])).toBe(expectedRemoteHead);
-  });
+  }, 20_000);
 
   it("creates and reuses a git worktree for an issue-scoped branch", async () => {
     const repoRoot = await createTempRepo();
@@ -3679,7 +3696,8 @@ describeEmbeddedPostgres("workspace runtime startup reconciliation", () => {
       executionWorkspaceId,
       workspaceCwd: workspace.cwd,
     });
-    await expect(fetch(first[0]!.url!)).rejects.toThrow();
+    await waitForLocalServicePortReleased(first[0]!.port!);
+    await expect(fetch(first[0]!.url!, { signal: AbortSignal.timeout(1_000) })).rejects.toThrow();
 
     const second = await startRuntimeServicesForWorkspaceControl({
       db,
@@ -3702,7 +3720,7 @@ describeEmbeddedPostgres("workspace runtime startup reconciliation", () => {
       executionWorkspaceId,
       workspaceCwd: workspace.cwd,
     });
-  });
+  }, 20_000);
 });
 
 describe("normalizeAdapterManagedRuntimeServices", () => {

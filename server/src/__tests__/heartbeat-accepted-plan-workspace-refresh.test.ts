@@ -116,6 +116,9 @@ describeEmbeddedPostgres("accepted plan workspace refresh", () => {
     await db.delete(executionWorkspaces);
     await db.delete(activityLog);
     await db.delete(heartbeatRunEvents);
+    await db.update(agentTaskSessions).set({ lastRunId: null });
+    await db.delete(agentTaskSessions);
+    await db.delete(activityLog);
     await db.delete(heartbeatRuns);
     await db.delete(issueComments);
     await db.delete(issues);

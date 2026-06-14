@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { AdapterEnvironmentTestResult } from "@penclipai/shared";
 import { useLocation, useNavigate, useParams } from "@/lib/router";
 import { useDialog } from "../context/DialogContext";
@@ -39,6 +40,7 @@ import { resolveRouteOnboardingOptions } from "../lib/onboarding-route";
 import { AsciiArtAnimation } from "./AsciiArtAnimation";
 import { FrontDoor } from "./FrontDoor";
 import { AgentCapsule } from "./AgentCapsule";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import {
   Building2,
   Bot,
@@ -84,6 +86,7 @@ function loadSavedState(): Record<string, unknown> | null {
 }
 
 export function OnboardingWizard() {
+  const { t } = useTranslation();
   const {
     onboardingOpen,
     onboardingOptions,
@@ -678,8 +681,11 @@ export function OnboardingWizard() {
             className="absolute top-4 left-4 z-10 rounded-sm p-1.5 text-muted-foreground/60 hover:text-foreground transition-colors"
           >
             <X className="h-5 w-5" />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{t("Close", { defaultValue: "Close" })}</span>
           </button>
+          <div className="absolute top-4 right-4 z-10">
+            <LanguageSwitcher contentClassName="z-[70]" />
+          </div>
 
           {/* Step 0: Front Door — full-screen choice */}
           {step === 0 && (

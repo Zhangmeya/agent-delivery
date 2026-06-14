@@ -142,6 +142,15 @@ export async function resetRuntimeServicesForTests() {
   runtimeServiceLeasesByRun.clear();
 }
 
+export async function stopRuntimeServicesForTests() {
+  const serviceIds = Array.from(runtimeServicesById.keys());
+  for (const serviceId of serviceIds) {
+    await stopRuntimeService(serviceId);
+  }
+  runtimeServicesByReuseKey.clear();
+  runtimeServiceLeasesByRun.clear();
+}
+
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;

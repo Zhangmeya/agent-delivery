@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { AdapterEnvironmentTestResult } from "@penclipai/shared";
 import { useLocation, useNavigate, useParams } from "@/lib/router";
 import { useDialog } from "../context/DialogContext";
@@ -46,6 +47,7 @@ import { DEFAULT_GEMINI_LOCAL_MODEL } from "@penclipai/adapter-gemini-local";
 import { DEFAULT_OPENCODE_LOCAL_MODEL, isValidOpenCodeModelId } from "@penclipai/adapter-opencode-local";
 import { resolveRouteOnboardingOptions } from "../lib/onboarding-route";
 import { AsciiArtAnimation } from "./AsciiArtAnimation";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import {
   Building2,
   Bot,
@@ -82,6 +84,7 @@ const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the
  * flag graduates or dies.
  */
 export function OnboardingWizardClassic() {
+  const { t } = useTranslation();
   const { onboardingOpen, onboardingOptions, closeOnboarding } = useDialog();
   const { companies, setSelectedCompanyId, loading: companiesLoading } = useCompany();
   const queryClient = useQueryClient();
@@ -629,8 +632,11 @@ export function OnboardingWizardClassic() {
             className="absolute top-4 left-4 z-10 rounded-sm p-1.5 text-muted-foreground/60 hover:text-foreground transition-colors"
           >
             <X className="h-5 w-5" />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{t("Close", { defaultValue: "Close" })}</span>
           </button>
+          <div className="absolute top-4 right-4 z-10">
+            <LanguageSwitcher contentClassName="z-[70]" />
+          </div>
 
           {/* Left half — form */}
           <div
