@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Clock3, Cpu, FlaskConical, Puzzle, Settings, Shield, SlidersHorizontal, UserRoundPen } from "lucide-react";
+import { Clock3, Cpu, FlaskConical, MonitorCog, Puzzle, Settings, Shield, SlidersHorizontal, UserRoundPen } from "lucide-react";
 import type { PluginRecord } from "@penclipai/shared";
 import { NavLink } from "@/lib/router";
 import { pluginsApi } from "@/api/plugins";
@@ -43,6 +43,7 @@ export function InstanceSidebar() {
         <div className="flex flex-col gap-0.5">
           <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/profile`} label={t("Profile", { defaultValue: "Profile" })} icon={UserRoundPen} end />
           <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/general`} label={t("General", { defaultValue: "General" })} icon={SlidersHorizontal} end />
+          <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/environments`} label={t("Environments", { defaultValue: "Environments" })} icon={MonitorCog} end />
           <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/access`} label={t("Access", { defaultValue: "Access" })} icon={Shield} end />
           <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/heartbeats`} label={t("Heartbeats", { defaultValue: "Heartbeats" })} icon={Clock3} end />
           <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/experimental`} label={t("Experimental", { defaultValue: "Experimental" })} icon={FlaskConical} />

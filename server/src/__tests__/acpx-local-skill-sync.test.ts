@@ -6,7 +6,6 @@ import {
 
 describe("acpx local skill sync", () => {
   const paperclipKey = "penclipai/paperclip-cn/paperclip";
-  const createAgentKey = "penclipai/paperclip-cn/paperclip-create-agent";
 
   it("reports ACPX Claude skills as supported runtime-mounted state", async () => {
     const snapshot = await listAcpxSkills({
@@ -25,7 +24,6 @@ describe("acpx local skill sync", () => {
     expect(snapshot.supported).toBe(true);
     expect(snapshot.mode).toBe("ephemeral");
     expect(snapshot.desiredSkills).toContain(paperclipKey);
-    expect(snapshot.desiredSkills).toContain(createAgentKey);
     expect(snapshot.entries.find((entry) => entry.key === paperclipKey)?.state).toBe("configured");
     expect(snapshot.entries.find((entry) => entry.key === paperclipKey)?.detail).toContain("ACPX Claude session");
     expect(snapshot.warnings).toEqual([]);

@@ -2,6 +2,28 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { buildSandboxNpmInstallCommand } from "@penclipai/adapter-utils";
 import type { ServerAdapterModule } from "../adapters/index.js";
 
+const hermesExecuteMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    exitCode: 0,
+    signal: null,
+    timedOut: false,
+  })),
+);
+
+vi.mock("hermes-paperclip-adapter/server", () => ({
+  execute: hermesExecuteMock,
+  testEnvironment: async () => ({
+    adapterType: "hermes_local",
+    status: "pass",
+    checks: [],
+    testedAt: new Date(0).toISOString(),
+  }),
+  sessionCodec: null,
+  listSkills: async () => [],
+  syncSkills: async () => ({ entries: [] }),
+  detectModel: async () => null,
+}));
+
 import {
   detectAdapterModel,
   findActiveServerAdapter,
@@ -15,6 +37,7 @@ import {
 import {
   resolveExternalAdapterRegistration,
   setOverridePaused,
+  waitForExternalAdapters,
 } from "../adapters/registry.js";
 
 const externalAdapter: ServerAdapterModule = {
@@ -39,12 +62,15 @@ describe("server adapter registry", () => {
     unregisterServerAdapter("external_test");
     unregisterServerAdapter("claude_local");
     setOverridePaused("claude_local", false);
+    setOverridePaused("hermes_local", true);
   });
 
   afterEach(() => {
     unregisterServerAdapter("external_test");
     unregisterServerAdapter("claude_local");
     setOverridePaused("claude_local", false);
+    setOverridePaused("hermes_local", false);
+    hermesExecuteMock.mockClear();
   });
 
   it("registers external adapters and exposes them through lookup helpers", async () => {
@@ -284,9 +310,17 @@ describe("server adapter registry", () => {
     expect(detectModel).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps Hermes out of the built-in registry so plugins own hermes_local", () => {
+  it("keeps Hermes removable as an external-only adapter in the CN fork", async () => {
+    await waitForExternalAdapters();
+
+    unregisterServerAdapter("hermes_local");
+
     expect(findServerAdapter("hermes_local")).toBeNull();
-    expect(() => requireServerAdapter("hermes_local")).toThrow("Unknown adapter type: hermes_local");
+    expect(findActiveServerAdapter("hermes_local")).toBeNull();
+    expect(() => requireServerAdapter("hermes_local")).toThrow(
+      "Unknown adapter type: hermes_local",
+    );
+    expect(hermesExecuteMock).not.toHaveBeenCalled();
   });
 });
 

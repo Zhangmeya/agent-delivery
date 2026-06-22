@@ -144,6 +144,7 @@ export function IssueColumnPicker({
 export function InboxIssueMetaLeading({
   issue,
   isLive,
+  subtreeLiveCount = 0,
   showStatus = true,
   showIdentifier = true,
   statusSlot,
@@ -151,6 +152,7 @@ export function InboxIssueMetaLeading({
 }: {
   issue: Issue;
   isLive: boolean;
+  subtreeLiveCount?: number;
   showStatus?: boolean;
   showIdentifier?: boolean;
   statusSlot?: ReactNode;
@@ -160,7 +162,7 @@ export function InboxIssueMetaLeading({
   return (
     <>
       {showStatus ? (
-        <span className="hidden shrink-0 sm:inline-flex">
+        <span className="hidden shrink-0 items-center sm:inline-flex">
           {statusSlot ?? <StatusIcon status={issue.status} blockerAttention={issue.blockerAttention} />}
         </span>
       ) : null}
@@ -197,6 +199,26 @@ export function InboxIssueMetaLeading({
             )}
           >
             {t("issuesList.live", { defaultValue: "Live" })}
+          </span>
+        </span>
+      )}
+      {!isLive && subtreeLiveCount > 0 && (
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 sm:gap-1.5 sm:px-2",
+            "border-border bg-transparent",
+          )}
+          title={`${subtreeLiveCount} sub-task${subtreeLiveCount === 1 ? "" : "s"} running below`}
+        >
+          <span
+            className={cn(
+              "h-2 w-2 shrink-0 rounded-full border",
+              "border-muted-foreground/60 bg-transparent",
+            )}
+            aria-hidden="true"
+          />
+          <span className="hidden text-[11px] font-medium text-muted-foreground sm:inline">
+            {subtreeLiveCount} live below
           </span>
         </span>
       )}

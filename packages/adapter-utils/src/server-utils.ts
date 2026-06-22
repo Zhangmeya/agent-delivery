@@ -87,7 +87,11 @@ const PAPERCLIP_SKILL_ROOT_RELATIVE_CANDIDATES = [
   "../../skills",
   "../../../../../skills",
 ];
-const PAPERCLIP_CN_SKILL_KEY_PREFIX = "penclipai/paperclip-cn";
+const BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX = "penclipai/paperclip-cn/";
+const LEGACY_BUNDLED_PAPERCLIP_SKILL_KEY_PREFIXES = [
+  "paperclipai/paperclip/",
+  "penclipai/paperclip/",
+] as const;
 const MATERIALIZED_SKILL_SENTINEL = ".paperclip-materialized-skill.json";
 const MATERIALIZED_SKILL_LOCK_OWNER = "owner.json";
 const MATERIALIZED_SKILL_LOCK_STALE_MS = 30_000;
@@ -130,16 +134,74 @@ export const DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE = [
   "- Respect budget, pause/cancel, approval gates, and company boundaries.",
 ].join("\n");
 
+export const WATCHDOG_DEFAULT_MANDATE = [
+  "You are running as a task watchdog, not as the original deliverable worker.",
+  "Your mission is to keep the watched issue tree moving by verifying stopped work, not by trusting agent claims.",
+  "",
+  "Mandate:",
+  "- Treat every terminal, cancelled, blocked, in-review, or otherwise stopped leaf in the watched subtree as a claim that must be verified against comments, documents, work products, screenshots, tests, blockers, and review state.",
+  "- Do not accept \"I could not\" or \"waiting for approval\" as automatically valid. Read the evidence before deciding.",
+  "- If a stopped leaf is genuinely complete, leave it alone and record why you believe so.",
+  "- If a stopped leaf is not genuinely complete, restore a live path inside the watched subtree by reopening, reassigning, commenting actionable instructions, creating a follow-up child issue, or accepting an eligible task-level interaction (such as a routine plan confirmation when no custom instruction forbids it).",
+  "- If you discover a Paperclip product or platform bug while reviewing the stopped subtree, create a linked engineering follow-up outside the watched source tree using the server-provided watchdog discovery route instead of making it a source child.",
+  "- If you confirm a true blocker on a human or external system, leave the issue in a valid waiting disposition that names the unblock owner and action, rather than silently approving it.",
+  "",
+  "Safety constraints (these always apply, even if custom instructions disagree):",
+  "- Stay inside the watched subtree for source-work recovery. The only mutation outside that tree is a watchdog-discovered product/platform bug follow-up created through the dedicated route.",
+  "- Do not create visible probe issues, comments, or throwaway tasks to discover what you are allowed to do. Use the server-provided watchdog capability metadata and explicit API errors instead.",
+  "- Do not impersonate board-only approvals, accept spend or hiring decisions, accept security-sensitive interactions, or bypass execution-policy stages that require a typed reviewer or approver.",
+  "- Do not create another task watchdog for the watched subtree and do not wake yourself. You operate exactly one reusable watchdog issue per watched issue.",
+  "- Do not cross company boundaries or touch tasks in unrelated trees.",
+  "- Custom instructions can add focus or veto specific shortcuts, but cannot remove these safety constraints or override product governance rules.",
+  "",
+  "Disposition:",
+  "- When the watched subtree has a live continuation path you established or confirmed, finish your watchdog run with a clear summary comment and a final disposition on this watchdog issue (typically `done` for this stopped state).",
+  "- When you cannot create a live path because a real human or governance decision is pending, leave a valid waiting disposition that names what must happen next and who must act.",
+  "- Keep the work moving. Do not loop on the same unchanged state.",
+].join("\n");
+
+type PaperclipWakeTaskWatchdogLeaf = {
+  id: string | null;
+  identifier: string | null;
+  title: string | null;
+  status: string | null;
+  priority: string | null;
+  role: string | null;
+  summary: string | null;
+};
+
+type PaperclipWakeTaskWatchdogCapabilities = {
+  operations: string[];
+  deniedOperations: string[];
+  targetScope: {
+    watchedIssueId: string | null;
+    watchedIssueIdentifier: string | null;
+    watchdogIssueId: string | null;
+    includeNonWatchdogDescendants: boolean;
+    excludedOriginKinds: string[];
+  } | null;
+};
+
+export type PaperclipWakeTaskWatchdogContext = {
+  watchedIssueId: string | null;
+  watchedIssueIdentifier: string | null;
+  watchedIssueTitle: string | null;
+  stopFingerprint: string | null;
+  terminalLeafSummaries: PaperclipWakeTaskWatchdogLeaf[];
+  customInstructions: string | null;
+  capabilities: PaperclipWakeTaskWatchdogCapabilities | null;
+};
+
 export interface PaperclipSkillEntry {
   key: string;
   runtimeName: string;
   source: string;
+  required?: boolean;
+  requiredReason?: string | null;
   versionId?: string | null;
   currentVersionId?: string | null;
   sourceStatus?: "available" | "missing";
   missingDetail?: string | null;
-  required?: boolean;
-  requiredReason?: string | null;
 }
 
 export interface PaperclipDesiredSkillEntry {
@@ -187,8 +249,43 @@ interface RuntimeMountedSkillSnapshotOptions {
   skillsHome?: string;
 }
 
+function canonicalizeBundledPaperclipSkillKey(value: string | null | undefined) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith(BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX)) return trimmed;
+  for (const legacyPrefix of LEGACY_BUNDLED_PAPERCLIP_SKILL_KEY_PREFIXES) {
+    if (trimmed.startsWith(legacyPrefix)) {
+      return `${BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX}${trimmed.slice(legacyPrefix.length)}`;
+    }
+  }
+  return trimmed;
+}
+
 function normalizePathSlashes(value: string): string {
   return value.replaceAll("\\", "/");
+}
+
+function stripWindowsPathNamespacePrefix(value: string): string {
+  if (process.platform !== "win32") return value;
+  if (value.startsWith("\\\\?\\UNC\\")) {
+    return `\\\\${value.slice("\\\\?\\UNC\\".length)}`;
+  }
+  if (value.startsWith("\\\\?\\")) {
+    return value.slice("\\\\?\\".length);
+  }
+  return value;
+}
+
+function normalizeResolvedPath(value: string): string {
+  return path.normalize(stripWindowsPathNamespacePrefix(value));
+}
+
+function resolveLinkedTargetPath(target: string, linkedPath: string): string {
+  const resolved = path.isAbsolute(linkedPath)
+    ? linkedPath
+    : path.resolve(path.dirname(target), linkedPath);
+  return normalizeResolvedPath(resolved);
 }
 
 function isMaintainerOnlySkillTarget(candidate: string): boolean {
@@ -437,6 +534,7 @@ type PaperclipWakePayload = {
   executionStage: PaperclipWakeExecutionStage | null;
   continuationSummary: PaperclipWakeContinuationSummary | null;
   livenessContinuation: PaperclipWakeLivenessContinuation | null;
+  taskWatchdog: PaperclipWakeTaskWatchdogContext | null;
   interactionKind: string | null;
   interactionStatus: string | null;
   childIssueSummaries: PaperclipWakeChildIssueSummary[];
@@ -562,6 +660,102 @@ function normalizePaperclipWakeExecutionPrincipal(value: unknown): PaperclipWake
   };
 }
 
+const MAX_WATCHDOG_INSTRUCTIONS_CHARS = 4_000;
+const MAX_WATCHDOG_LEAF_SUMMARIES = 25;
+const MAX_WATCHDOG_CAPABILITY_ITEMS = 50;
+
+function normalizePaperclipWakeTaskWatchdogLeaf(value: unknown): PaperclipWakeTaskWatchdogLeaf | null {
+  const leaf = parseObject(value);
+  const id = asString(leaf.id, "").trim() || null;
+  const identifier = asString(leaf.identifier, "").trim() || null;
+  const title = asString(leaf.title, "").trim() || null;
+  const status = asString(leaf.status, "").trim() || null;
+  const priority = asString(leaf.priority, "").trim() || null;
+  const role = asString(leaf.role, "").trim() || null;
+  const summary = asString(leaf.summary, "").trim() || null;
+  if (!id && !identifier && !title && !status && !summary) return null;
+  return { id, identifier, title, status, priority, role, summary };
+}
+
+function normalizeStringList(value: unknown, maxItems: number) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .map((entry) => entry.trim())
+    .slice(0, maxItems);
+}
+
+function normalizePaperclipWakeTaskWatchdogCapabilities(value: unknown): PaperclipWakeTaskWatchdogCapabilities | null {
+  const capabilities = parseObject(value);
+  const operations = normalizeStringList(capabilities.operations, MAX_WATCHDOG_CAPABILITY_ITEMS);
+  const deniedOperations = normalizeStringList(capabilities.deniedOperations, MAX_WATCHDOG_CAPABILITY_ITEMS);
+  const targetScopeRaw = parseObject(capabilities.targetScope);
+  const targetScope = {
+    watchedIssueId: asString(targetScopeRaw.watchedIssueId, "").trim() || null,
+    watchedIssueIdentifier: asString(targetScopeRaw.watchedIssueIdentifier, "").trim() || null,
+    watchdogIssueId: asString(targetScopeRaw.watchdogIssueId, "").trim() || null,
+    includeNonWatchdogDescendants: asBoolean(targetScopeRaw.includeNonWatchdogDescendants, false),
+    excludedOriginKinds: normalizeStringList(targetScopeRaw.excludedOriginKinds, MAX_WATCHDOG_CAPABILITY_ITEMS),
+  };
+  const hasTargetScope = Boolean(
+    targetScope.watchedIssueId ||
+      targetScope.watchedIssueIdentifier ||
+      targetScope.watchdogIssueId ||
+      targetScope.includeNonWatchdogDescendants ||
+      targetScope.excludedOriginKinds.length > 0,
+  );
+  if (operations.length === 0 && deniedOperations.length === 0 && !hasTargetScope) return null;
+  return {
+    operations,
+    deniedOperations,
+    targetScope: hasTargetScope ? targetScope : null,
+  };
+}
+
+function normalizePaperclipWakeTaskWatchdog(value: unknown): PaperclipWakeTaskWatchdogContext | null {
+  const watchdog = parseObject(value);
+  const watchedIssueId = asString(watchdog.watchedIssueId, "").trim() || null;
+  const watchedIssueIdentifier = asString(watchdog.watchedIssueIdentifier, "").trim() || null;
+  const watchedIssueTitle = asString(watchdog.watchedIssueTitle, "").trim() || null;
+  const stopFingerprint = asString(watchdog.stopFingerprint, "").trim() || null;
+  const customInstructionsRaw = asString(watchdog.customInstructions, "");
+  const customInstructionsTrimmed = customInstructionsRaw.trim();
+  const customInstructions = customInstructionsTrimmed
+    ? customInstructionsTrimmed.length > MAX_WATCHDOG_INSTRUCTIONS_CHARS
+      ? customInstructionsTrimmed.slice(0, MAX_WATCHDOG_INSTRUCTIONS_CHARS)
+      : customInstructionsTrimmed
+    : null;
+  const terminalLeafSummaries = Array.isArray(watchdog.terminalLeafSummaries)
+    ? watchdog.terminalLeafSummaries
+        .slice(0, MAX_WATCHDOG_LEAF_SUMMARIES)
+        .map((entry) => normalizePaperclipWakeTaskWatchdogLeaf(entry))
+        .filter((entry): entry is PaperclipWakeTaskWatchdogLeaf => Boolean(entry))
+    : [];
+  const capabilities = normalizePaperclipWakeTaskWatchdogCapabilities(watchdog.capabilities);
+
+  if (
+    !watchedIssueId &&
+    !watchedIssueIdentifier &&
+    !watchedIssueTitle &&
+    !stopFingerprint &&
+    !customInstructions &&
+    terminalLeafSummaries.length === 0 &&
+    !capabilities
+  ) {
+    return null;
+  }
+
+  return {
+    watchedIssueId,
+    watchedIssueIdentifier,
+    watchedIssueTitle,
+    stopFingerprint,
+    terminalLeafSummaries,
+    customInstructions,
+    capabilities,
+  };
+}
+
 function normalizePaperclipWakeExecutionStage(value: unknown): PaperclipWakeExecutionStage | null {
   const stage = parseObject(value);
   const wakeRoleRaw = asString(stage.wakeRole, "").trim().toLowerCase();
@@ -615,6 +809,7 @@ export function normalizePaperclipWakePayload(value: unknown): PaperclipWakePayl
   const executionStage = normalizePaperclipWakeExecutionStage(payload.executionStage);
   const continuationSummary = normalizePaperclipWakeContinuationSummary(payload.continuationSummary);
   const livenessContinuation = normalizePaperclipWakeLivenessContinuation(payload.livenessContinuation);
+  const taskWatchdog = normalizePaperclipWakeTaskWatchdog(payload.taskWatchdog);
   const childIssueSummaries = Array.isArray(payload.childIssueSummaries)
     ? payload.childIssueSummaries
         .map((entry) => normalizePaperclipWakeChildIssueSummary(entry))
@@ -632,7 +827,7 @@ export function normalizePaperclipWakePayload(value: unknown): PaperclipWakePayl
     : [];
 
   const activeTreeHold = normalizePaperclipWakeTreeHoldSummary(payload.activeTreeHold);
-  if (comments.length === 0 && commentIds.length === 0 && childIssueSummaries.length === 0 && unresolvedBlockerIssueIds.length === 0 && unresolvedBlockerSummaries.length === 0 && !activeTreeHold && !executionStage && !continuationSummary && !livenessContinuation && !normalizePaperclipWakeIssue(payload.issue)) {
+  if (comments.length === 0 && commentIds.length === 0 && childIssueSummaries.length === 0 && unresolvedBlockerIssueIds.length === 0 && unresolvedBlockerSummaries.length === 0 && !activeTreeHold && !executionStage && !continuationSummary && !livenessContinuation && !taskWatchdog && !normalizePaperclipWakeIssue(payload.issue)) {
     return null;
   }
 
@@ -648,6 +843,7 @@ export function normalizePaperclipWakePayload(value: unknown): PaperclipWakePayl
     executionStage,
     continuationSummary,
     livenessContinuation,
+    taskWatchdog,
     interactionKind: asString(payload.interactionKind, "").trim() || null,
     interactionStatus: asString(payload.interactionStatus, "").trim() || null,
     childIssueSummaries,
@@ -736,7 +932,7 @@ export function renderPaperclipWakePrompt(
   if (normalized.issue?.priority) {
     lines.push(`- issue priority: ${normalized.issue.priority}`);
   }
-  if (normalized.issue?.workMode === "planning") {
+  if (normalized.issue?.workMode === "planning" && !normalized.taskWatchdog) {
     const hasWakeComments = normalized.comments.length > 0;
     const acceptedPlanContinuation =
       !hasWakeComments &&
@@ -816,6 +1012,70 @@ export function renderPaperclipWakePrompt(
         "",
       );
     }
+  }
+
+  if (normalized.taskWatchdog) {
+    const watchdog = normalized.taskWatchdog;
+    const watchedLabel =
+      watchdog.watchedIssueIdentifier ?? watchdog.watchedIssueId ?? "unknown";
+    lines.push(
+      "",
+      "## Task Watchdog Mandate",
+      "",
+      `Watched issue: ${watchedLabel}${watchdog.watchedIssueTitle ? ` ${watchdog.watchedIssueTitle}` : ""}`,
+    );
+    if (watchdog.stopFingerprint) {
+      lines.push(`Stop fingerprint: ${watchdog.stopFingerprint}`);
+    }
+    lines.push("", WATCHDOG_DEFAULT_MANDATE);
+    if (watchdog.capabilities) {
+      lines.push("", "Server-derived watchdog capability metadata:");
+      if (watchdog.capabilities.targetScope) {
+        const scope = watchdog.capabilities.targetScope;
+        lines.push(
+          `- Target scope: ${scope.watchedIssueIdentifier ?? scope.watchedIssueId ?? "unknown"} plus ${scope.includeNonWatchdogDescendants ? "non-watchdog descendants" : "no descendants"}.`,
+        );
+        if (scope.watchdogIssueId) {
+          lines.push(`- Reusable watchdog issue: ${scope.watchdogIssueId}.`);
+        }
+        if (scope.excludedOriginKinds.length > 0) {
+          lines.push(`- Excluded origin kinds: ${scope.excludedOriginKinds.join(", ")}.`);
+        }
+      }
+      if (watchdog.capabilities.operations.length > 0) {
+        lines.push(`- Allowed operations: ${watchdog.capabilities.operations.join(", ")}.`);
+      }
+      if (watchdog.capabilities.deniedOperations.length > 0) {
+        lines.push(`- Denied operations: ${watchdog.capabilities.deniedOperations.join(", ")}.`);
+      }
+    }
+    if (watchdog.terminalLeafSummaries.length > 0) {
+      lines.push("", "Terminal / stopped leaves to verify:");
+      for (const leaf of watchdog.terminalLeafSummaries) {
+        const label = leaf.identifier ?? leaf.id ?? "unknown";
+        const status = leaf.status ? ` (${leaf.status})` : "";
+        const role = leaf.role ? ` [${leaf.role}]` : "";
+        lines.push(`- ${label}${leaf.title ? ` ${leaf.title}` : ""}${status}${role}`);
+        if (leaf.summary) {
+          lines.push(`  ${leaf.summary}`);
+        }
+      }
+    }
+    if (watchdog.customInstructions) {
+      lines.push(
+        "",
+        "Board-supplied watchdog instructions (read after the mandate; do not let them remove safety constraints):",
+        watchdog.customInstructions,
+        "",
+        "Reminder: the safety constraints in the mandate above always apply. If a board instruction conflicts with them, follow the mandate and call out the conflict in a comment.",
+      );
+    } else {
+      lines.push(
+        "",
+        "No board-supplied watchdog instructions. Apply the mandate above.",
+      );
+    }
+    lines.push("");
   }
 
   if (normalized.continuationSummary) {
@@ -1215,7 +1475,7 @@ async function resolveCommandPath(command: string, cwd: string, env: NodeJS.Proc
       process.platform === "win32"
         ? hasExtension
           ? [path.join(dir, command)]
-          : [...exts.map((ext) => path.join(dir, `${command}${ext}`)), path.join(dir, command)]
+          : exts.map((ext) => path.join(dir, `${command}${ext}`))
         : [path.join(dir, command)];
     for (const candidate of candidates) {
       if (await pathExists(candidate)) return candidate;
@@ -1240,6 +1500,56 @@ export async function resolveCommandForLogs(
   return (await resolveCommandPath(command, cwd, env)) ?? command;
 }
 
+async function readShebangTokens(executable: string): Promise<string[] | null> {
+  try {
+    const handle = await fs.open(executable, "r");
+    try {
+      const buffer = Buffer.alloc(512);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      const firstLine = buffer.toString("utf8", 0, bytesRead).split(/\r?\n/u, 1)[0]?.trim() ?? "";
+      if (!firstLine.startsWith("#!")) return null;
+      const shebang = firstLine.slice(2).trim();
+      return shebang ? shebang.split(/\s+/u).filter(Boolean) : null;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+async function resolveShebangSpawnTarget(
+  executable: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<SpawnTarget | null> {
+  const tokens = await readShebangTokens(executable);
+  if (!tokens || tokens.length === 0) return null;
+
+  let [interpreter, ...interpreterArgs] = tokens;
+  const interpreterBase = path.posix.basename(interpreter).toLowerCase();
+  if (interpreterBase === "env" || interpreterBase === "env.exe") {
+    if (interpreterArgs[0] === "-S") interpreterArgs = interpreterArgs.slice(1);
+    interpreter = interpreterArgs.shift() ?? "";
+  }
+
+  const normalizedBase = path.posix.basename(interpreter).toLowerCase().replace(/\.exe$/u, "");
+  const resolvedInterpreter =
+    normalizedBase === "node"
+      ? process.execPath
+      : normalizedBase === "sh"
+        ? await resolveCommandPath("bash", cwd, env)
+        : normalizedBase
+          ? await resolveCommandPath(normalizedBase, cwd, env)
+          : null;
+
+  if (!resolvedInterpreter) return null;
+  return {
+    command: resolvedInterpreter,
+    args: [...interpreterArgs, executable],
+  };
+}
+
 function quoteForCmd(arg: string) {
   if (!arg.length) return '""';
   const escaped = arg.replace(/"/g, '""');
@@ -1256,37 +1566,6 @@ export function sanitizeSshRemoteEnv(
 function resolveWindowsCmdShell(env: NodeJS.ProcessEnv): string {
   const fallbackRoot = env.SystemRoot || process.env.SystemRoot || "C:\\Windows";
   return path.join(fallbackRoot, "System32", "cmd.exe");
-}
-
-async function resolveWindowsShebangSpawnTarget(executable: string, args: string[]): Promise<SpawnTarget | null> {
-  if (process.platform !== "win32") return null;
-  if (path.extname(executable)) return null;
-
-  let firstLine = "";
-  try {
-    const handle = await fs.open(executable, "r");
-    try {
-      const buffer = Buffer.alloc(256);
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-      firstLine = buffer.toString("utf8", 0, bytesRead).split(/\r?\n/, 1)[0]?.trim() ?? "";
-    } finally {
-      await handle.close();
-    }
-  } catch {
-    return null;
-  }
-
-  if (!firstLine.startsWith("#!")) return null;
-  const shebang = firstLine.slice(2).trim();
-  const invokesNode =
-    /^\/usr\/bin\/env\s+(?:-S\s+)?node(?:\s|$)/.test(shebang) ||
-    /(?:^|[\\/])node(?:\.exe)?(?:\s|$)/i.test(shebang);
-  if (!invokesNode) return null;
-
-  return {
-    command: process.execPath,
-    args: [executable, ...args],
-  };
 }
 
 async function resolveSpawnTarget(
@@ -1339,8 +1618,13 @@ async function resolveSpawnTarget(
     };
   }
 
-  const shebangTarget = await resolveWindowsShebangSpawnTarget(executable, args);
-  if (shebangTarget) return shebangTarget;
+  const shebangTarget = await resolveShebangSpawnTarget(executable, cwd, env);
+  if (shebangTarget) {
+    return {
+      command: shebangTarget.command,
+      args: [...shebangTarget.args, ...args],
+    };
+  }
 
   return { command: executable, args };
 }
@@ -1408,20 +1692,6 @@ export async function resolvePaperclipSkillsDir(
   return null;
 }
 
-async function readSkillRequired(skillDir: string): Promise<boolean> {
-  try {
-    const content = await fs.readFile(path.join(skillDir, "SKILL.md"), "utf8");
-    const normalized = content.replace(/\r\n/g, "\n");
-    if (!normalized.startsWith("---\n")) return true;
-    const closing = normalized.indexOf("\n---\n", 4);
-    if (closing < 0) return true;
-    const frontmatter = normalized.slice(4, closing);
-    return !/^\s*required\s*:\s*false\s*$/m.test(frontmatter);
-  } catch {
-    return true;
-  }
-}
-
 export async function listPaperclipSkillEntries(
   moduleDir: string,
   additionalCandidates: string[] = [],
@@ -1436,7 +1706,7 @@ export async function listPaperclipSkillEntries(
       const skillDir = path.join(root, entry.name);
       const required = await readSkillRequired(skillDir);
       return {
-        key: `${PAPERCLIP_CN_SKILL_KEY_PREFIX}/${entry.name}`,
+        key: `${BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX}${entry.name}`,
         runtimeName: entry.name,
         source: skillDir,
         required,
@@ -1447,6 +1717,20 @@ export async function listPaperclipSkillEntries(
     }));
   } catch {
     return [];
+  }
+}
+
+async function readSkillRequired(skillDir: string): Promise<boolean> {
+  try {
+    const content = await fs.readFile(path.join(skillDir, "SKILL.md"), "utf8");
+    const normalized = content.replace(/\r\n/g, "\n");
+    if (!normalized.startsWith("---\n")) return true;
+    const closing = normalized.indexOf("\n---\n", 4);
+    if (closing < 0) return true;
+    const frontmatter = normalized.slice(4, closing);
+    return !/^\s*required\s*:\s*false\s*$/m.test(frontmatter);
+  } catch {
+    return true;
   }
 }
 
@@ -1477,13 +1761,27 @@ export function buildRuntimeMountedSkillSnapshot(
     skillsHome,
   } = options;
   const supported = options.supported ?? mode !== "unsupported";
-  const availableByKey = new Map(availableEntries.map((entry) => [entry.key, entry]));
-  const desiredSet = new Set(desiredSkills);
+  const canonicalDesiredSkills = Array.from(
+    new Set(
+      desiredSkills
+        .map((desiredSkill) => canonicalizeBundledPaperclipSkillKey(desiredSkill))
+        .filter((desiredSkill): desiredSkill is string => Boolean(desiredSkill)),
+    ),
+  );
+  const availableByKey = new Map(
+    availableEntries.flatMap((entry) => {
+      const canonicalKey = canonicalizeBundledPaperclipSkillKey(entry.key) ?? entry.key;
+      return canonicalKey === entry.key
+        ? [[entry.key, entry] as const]
+        : [[entry.key, entry] as const, [canonicalKey, entry] as const];
+    }),
+  );
+  const desiredSet = new Set(canonicalDesiredSkills);
   const entries: AdapterSkillEntry[] = [];
   const warnings = [...(options.warnings ?? [])];
 
   for (const available of availableEntries) {
-    const desired = desiredSet.has(available.key);
+    const desired = desiredSet.has(canonicalizeBundledPaperclipSkillKey(available.key) ?? available.key);
     if (isPaperclipSkillSourceMissing(available)) {
       entries.push({
         key: available.key,
@@ -1529,7 +1827,7 @@ export function buildRuntimeMountedSkillSnapshot(
     });
   }
 
-  for (const desiredSkill of desiredSkills) {
+  for (const desiredSkill of canonicalDesiredSkills) {
     if (availableByKey.has(desiredSkill)) continue;
     warnings.push(`Desired skill "${desiredSkill}" is not available from the Paperclip skills directory.`);
     entries.push({
@@ -1573,8 +1871,8 @@ export function buildRuntimeMountedSkillSnapshot(
     adapterType,
     supported,
     mode,
-    desiredSkills,
-    desiredSkillEntries: desiredSkills.map((key) => ({
+    desiredSkills: canonicalDesiredSkills,
+    desiredSkillEntries: canonicalDesiredSkills.map((key) => ({
       key,
       versionId: availableByKey.get(key)?.versionId ?? null,
     })),
@@ -1598,14 +1896,28 @@ export function buildPersistentSkillSnapshot(
     externalConflictDetail,
     externalDetail,
   } = options;
-  const availableByKey = new Map(availableEntries.map((entry) => [entry.key, entry]));
-  const desiredSet = new Set(desiredSkills);
+  const canonicalDesiredSkills = Array.from(
+    new Set(
+      desiredSkills
+        .map((desiredSkill) => canonicalizeBundledPaperclipSkillKey(desiredSkill))
+        .filter((desiredSkill): desiredSkill is string => Boolean(desiredSkill)),
+    ),
+  );
+  const availableByKey = new Map(
+    availableEntries.flatMap((entry) => {
+      const canonicalKey = canonicalizeBundledPaperclipSkillKey(entry.key) ?? entry.key;
+      return canonicalKey === entry.key
+        ? [[entry.key, entry] as const]
+        : [[entry.key, entry] as const, [canonicalKey, entry] as const];
+    }),
+  );
+  const desiredSet = new Set(canonicalDesiredSkills);
   const entries: AdapterSkillEntry[] = [];
   const warnings = [...(options.warnings ?? [])];
 
   for (const available of availableEntries) {
     const installedEntry = installed.get(available.runtimeName) ?? null;
-    const desired = desiredSet.has(available.key);
+    const desired = desiredSet.has(canonicalizeBundledPaperclipSkillKey(available.key) ?? available.key);
     if (isPaperclipSkillSourceMissing(available)) {
       entries.push({
         key: available.key,
@@ -1661,7 +1973,7 @@ export function buildPersistentSkillSnapshot(
     });
   }
 
-  for (const desiredSkill of desiredSkills) {
+  for (const desiredSkill of canonicalDesiredSkills) {
     if (availableByKey.has(desiredSkill)) continue;
     warnings.push(`Desired skill "${desiredSkill}" is not available from the Paperclip skills directory.`);
     entries.push({
@@ -1703,8 +2015,8 @@ export function buildPersistentSkillSnapshot(
     adapterType,
     supported: true,
     mode: "persistent",
-    desiredSkills,
-    desiredSkillEntries: desiredSkills.map((key) => ({
+    desiredSkills: canonicalDesiredSkills,
+    desiredSkillEntries: canonicalDesiredSkills.map((key) => ({
       key,
       versionId: availableByKey.get(key)?.versionId ?? null,
     })),
@@ -1718,7 +2030,7 @@ function normalizeConfiguredPaperclipRuntimeSkills(value: unknown): PaperclipSki
   const out: PaperclipSkillEntry[] = [];
   for (const rawEntry of value) {
     const entry = parseObject(rawEntry);
-    const key = asString(entry.key, asString(entry.name, "")).trim();
+    const key = canonicalizeBundledPaperclipSkillKey(asString(entry.key, asString(entry.name, ""))) ?? "";
     const runtimeName = asString(entry.runtimeName, asString(entry.name, "")).trim();
     const source = asString(entry.source, "").trim();
     if (!key || !runtimeName || !source) continue;
@@ -1734,15 +2046,15 @@ function normalizeConfiguredPaperclipRuntimeSkills(value: unknown): PaperclipSki
         typeof entry.currentVersionId === "string" && entry.currentVersionId.trim().length > 0
           ? entry.currentVersionId.trim()
           : null,
-      sourceStatus: entry.sourceStatus === "missing" ? "missing" : "available",
-      missingDetail:
-        typeof entry.missingDetail === "string" && entry.missingDetail.trim().length > 0
-          ? entry.missingDetail.trim()
-          : null,
       required: asBoolean(entry.required, false),
       requiredReason:
         typeof entry.requiredReason === "string" && entry.requiredReason.trim().length > 0
           ? entry.requiredReason.trim()
+          : null,
+      sourceStatus: entry.sourceStatus === "missing" ? "missing" : "available",
+      missingDetail:
+        typeof entry.missingDetail === "string" && entry.missingDetail.trim().length > 0
+          ? entry.missingDetail.trim()
           : null,
     });
   }
@@ -1763,11 +2075,11 @@ export async function readPaperclipSkillMarkdown(
   moduleDir: string,
   skillKey: string,
 ): Promise<string | null> {
-  const normalized = skillKey.trim().toLowerCase();
+  const normalized = canonicalizeBundledPaperclipSkillKey(skillKey)?.trim().toLowerCase() ?? "";
   if (!normalized) return null;
 
   const entries = await listPaperclipSkillEntries(moduleDir);
-  const match = entries.find((entry) => entry.key === normalized);
+  const match = entries.find((entry) => entry.key.trim().toLowerCase() === normalized);
   if (!match) return null;
 
   try {
@@ -1824,22 +2136,29 @@ function canonicalizeDesiredPaperclipSkillReference(
 ): string {
   const normalizedReference = reference.trim().toLowerCase();
   if (!normalizedReference) return "";
-  const normalizedReferenceSlug = normalizedReference.split("/").pop() ?? normalizedReference;
+
+  const canonicalBundledReference = canonicalizeBundledPaperclipSkillKey(normalizedReference);
+  if (canonicalBundledReference) {
+    const exactCanonicalKey = availableEntries.find(
+      (entry) => entry.key.trim().toLowerCase() === canonicalBundledReference,
+    );
+    if (exactCanonicalKey) return exactCanonicalKey.key;
+  }
 
   const exactKey = availableEntries.find((entry) => entry.key.trim().toLowerCase() === normalizedReference);
   if (exactKey) return exactKey.key;
 
   const byRuntimeName = availableEntries.filter((entry) =>
-    typeof entry.runtimeName === "string" && entry.runtimeName.trim().toLowerCase() === normalizedReferenceSlug,
+    typeof entry.runtimeName === "string" && entry.runtimeName.trim().toLowerCase() === normalizedReference,
   );
   if (byRuntimeName.length === 1) return byRuntimeName[0]!.key;
 
   const slugMatches = availableEntries.filter((entry) =>
-    entry.key.trim().toLowerCase().split("/").pop() === normalizedReferenceSlug,
+    entry.key.trim().toLowerCase().split("/").pop() === normalizedReference,
   );
   if (slugMatches.length === 1) return slugMatches[0]!.key;
 
-  return normalizedReference;
+  return canonicalBundledReference ?? normalizedReference;
 }
 
 export function resolvePaperclipDesiredSkillNames(
@@ -1850,9 +2169,7 @@ export function resolvePaperclipDesiredSkillNames(
   const requiredSkills = availableEntries
     .filter((entry) => entry.required)
     .map((entry) => entry.key);
-  if (!preference.explicit) {
-    return Array.from(new Set(requiredSkills));
-  }
+  if (!preference.explicit) return Array.from(new Set(requiredSkills));
   const desiredSkills = preference.desiredSkills
     .map((reference) => canonicalizeDesiredPaperclipSkillReference(reference, availableEntries))
     .filter(Boolean);
@@ -1890,47 +2207,94 @@ export function writePaperclipSkillSyncPreference(
   return next;
 }
 
-type PaperclipSkillLinker = (source: string, target: string) => Promise<void>;
+function isPermissionDeniedError(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "EPERM" || error.code === "EACCES")
+  );
+}
+
+async function materializePaperclipSkillTarget(
+  source: string,
+  target: string,
+  options: {
+    linkSkill?: (source: string, target: string) => Promise<void>;
+    allowCopyFallback?: boolean;
+  } = {},
+): Promise<"linked" | "copied"> {
+  const { linkSkill, allowCopyFallback = false } = options;
+  const sourceStats = await fs.stat(source);
+  const sourceIsDirectory = sourceStats.isDirectory();
+  const tryJunction = async () => {
+    await fs.symlink(path.resolve(source), target, "junction");
+    return "linked" as const;
+  };
+
+  try {
+    if (linkSkill) {
+      await linkSkill(source, target);
+      return "linked";
+    }
+
+    if (process.platform === "win32" && sourceIsDirectory) {
+      await fs.symlink(path.resolve(source), target, "junction");
+      return "linked";
+    }
+
+    if (process.platform === "win32") {
+      await fs.copyFile(source, target);
+      return "copied";
+    }
+
+    await fs.symlink(source, target);
+    return "linked";
+  } catch (error) {
+    if (sourceIsDirectory && process.platform === "win32" && isPermissionDeniedError(error)) {
+      try {
+        return await tryJunction();
+      } catch (junctionError) {
+        if (!allowCopyFallback || !isPermissionDeniedError(junctionError)) {
+          throw junctionError;
+        }
+        await materializePaperclipSkillCopy(source, target);
+        return "copied";
+      }
+    }
+
+    if (!allowCopyFallback || !sourceIsDirectory || !isPermissionDeniedError(error)) {
+      throw error;
+    }
+    await materializePaperclipSkillCopy(source, target);
+    return "copied";
+  }
+}
 
 type EnsurePaperclipSkillSymlinkOptions = {
-  linkSkill?: PaperclipSkillLinker;
+  linkSkill?: (source: string, target: string) => Promise<void>;
   allowCopyFallback?: boolean;
 };
 
-function resolvePaperclipSkillLinkOptions(
-  input?: PaperclipSkillLinker | EnsurePaperclipSkillSymlinkOptions,
-): Required<EnsurePaperclipSkillSymlinkOptions> {
-  if (typeof input === "function") {
-    return { linkSkill: input, allowCopyFallback: false };
+function resolveEnsurePaperclipSkillOptions(
+  optionsOrLinkSkill?: EnsurePaperclipSkillSymlinkOptions | ((source: string, target: string) => Promise<void>),
+): EnsurePaperclipSkillSymlinkOptions {
+  if (typeof optionsOrLinkSkill === "function") {
+    return { linkSkill: optionsOrLinkSkill };
   }
-  return {
-    linkSkill: input?.linkSkill ?? ((linkSource, linkTarget) => fs.symlink(linkSource, linkTarget)),
-    allowCopyFallback: Boolean(input?.allowCopyFallback),
-  };
-}
-
-async function createPaperclipSkillLinkOrCopy(
-  source: string,
-  target: string,
-  options: Required<EnsurePaperclipSkillSymlinkOptions>,
-): Promise<void> {
-  try {
-    await options.linkSkill(source, target);
-  } catch (err) {
-    if (!options.allowCopyFallback) throw err;
-    await materializePaperclipSkillCopy(source, target);
-  }
+  return optionsOrLinkSkill ?? {};
 }
 
 export async function ensurePaperclipSkillSymlink(
   source: string,
   target: string,
-  input?: PaperclipSkillLinker | EnsurePaperclipSkillSymlinkOptions,
+  optionsOrLinkSkill?: EnsurePaperclipSkillSymlinkOptions | ((source: string, target: string) => Promise<void>),
 ): Promise<"created" | "repaired" | "skipped"> {
-  const options = resolvePaperclipSkillLinkOptions(input);
+  const options = resolveEnsurePaperclipSkillOptions(optionsOrLinkSkill);
+  const normalizedSource = normalizeResolvedPath(path.resolve(source));
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {
-    await createPaperclipSkillLinkOrCopy(source, target, options);
+    await materializePaperclipSkillTarget(source, target, options);
     return "created";
   }
 
@@ -1941,8 +2305,8 @@ export async function ensurePaperclipSkillSymlink(
   const linkedPath = await fs.readlink(target).catch(() => null);
   if (!linkedPath) return "skipped";
 
-  const resolvedLinkedPath = path.resolve(path.dirname(target), linkedPath);
-  if (resolvedLinkedPath === source) {
+  const resolvedLinkedPath = resolveLinkedTargetPath(target, linkedPath);
+  if (resolvedLinkedPath === normalizedSource) {
     return "skipped";
   }
 
@@ -1952,7 +2316,7 @@ export async function ensurePaperclipSkillSymlink(
   }
 
   await fs.unlink(target);
-  await createPaperclipSkillLinkOrCopy(source, target, options);
+  await materializePaperclipSkillTarget(source, target, options);
   return "repaired";
 }
 
@@ -2227,7 +2591,7 @@ export async function runChildProcess(
     // Strip Claude Code nesting-guard env vars so spawned `claude` processes
     // don't refuse to start with "cannot be launched inside another session".
     // These vars leak in when the Paperclip server itself is started from
-    // within a Claude Code session (e.g. `npx paperclipai run` in a terminal
+    // within a Claude Code session (e.g. `npx penclip run` in a terminal
     // owned by Claude Code) or when cron inherits a contaminated shell env.
     const CLAUDE_CODE_NESTING_VARS = [
       "CLAUDECODE",

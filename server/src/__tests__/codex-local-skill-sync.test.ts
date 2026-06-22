@@ -13,7 +13,6 @@ async function makeTempDir(prefix: string): Promise<string> {
 
 describe("codex local skill sync", () => {
   const paperclipKey = "penclipai/paperclip-cn/paperclip";
-  const createAgentKey = "penclipai/paperclip-cn/paperclip-create-agent";
   const cleanupDirs = new Set<string>();
 
   afterEach(async () => {
@@ -42,11 +41,7 @@ describe("codex local skill sync", () => {
     const before = await listCodexSkills(ctx);
     expect(before.mode).toBe("ephemeral");
     expect(before.desiredSkills).toContain(paperclipKey);
-    expect(before.desiredSkills).toContain(createAgentKey);
-    expect(before.entries.find((entry) => entry.key === paperclipKey)?.required).toBe(true);
     expect(before.entries.find((entry) => entry.key === paperclipKey)?.state).toBe("configured");
-    expect(before.entries.find((entry) => entry.key === createAgentKey)?.required).toBe(true);
-    expect(before.entries.find((entry) => entry.key === createAgentKey)?.state).toBe("configured");
     expect(before.entries.find((entry) => entry.key === paperclipKey)?.detail).toContain("CODEX_HOME/skills/");
   });
 
@@ -76,31 +71,6 @@ describe("codex local skill sync", () => {
     });
   });
 
-  it("keeps required bundled Paperclip skills configured even when the desired set is emptied", async () => {
-    const codexHome = await makeTempDir("paperclip-codex-skill-required-");
-    cleanupDirs.add(codexHome);
-
-    const configuredCtx = {
-      agentId: "agent-2",
-      companyId: "company-1",
-      adapterType: "codex_local",
-      config: {
-        env: {
-          CODEX_HOME: codexHome,
-        },
-        paperclipSkillSync: {
-          desiredSkills: [],
-        },
-      },
-    } as const;
-
-    const after = await syncCodexSkills(configuredCtx, []);
-    expect(after.desiredSkills).toContain(paperclipKey);
-    expect(after.desiredSkills).toContain(createAgentKey);
-    expect(after.entries.find((entry) => entry.key === paperclipKey)?.state).toBe("configured");
-    expect(after.entries.find((entry) => entry.key === createAgentKey)?.state).toBe("configured");
-  });
-
   it("normalizes legacy flat Paperclip skill refs before reporting configured state", async () => {
     const codexHome = await makeTempDir("paperclip-codex-legacy-skill-sync-");
     cleanupDirs.add(codexHome);
@@ -124,5 +94,29 @@ describe("codex local skill sync", () => {
     expect(snapshot.desiredSkills).not.toContain("paperclip");
     expect(snapshot.entries.find((entry) => entry.key === paperclipKey)?.state).toBe("configured");
     expect(snapshot.entries.find((entry) => entry.key === "paperclip")).toBeUndefined();
+  });
+
+  it("normalizes legacy bundled Paperclip repo keys to the Paperclip CN canonical key", async () => {
+    const codexHome = await makeTempDir("paperclip-codex-legacy-repo-skill-sync-");
+    cleanupDirs.add(codexHome);
+
+    const snapshot = await listCodexSkills({
+      agentId: "agent-legacy",
+      companyId: "company-1",
+      adapterType: "codex_local",
+      config: {
+        env: {
+          CODEX_HOME: codexHome,
+        },
+        paperclipSkillSync: {
+          desiredSkills: ["paperclipai/paperclip/paperclip"],
+        },
+      },
+    });
+
+    expect(snapshot.warnings).toEqual([]);
+    expect(snapshot.desiredSkills).toContain(paperclipKey);
+    expect(snapshot.desiredSkills).not.toContain("paperclipai/paperclip/paperclip");
+    expect(snapshot.entries.find((entry) => entry.key === paperclipKey)?.state).toBe("configured");
   });
 });

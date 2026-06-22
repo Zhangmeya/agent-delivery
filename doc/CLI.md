@@ -401,7 +401,7 @@ are added on top of whatever the desired set names.
 
 ### Catalog (app-shipped skills)
 
-The Paperclip app ships a curated catalog under `@paperclipai/skills-catalog`.
+The Paperclip app ships a curated catalog under `@penclipai/skills-catalog`.
 Browse and inspect commands never mutate company state; `install` adds a catalog
 skill to the company library.
 
@@ -651,6 +651,8 @@ pnpm penclip auth revoke-current
 
 `--token <challenge-secret>` is still supported for compatibility, but `--token-env` avoids putting challenge secrets in shell history or process arguments.
 
+## Instance Settings Commands
+
 ```sh
 pnpm penclip instance scheduler-heartbeats
 pnpm penclip instance settings:general
@@ -658,6 +660,11 @@ pnpm penclip instance settings:general:update --payload-json '{...}'
 pnpm penclip instance settings:experimental
 pnpm penclip instance settings:experimental:update --payload-json '{...}'
 pnpm penclip instance database-backup
+```
+
+Experimental features are opt-in and are provided without compatibility guarantees. They may break, change, or be removed at any time. Use them at your own risk.
+
+```sh
 pnpm penclip sidebar preferences
 pnpm penclip sidebar preferences:update --payload-json '{...}'
 pnpm penclip sidebar project-preferences --company-id <company-id>

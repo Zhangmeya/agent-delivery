@@ -15,11 +15,6 @@
     "publishFromCi": true
   },
   {
-    "dir": "packages/adapters/codebuddy-local",
-    "name": "@penclipai/adapter-codebuddy-local",
-    "publishFromCi": true
-  },
-  {
     "dir": "packages/adapters/codex-local",
     "name": "@penclipai/adapter-codex-local",
     "publishFromCi": true
@@ -55,11 +50,6 @@
     "publishFromCi": true
   },
   {
-    "dir": "packages/adapters/qwen-local",
-    "name": "@penclipai/adapter-qwen-local",
-    "publishFromCi": true
-  },
-  {
     "dir": "packages/adapters/openclaw-gateway",
     "name": "@penclipai/adapter-openclaw-gateway",
     "publishFromCi": true
@@ -72,12 +62,12 @@
   {
     "dir": "packages/skills-catalog",
     "name": "@penclipai/skills-catalog",
-    "publishFromCi": false
+    "publishFromCi": true
   },
   {
     "dir": "packages/teams-catalog",
     "name": "@penclipai/teams-catalog",
-    "publishFromCi": false
+    "publishFromCi": true
   },
   {
     "dir": "packages/db",
@@ -86,13 +76,13 @@
   },
   {
     "dir": "packages/plugins/sdk",
-    "name": "@penclipai/plugin-sdk",
+    "name": "@paperclipai/plugin-sdk",
     "publishFromCi": true
   },
   {
     "dir": "packages/plugins/plugin-workspace-diff",
     "name": "@penclipai/plugin-workspace-diff",
-    "publishFromCi": false
+    "publishFromCi": true
   },
   {
     "dir": "server",
@@ -101,23 +91,23 @@
   },
   {
     "dir": "cli",
-    "name": "penclip",
+    "name": "paperclipai",
     "publishFromCi": true
   },
   {
     "dir": "packages/mcp-server",
-    "name": "@penclipai/mcp-server",
+    "name": "@paperclipai/mcp-server",
     "publishFromCi": true
   },
   {
     "dir": "packages/plugins/create-paperclip-plugin",
-    "name": "@penclipai/create-paperclip-plugin",
+    "name": "@paperclipai/create-paperclip-plugin",
     "publishFromCi": true
   },
   {
     "dir": "packages/plugins/sandbox-providers/cloudflare",
     "name": "@penclipai/plugin-cloudflare-sandbox",
-    "publishFromCi": false
+    "publishFromCi": true
   },
   {
     "dir": "packages/plugins/sandbox-providers/daytona",
@@ -127,7 +117,7 @@
   {
     "dir": "packages/plugins/sandbox-providers/exe-dev",
     "name": "@penclipai/plugin-exe-dev",
-    "publishFromCi": false
+    "publishFromCi": true
   },
   {
     "dir": "packages/plugins/sandbox-providers/e2b",
@@ -142,7 +132,12 @@
   {
     "dir": "packages/plugins/sandbox-providers/kubernetes",
     "name": "@penclipai/plugin-kubernetes",
-    "publishFromCi": false
+    "publishFromCi": true
+  },
+  {
+    "dir": "packages/plugins/sandbox-providers/novita",
+    "name": "@penclipai/plugin-novita-sandbox",
+    "publishFromCi": true
   },
   {
     "dir": "ui",

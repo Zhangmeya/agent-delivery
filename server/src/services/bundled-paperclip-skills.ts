@@ -1,5 +1,6 @@
 export const BUNDLED_PAPERCLIP_SKILL_REPO = "penclipai/paperclip-cn";
 export const RESERVED_PAPERCLIP_SKILL_KEY_PREFIX = "paperclipai/paperclip/";
+export const BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX = `${BUNDLED_PAPERCLIP_SKILL_REPO}/`;
 
 export const BUNDLED_PAPERCLIP_SKILL_REPOS = [
   BUNDLED_PAPERCLIP_SKILL_REPO,
@@ -25,14 +26,14 @@ export function isBundledPaperclipSkillRepo(value: string | null | undefined) {
 }
 
 export function isReservedPaperclipSkillKey(value: string | null | undefined) {
-  return Boolean(value?.startsWith(RESERVED_PAPERCLIP_SKILL_KEY_PREFIX));
+  return Boolean(getBundledPaperclipSkillSlugFromKey(value));
 }
 
 export function isBundledPaperclipSkillSourceForKey(
   repo: string | null | undefined,
   canonicalKey: string | null | undefined,
 ) {
-  return isReservedPaperclipSkillKey(canonicalKey) && isBundledPaperclipSkillRepo(repo);
+  return Boolean(getBundledPaperclipSkillSlugFromKey(canonicalKey) && isBundledPaperclipSkillRepo(repo));
 }
 
 export function getBundledPaperclipSkillSlugFromKey(value: string | null | undefined) {
@@ -50,5 +51,5 @@ export function getBundledPaperclipSkillSlugFromKey(value: string | null | undef
 
 export function getBundledPaperclipSkillIdentity(value: string | null | undefined) {
   const slug = getBundledPaperclipSkillSlugFromKey(value);
-  return slug ? `${RESERVED_PAPERCLIP_SKILL_KEY_PREFIX}${slug}` : null;
+  return slug ? `${BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX}${slug}` : null;
 }

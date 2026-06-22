@@ -8,9 +8,14 @@ async function writeFakeGeminiCommand(binDir: string, argsCapturePath: string): 
   const commandPath = path.join(binDir, "gemini");
   const script = `#!/usr/bin/env node
 const fs = require("node:fs");
+const argv = process.argv.slice(2);
+if (argv.includes("--version")) {
+  console.log("gemini-test 0.0.0");
+  process.exit(0);
+}
 const outPath = process.env.PAPERCLIP_TEST_ARGS_PATH;
 if (outPath) {
-  fs.writeFileSync(outPath, JSON.stringify(process.argv.slice(2)), "utf8");
+  fs.writeFileSync(outPath, JSON.stringify(argv), "utf8");
 }
 console.log(JSON.stringify({
   type: "assistant",
@@ -24,6 +29,13 @@ console.log(JSON.stringify({
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  if (process.platform === "win32") {
+    await fs.writeFile(
+      path.join(binDir, "gemini.cmd"),
+      `@echo off\r\n"${process.execPath}" "%~dp0gemini" %*\r\n`,
+      "utf8",
+    );
+  }
   return commandPath;
 }
 
@@ -38,6 +50,13 @@ process.exit(1);
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  if (process.platform === "win32") {
+    await fs.writeFile(
+      path.join(binDir, "gemini.cmd"),
+      `@echo off\r\n"${process.execPath}" "%~dp0gemini" %*\r\n`,
+      "utf8",
+    );
+  }
   return commandPath;
 }
 

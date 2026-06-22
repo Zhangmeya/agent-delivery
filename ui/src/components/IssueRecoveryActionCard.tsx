@@ -52,11 +52,15 @@ const KIND_LABEL: Record<IssueRecoveryActionKind, { key: string; defaultValue: s
   },
   stranded_assigned_issue: {
     key: "issueRecoveryAction.kind.stranded_assigned_issue",
-    defaultValue: "Stranded Issue",
+    defaultValue: "Stranded Task",
   },
   workspace_validation: {
     key: "issueRecoveryAction.kind.workspace_validation",
     defaultValue: "Workspace Validation",
+  },
+  configuration_validation: {
+    key: "issueRecoveryAction.kind.configuration_validation",
+    defaultValue: "Configuration Validation",
   },
   active_run_watchdog: {
     key: "issueRecoveryAction.kind.active_run_watchdog",
@@ -71,15 +75,19 @@ const KIND_LABEL: Record<IssueRecoveryActionKind, { key: string; defaultValue: s
 const KIND_HEADLINE: Record<IssueRecoveryActionKind, { key: string; defaultValue: string }> = {
   missing_disposition: {
     key: "issueRecoveryAction.headline.missing_disposition",
-    defaultValue: "This issue's run finished, but no next step was chosen.",
+    defaultValue: "This task's run finished, but no next step was chosen.",
   },
   stranded_assigned_issue: {
     key: "issueRecoveryAction.headline.stranded_assigned_issue",
-    defaultValue: "Paperclip retried this issue's last run and it still has no live execution path.",
+    defaultValue: "Paperclip retried this task's last run and it still has no live execution path.",
   },
   workspace_validation: {
     key: "issueRecoveryAction.headline.workspace_validation",
-    defaultValue: "Paperclip stopped this run because the issue's git workspace could not be validated.",
+    defaultValue: "Paperclip stopped this run because the task's git workspace could not be validated.",
+  },
+  configuration_validation: {
+    key: "issueRecoveryAction.headline.configuration_validation",
+    defaultValue: "Paperclip stopped before dispatching this run because required secret/env bindings are missing.",
   },
   active_run_watchdog: {
     key: "issueRecoveryAction.headline.active_run_watchdog",
@@ -87,7 +95,7 @@ const KIND_HEADLINE: Record<IssueRecoveryActionKind, { key: string; defaultValue
   },
   issue_graph_liveness: {
     key: "issueRecoveryAction.headline.issue_graph_liveness",
-    defaultValue: "Paperclip detected this issue lost a live action path. A recovery owner needs to act.",
+    defaultValue: "Paperclip detected this task lost a live action path. A recovery owner needs to act.",
   },
 };
 

@@ -1,9 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { runChildProcess } from "@penclipai/adapter-utils/server-utils";
-import { claudeSessionCwdMatchesExecutionTarget, execute } from "@penclipai/adapter-claude-local/server";
+import {
+  claudeCommandSupportsEffortFlag,
+  claudeSessionCwdMatchesExecutionTarget,
+  execute,
+  resetClaudeCliCapabilitiesCacheForTests,
+} from "@penclipai/adapter-claude-local/server";
+
+async function writeWindowsNodeCommandShim(commandPath: string): Promise<void> {
+  if (process.platform !== "win32") return;
+  await fs.writeFile(
+    `${commandPath}.cmd`,
+    `@echo off\r\n"${process.execPath}" "%~dpn0" %*\r\n`,
+    "utf8",
+  );
+}
 
 async function writeFailingClaudeCommand(
   commandPath: string,
@@ -17,6 +32,7 @@ process.exit(${exit});
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
 }
 
 async function writeTextFailingClaudeCommand(
@@ -35,6 +51,7 @@ process.exit(${exit});
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
 }
 
 async function writeFakeClaudeCommand(commandPath: string): Promise<void> {
@@ -54,7 +71,9 @@ const payload = {
   addDir,
   instructionsFilePath,
   instructionsContents: instructionsFilePath ? fs.readFileSync(instructionsFilePath, "utf8") : null,
-  skillEntries: addDir ? fs.readdirSync(path.join(addDir, ".claude", "skills")).sort() : [],
+  skillEntries: addDir && fs.existsSync(path.join(addDir, ".claude", "skills"))
+    ? fs.readdirSync(path.join(addDir, ".claude", "skills")).sort()
+    : [],
   claudeConfigDir: process.env.CLAUDE_CONFIG_DIR || null,
   claudeConfigEntries: process.env.CLAUDE_CONFIG_DIR && fs.existsSync(process.env.CLAUDE_CONFIG_DIR)
     ? fs.readdirSync(process.env.CLAUDE_CONFIG_DIR).sort()
@@ -72,6 +91,90 @@ console.log(JSON.stringify({ type: "result", session_id: "11111111-1111-4111-811
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
+}
+
+async function writeHelpWithoutEffortClaudeCommand(commandPath: string): Promise<void> {
+  const script = `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+
+const argv = process.argv.slice(2);
+if (argv.includes("--help")) {
+  process.stdout.write("Usage: claude [options]\\n  --print\\n  --model <id>\\n");
+  process.exit(0);
+}
+if (argv.includes("--effort")) {
+  process.stderr.write("error: unknown option '--effort'\\n");
+  process.exit(1);
+}
+const addDirIndex = argv.indexOf("--add-dir");
+const addDir = addDirIndex >= 0 ? argv[addDirIndex + 1] : null;
+const instructionsIndex = argv.indexOf("--append-system-prompt-file");
+const instructionsFilePath = instructionsIndex >= 0 ? argv[instructionsIndex + 1] : null;
+const capturePath = process.env.PAPERCLIP_TEST_CAPTURE_PATH;
+const payload = {
+  argv,
+  prompt: fs.readFileSync(0, "utf8"),
+  addDir,
+  instructionsFilePath,
+  instructionsContents: instructionsFilePath ? fs.readFileSync(instructionsFilePath, "utf8") : null,
+  skillEntries: addDir && fs.existsSync(path.join(addDir, ".claude", "skills"))
+    ? fs.readdirSync(path.join(addDir, ".claude", "skills")).sort()
+    : [],
+};
+if (capturePath) {
+  fs.writeFileSync(capturePath, JSON.stringify(payload), "utf8");
+}
+console.log(JSON.stringify({ type: "system", subtype: "init", session_id: "33333333-3333-4333-8333-333333333333", model: "claude-sonnet" }));
+console.log(JSON.stringify({ type: "assistant", session_id: "33333333-3333-4333-8333-333333333333", message: { content: [{ type: "text", text: "hello" }] } }));
+console.log(JSON.stringify({ type: "result", session_id: "33333333-3333-4333-8333-333333333333", result: "hello", usage: { input_tokens: 1, cache_read_input_tokens: 0, output_tokens: 1 } }));
+`;
+  await fs.writeFile(commandPath, script, "utf8");
+  await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
+}
+
+async function writeHelpWithEffortClaudeCommand(commandPath: string): Promise<void> {
+  const script = `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+
+const argv = process.argv.slice(2);
+if (argv.includes("--help")) {
+  const helpCountPath = process.env.PAPERCLIP_TEST_HELP_COUNT_PATH;
+  if (helpCountPath) {
+    const current = fs.existsSync(helpCountPath) ? Number(fs.readFileSync(helpCountPath, "utf8")) || 0 : 0;
+    fs.writeFileSync(helpCountPath, String(current + 1), "utf8");
+  }
+  process.stdout.write("Usage: claude [options]\\n  --print\\n  --effort <level>\\n  --model <id>\\n");
+  process.exit(0);
+}
+const addDirIndex = argv.indexOf("--add-dir");
+const addDir = addDirIndex >= 0 ? argv[addDirIndex + 1] : null;
+const instructionsIndex = argv.indexOf("--append-system-prompt-file");
+const instructionsFilePath = instructionsIndex >= 0 ? argv[instructionsIndex + 1] : null;
+const capturePath = process.env.PAPERCLIP_TEST_CAPTURE_PATH;
+const payload = {
+  argv,
+  prompt: fs.readFileSync(0, "utf8"),
+  addDir,
+  instructionsFilePath,
+  instructionsContents: instructionsFilePath ? fs.readFileSync(instructionsFilePath, "utf8") : null,
+  skillEntries: addDir && fs.existsSync(path.join(addDir, ".claude", "skills"))
+    ? fs.readdirSync(path.join(addDir, ".claude", "skills")).sort()
+    : [],
+};
+if (capturePath) {
+  fs.writeFileSync(capturePath, JSON.stringify(payload), "utf8");
+}
+console.log(JSON.stringify({ type: "system", subtype: "init", session_id: "44444444-4444-4444-8444-444444444444", model: "claude-sonnet" }));
+console.log(JSON.stringify({ type: "assistant", session_id: "44444444-4444-4444-8444-444444444444", message: { content: [{ type: "text", text: "hello" }] } }));
+console.log(JSON.stringify({ type: "result", session_id: "44444444-4444-4444-8444-444444444444", result: "hello", usage: { input_tokens: 1, cache_read_input_tokens: 0, output_tokens: 1 } }));
+`;
+  await fs.writeFile(commandPath, script, "utf8");
+  await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
 }
 
 type CapturePayload = {
@@ -90,17 +193,9 @@ type CapturePayload = {
   appendedSystemPromptFileContents?: string | null;
 };
 
-function toBashPath(value: string): string {
-  const normalized = value.replace(/\\/g, "/");
-  const driveMatch = normalized.match(/^([A-Za-z]):\/(.*)$/);
-  if (!driveMatch) return normalized;
-  return `/mnt/${driveMatch[1].toLowerCase()}/${driveMatch[2]}`;
-}
-
-function translateWindowsPathsForBashScript(script: string): string {
-  if (process.platform !== "win32") return script;
-  return script.replace(/[A-Za-z]:[\\/][^'"\s]+/g, (match) => toBashPath(match));
-}
+afterEach(() => {
+  resetClaudeCliCapabilitiesCacheForTests();
+});
 
 async function writePoisonedMessageIdClaudeCommand(commandPath: string): Promise<void> {
   const script = `#!/usr/bin/env node
@@ -136,6 +231,7 @@ console.log(JSON.stringify({ type: "result", session_id: "bbbbbbbb-bbbb-4bbb-8bb
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
 }
 
 async function writeAlwaysPoisonedMessageIdClaudeCommand(commandPath: string): Promise<void> {
@@ -166,6 +262,7 @@ process.exit(1);
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
 }
 
 async function writeRetryThenSucceedClaudeCommand(commandPath: string): Promise<void> {
@@ -207,6 +304,7 @@ console.log(JSON.stringify({ type: "result", session_id: "22222222-2222-4222-822
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
 }
 
 async function setupExecuteEnv(
@@ -236,7 +334,58 @@ async function setupExecuteEnv(
   };
 }
 
-function createLocalSandboxRunner(scriptDir: string) {
+function resolveTestPosixShellCommand() {
+  if (process.platform !== "win32") return "sh";
+  const candidates = [
+    "C:\\Program Files\\Git\\usr\\bin\\sh.exe",
+    "C:\\Program Files\\Git\\bin\\bash.exe",
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? "sh";
+}
+
+function rewriteWindowsPathsForGitShell(script: string) {
+  if (process.platform !== "win32") return script;
+  return script.replace(/([A-Za-z]):\\([^'"\s]*)/g, (_match, drive: string, rest: string) =>
+    `/${drive.toLowerCase()}/${rest.replace(/\\/g, "/")}`,
+  );
+}
+
+function toGitShellPath(value: string) {
+  if (process.platform !== "win32") return value;
+  return value.replace(/^([A-Za-z]):\\?/, (_match, drive: string) => `/${drive.toLowerCase()}/`).replace(/\\/g, "/");
+}
+
+function fromGitShellPath(value: string) {
+  if (process.platform !== "win32") return value;
+  return value.replace(/^\/([a-zA-Z])\/(.*)$/, (_match, drive: string, rest: string) =>
+    `${drive.toUpperCase()}:\\${rest.replace(/\//g, "\\")}`,
+  );
+}
+
+function augmentTestPosixPath(env: Record<string, string>) {
+  if (process.platform !== "win32") return env;
+  const entries = [
+    "/usr/bin",
+    "/bin",
+    "C:\\Program Files\\Git\\usr\\bin",
+    "C:\\Program Files\\Git\\bin",
+  ].filter((entry) => entry.startsWith("/") || existsSync(entry));
+  return {
+    ...env,
+    PATH: [...entries, env.PATH ?? process.env.PATH ?? ""].join(path.delimiter),
+  };
+}
+
+function envForGitShell(env: Record<string, string>) {
+  if (process.platform !== "win32") return env;
+  const home = env.HOME ?? process.env.HOME;
+  return augmentTestPosixPath({
+    ...env,
+    ...(home ? { HOME: toGitShellPath(home) } : {}),
+  });
+}
+
+function createLocalSandboxRunner() {
   let counter = 0;
   return {
     execute: async (input: {
@@ -250,27 +399,24 @@ function createLocalSandboxRunner(scriptDir: string) {
       onSpawn?: (meta: { pid: number; startedAt: string }) => Promise<void>;
     }) => {
       counter += 1;
-      const command = process.platform === "win32" && input.command === "sh" ? "bash" : input.command;
-      const inputArgs = input.args ?? [];
-      let args = inputArgs;
-      if (command === "bash" && inputArgs[0] === "-c" && typeof inputArgs[1] === "string") {
-        const script = translateWindowsPathsForBashScript(inputArgs[1]);
-        if (process.platform === "win32") {
-          await fs.mkdir(scriptDir, { recursive: true });
-          const scriptPath = path.join(scriptDir, `.paperclip-sandbox-run-${counter}.sh`);
-          await fs.writeFile(scriptPath, script, "utf8");
-          args = [toBashPath(scriptPath), ...inputArgs.slice(2)];
-        } else {
-          args = ["-c", script, ...inputArgs.slice(2)];
-        }
+      const command = input.command === "sh" ? resolveTestPosixShellCommand() : input.command;
+      const hostCommand = input.command === "sh" ? command : fromGitShellPath(command);
+      const args = [...(input.args ?? [])];
+      if (
+        input.command === "sh" &&
+        (args[0] === "-c" || args[0] === "-lc") &&
+        typeof args[1] === "string"
+      ) {
+        args[1] = rewriteWindowsPathsForGitShell(args[1]);
       }
+      const hostCwd = fromGitShellPath(input.cwd ?? process.cwd());
       return runChildProcess(
         `sandbox-run-${counter}`,
-        command,
+        hostCommand,
         args,
         {
-          cwd: input.cwd ?? process.cwd(),
-          env: input.env ?? {},
+          cwd: hostCwd,
+          env: input.command === "sh" ? envForGitShell(input.env ?? {}) : input.env ?? {},
           stdin: input.stdin,
           timeoutSec: Math.max(1, Math.ceil((input.timeoutMs ?? 30_000) / 1000)),
           graceSec: 5,
@@ -651,10 +797,11 @@ describe("claude execute", () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.errorMessage).toBeNull();
-      expect(loggedCommand).toBe(commandPath);
+      const expectedResolvedCommand = process.platform === "win32" ? `${commandPath}.cmd` : commandPath;
+      expect(loggedCommand?.toLowerCase()).toBe(expectedResolvedCommand.toLowerCase());
       expect(loggedEnv.HOME).toBe(root);
       expect(loggedEnv.CLAUDE_CONFIG_DIR).toBe(claudeConfigDir);
-      expect(loggedEnv.PAPERCLIP_RESOLVED_COMMAND).toBe(commandPath);
+      expect(loggedEnv.PAPERCLIP_RESOLVED_COMMAND?.toLowerCase()).toBe(expectedResolvedCommand.toLowerCase());
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;
@@ -666,10 +813,10 @@ describe("claude execute", () => {
     }
   });
 
-  it.skipIf(process.platform === "win32")("injects bridge env into sandbox-managed remote runs", async () => {
+  it("injects bridge env into sandbox-managed remote runs", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-claude-execute-sandbox-"));
     const localWorkspace = path.join(root, "workspace");
-    const remoteWorkspace = path.join(root, "sandbox-home");
+    const remoteWorkspace = path.join(root, "sandbox-$HOME");
     const binDir = path.join(root, "bin");
     const commandPath = path.join(binDir, "claude");
     const capturePath1 = path.join(remoteWorkspace, "capture-1.json");
@@ -720,7 +867,7 @@ describe("claude execute", () => {
           leaseId: "lease-1",
           remoteCwd: remoteWorkspace,
           timeoutMs: 30_000,
-          runner: createLocalSandboxRunner(root),
+          runner: createLocalSandboxRunner(),
         },
         authToken: "run-jwt-token",
         onLog: async () => {},
@@ -755,16 +902,182 @@ describe("claude execute", () => {
       else process.env.HOME = previousHome;
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
-      try {
-        await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-      } catch (err) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (process.platform !== "win32" || (code !== "EBUSY" && code !== "EPERM")) {
-          throw err;
-        }
-      }
+      await fs.rm(root, { recursive: true, force: true });
     }
   }, 20_000);
+
+  it("omits --effort for sandbox-managed runs when the installed Claude CLI does not advertise it", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-claude-execute-sandbox-effort-"));
+    const { workspace, commandPath, capturePath, restore } = await setupExecuteEnv(root, {
+      commandWriter: writeHelpWithoutEffortClaudeCommand,
+    });
+    const remoteWorkspace = path.join(root, "sandbox-workspace");
+    await fs.mkdir(remoteWorkspace, { recursive: true });
+
+    try {
+      const result = await execute({
+        runId: "run-sandbox-effort-fallback",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Claude Coder",
+          adapterType: "claude_local",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: commandPath,
+          cwd: workspace,
+          effort: "low",
+          env: {
+            PAPERCLIP_TEST_CAPTURE_PATH: capturePath,
+          },
+          promptTemplate: "Fallback cleanly if the sandbox CLI is old.",
+        },
+        context: {},
+        executionTarget: {
+          kind: "remote",
+          transport: "sandbox",
+          providerKey: "daytona",
+          environmentId: "env-1",
+          leaseId: "lease-1",
+          remoteCwd: remoteWorkspace,
+          timeoutMs: 30_000,
+          runner: createLocalSandboxRunner(),
+        },
+        authToken: "run-jwt-token",
+        onLog: async () => {},
+      });
+
+      expect(result.exitCode).toBe(0);
+      const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload;
+      expect(capture.argv).not.toContain("--effort");
+    } finally {
+      restore();
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  }, 10_000);
+
+  it("passes through --effort and reuses the sandbox capability probe across sandbox leases when the installed Claude CLI advertises it", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-claude-execute-sandbox-effort-supported-"));
+    const { workspace, commandPath, capturePath, restore } = await setupExecuteEnv(root, {
+      commandWriter: writeHelpWithEffortClaudeCommand,
+    });
+    const helpCountPath = path.join(root, "help-count.txt");
+    const remoteWorkspace = path.join(root, "sandbox-workspace");
+    await fs.mkdir(remoteWorkspace, { recursive: true });
+
+    const baseInput = {
+      agent: {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Claude Coder",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {
+        command: commandPath,
+        cwd: workspace,
+        effort: "low",
+        env: {
+          PAPERCLIP_TEST_CAPTURE_PATH: capturePath,
+          PAPERCLIP_TEST_HELP_COUNT_PATH: helpCountPath,
+        },
+        promptTemplate: "Keep the requested effort when supported.",
+      },
+      context: {},
+      executionTarget: {
+        kind: "remote" as const,
+        transport: "sandbox" as const,
+        providerKey: "daytona",
+        environmentId: "env-1",
+        leaseId: "lease-1",
+        remoteCwd: remoteWorkspace,
+        timeoutMs: 30_000,
+        runner: createLocalSandboxRunner(),
+      },
+      authToken: "run-jwt-token",
+      onLog: async () => {},
+    };
+
+    try {
+      const first = await execute({
+        runId: "run-sandbox-effort-supported-1",
+        ...baseInput,
+      });
+      const second = await execute({
+        runId: "run-sandbox-effort-supported-2",
+        ...baseInput,
+        executionTarget: {
+          ...baseInput.executionTarget,
+          leaseId: "lease-2",
+        },
+      });
+
+      expect(first.exitCode).toBe(0);
+      expect(second.exitCode).toBe(0);
+      const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload;
+      expect(capture.argv).toContain("--effort");
+      expect(capture.argv).toContain("low");
+      expect(await fs.readFile(helpCountPath, "utf8")).toBe("1");
+    } finally {
+      restore();
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  }, 10_000);
+
+  it("degrades to the conservative fallback (returns null) when the sandbox probe throws, and retries on the next lease", async () => {
+    let calls = 0;
+    const throwingRunner = {
+      execute: async () => {
+        calls += 1;
+        throw new Error("sandbox connection error");
+      },
+    };
+    const target = {
+      kind: "remote" as const,
+      transport: "sandbox" as const,
+      providerKey: "daytona",
+      environmentId: "env-1",
+      leaseId: "lease-1",
+      remoteCwd: "/remote/workspace",
+      timeoutMs: 30_000,
+      runner: throwingRunner,
+    };
+    const probeInput = {
+      runId: "run-probe-throws",
+      command: "/usr/local/bin/claude",
+      cwd: "/host/workspace",
+      env: {},
+      timeoutSec: 20,
+      graceSec: 5,
+    };
+
+    // A thrown probe must resolve to null (unknown) rather than reject and kill the run.
+    await expect(
+      claudeCommandSupportsEffortFlag({ ...probeInput, target }),
+    ).resolves.toBeNull();
+
+    // The failed result is not cached: a second lease re-probes instead of reusing the rejection.
+    await expect(
+      claudeCommandSupportsEffortFlag({
+        ...probeInput,
+        target: { ...target, leaseId: "lease-2" },
+      }),
+    ).resolves.toBeNull();
+    expect(calls).toBe(2);
+  });
 
   it("allows remote session resumes when saved cwd is the host workspace", () => {
     expect(claudeSessionCwdMatchesExecutionTarget({
@@ -822,6 +1135,9 @@ describe("claude execute", () => {
             PAPERCLIP_TEST_CAPTURE_PATH: capturePath1,
           },
           promptTemplate: "Follow the paperclip heartbeat.",
+          paperclipSkillSync: {
+            desiredSkills: ["paperclip"],
+          },
         },
         context: {},
         authToken: "run-jwt-token",
@@ -859,6 +1175,9 @@ describe("claude execute", () => {
             PAPERCLIP_TEST_CAPTURE_PATH: capturePath2,
           },
           promptTemplate: "Follow the paperclip heartbeat.",
+          paperclipSkillSync: {
+            desiredSkills: ["paperclip"],
+          },
         },
         context: {
           issueId: "issue-1",

@@ -10,9 +10,14 @@ async function writeFakeAgentCommand(binDir: string, argsCapturePath: string): P
   const commandPath = path.join(binDir, "agent");
   const script = `#!/usr/bin/env node
 const fs = require("node:fs");
+const argv = process.argv.slice(2);
+if (argv.includes("--version")) {
+  console.log("cursor-agent-test 0.0.0");
+  process.exit(0);
+}
 const outPath = process.env.PAPERCLIP_TEST_ARGS_PATH;
 if (outPath) {
-  fs.writeFileSync(outPath, JSON.stringify(process.argv.slice(2)), "utf8");
+  fs.writeFileSync(outPath, JSON.stringify(argv), "utf8");
 }
 console.log(JSON.stringify({
   type: "assistant",
@@ -26,17 +31,29 @@ console.log(JSON.stringify({
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  if (process.platform === "win32") {
+    await fs.writeFile(
+      path.join(binDir, "agent.cmd"),
+      `@echo off\r\n"${process.execPath}" "%~dp0agent" %*\r\n`,
+      "utf8",
+    );
+  }
   return commandPath;
 }
 
 async function writeFakeCursorAgentCommand(commandPath: string): Promise<void> {
   const script = `#!/usr/bin/env node
 const fs = require("node:fs");
+const argv = process.argv.slice(2);
+if (argv.includes("--version")) {
+  console.log("cursor-agent-test 0.0.0");
+  process.exit(0);
+}
 const outPath = process.env.PAPERCLIP_TEST_ARGS_PATH;
 if (outPath) {
   fs.writeFileSync(outPath, JSON.stringify({
     command: process.argv[1],
-    argv: process.argv.slice(2),
+    argv,
     path: process.env.PATH || "",
   }), "utf8");
 }

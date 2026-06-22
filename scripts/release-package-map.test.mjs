@@ -4,9 +4,13 @@ import test from "node:test";
 import {
   buildReleasePackagePlan,
   checkConfiguration,
-  findPublishedPackageBlockedDependencies,
+  findUnpublishableWorkspaceEdges,
   getReleasePackages,
 } from "./release-package-map.mjs";
+
+function pkg(name, { publishFromCi, ...deps } = {}) {
+  return { name, dir: name, publishFromCi, pkg: { name, ...deps } };
+}
 
 test("release package manifest covers all public packages with explicit CI enrollment", () => {
   const packages = buildReleasePackagePlan();
@@ -24,24 +28,77 @@ test("release package configuration validates successfully", () => {
   assert.doesNotThrow(() => checkConfiguration());
 });
 
-test("release package configuration catches published packages depending on disabled workspace packages", () => {
-  const packages = buildReleasePackagePlan();
-  const server = packages.find((pkg) => pkg.name === "@penclipai/server");
-  const cursorCloud = packages.find((pkg) => pkg.name === "@penclipai/adapter-cursor-cloud");
-  assert.ok(server);
-  assert.ok(cursorCloud);
-
-  const problems = findPublishedPackageBlockedDependencies(
-    packages.map((pkg) =>
-      pkg.name === cursorCloud.name
-        ? { ...pkg, publishFromCi: false }
-        : pkg,
-    ),
-  );
-
-  assert.deepEqual(problems, [
-    "@penclipai/server dependencies includes @penclipai/adapter-cursor-cloud, but packages/adapters/cursor-cloud has publishFromCi=false",
-    "@penclipai/ui dependencies includes @penclipai/adapter-cursor-cloud, but packages/adapters/cursor-cloud has publishFromCi=false",
-    "penclip dependencies includes @penclipai/adapter-cursor-cloud, but packages/adapters/cursor-cloud has publishFromCi=false",
+test("guard flags a publishFromCi:true package depending on a publishFromCi:false package", () => {
+  const problems = findUnpublishableWorkspaceEdges([
+    pkg("@penclipai/server", {
+      publishFromCi: true,
+      dependencies: { "@penclipai/skills-catalog": "workspace:*" },
+    }),
+    pkg("@penclipai/skills-catalog", { publishFromCi: false }),
   ]);
+
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /@paperclipai\/server/);
+  assert.match(problems[0], /@paperclipai\/skills-catalog/);
+});
+
+test("guard inspects optional and peer dependency sections too", () => {
+  const problems = findUnpublishableWorkspaceEdges([
+    pkg("@penclipai/server", {
+      publishFromCi: true,
+      optionalDependencies: { "@paperclipai/opt": "workspace:^" },
+      peerDependencies: { "@paperclipai/peer": "workspace:*" },
+    }),
+    pkg("@paperclipai/opt", { publishFromCi: false }),
+    pkg("@paperclipai/peer", { publishFromCi: false }),
+  ]);
+
+  assert.equal(problems.length, 2);
+});
+
+test("guard treats a workspace dep on an unknown @paperclipai package as unpublishable", () => {
+  const problems = findUnpublishableWorkspaceEdges([
+    pkg("@penclipai/server", {
+      publishFromCi: true,
+      dependencies: { "@paperclipai/private-internal": "workspace:*" },
+    }),
+  ]);
+
+  assert.equal(problems.length, 1);
+});
+
+test("guard allows true->true workspace edges", () => {
+  const problems = findUnpublishableWorkspaceEdges([
+    pkg("@penclipai/server", {
+      publishFromCi: true,
+      dependencies: { "@penclipai/shared": "workspace:*" },
+    }),
+    pkg("@penclipai/shared", { publishFromCi: true }),
+  ]);
+
+  assert.deepEqual(problems, []);
+});
+
+test("guard ignores non-workspace specs, non-internal deps, and edges from off-train packages", () => {
+  const problems = findUnpublishableWorkspaceEdges([
+    pkg("@penclipai/server", {
+      publishFromCi: true,
+      dependencies: {
+        "@paperclipai/pinned": "0.3.1",
+        zod: "^3.0.0",
+      },
+    }),
+    pkg("@paperclipai/pinned", { publishFromCi: false }),
+    pkg("@paperclipai/offtrain", {
+      publishFromCi: false,
+      dependencies: { "@paperclipai/also-off": "workspace:*" },
+    }),
+    pkg("@paperclipai/also-off", { publishFromCi: false }),
+  ]);
+
+  assert.deepEqual(problems, []);
+});
+
+test("the live release manifest has no unpublishable workspace edges", () => {
+  assert.deepEqual(findUnpublishableWorkspaceEdges(buildReleasePackagePlan()), []);
 });

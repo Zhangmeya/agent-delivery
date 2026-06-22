@@ -668,6 +668,7 @@ describeEmbeddedPostgres("companySkillService.list", () => {
   });
 
   it("accepts reserved Paperclip skill keys from the CN bundled repo", async () => {
+    const canonicalPaperclipSkillKey = "penclipai/paperclip-cn/paperclip";
     const companyId = randomUUID();
     await db.insert(companies).values({
       id: companyId,
@@ -679,7 +680,7 @@ describeEmbeddedPostgres("companySkillService.list", () => {
     const imported = await svc.importPackageFiles(companyId, {
       "skills/paperclip/SKILL.md": [
         "---",
-        "key: paperclipai/paperclip/paperclip",
+        `key: ${canonicalPaperclipSkillKey}`,
         "slug: paperclip",
         "name: Paperclip",
         "description: Official coordination skill.",
@@ -699,7 +700,7 @@ describeEmbeddedPostgres("companySkillService.list", () => {
 
     expect(imported).toHaveLength(1);
     expect(imported[0]?.skill).toMatchObject({
-      key: "paperclipai/paperclip/paperclip",
+      key: canonicalPaperclipSkillKey,
       slug: "paperclip",
       sourceType: "github",
       sourceRef: "0123456789abcdef0123456789abcdef01234567",

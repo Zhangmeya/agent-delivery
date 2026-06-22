@@ -330,6 +330,7 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
     const provider = typeof environment.config?.provider === "string" ? environment.config.provider : null;
     return provider !== null && provider !== "fake";
   });
+  const showExecutionWorkspaceEnvironmentControl = environmentsEnabled && runSelectableEnvironments.length > 1;
 
   const invalidateProject = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(project.id) });
@@ -1050,7 +1051,7 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
                             {t("projectProperties.gitWorktree", { defaultValue: "Git worktree" })}
                           </span>
                         </div>
-                        {environmentsEnabled ? (
+                        {showExecutionWorkspaceEnvironmentControl ? (
                           <div>
                             <div className="mb-1 flex items-center gap-1.5">
                               <label className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -47,6 +47,13 @@ export function AgentProperties({ agent, runtimeState }: AgentPropertiesProps) {
         <PropertyRow label={t("Status", { defaultValue: "Status" })}>
           <StatusBadge status={agent.status} />
         </PropertyRow>
+        {lastErrorIsActive && agent.errorReason && (
+          <PropertyRow label={t("Error reason", { defaultValue: "Error reason" })}>
+            <span className="text-xs text-red-600 dark:text-red-400 break-words min-w-0">
+              {agent.errorReason}
+            </span>
+          </PropertyRow>
+        )}
         <PropertyRow label={t("Role", { defaultValue: "Role" })}>
           <span className="text-sm">{translateRoleLabel(t, agent.role)}</span>
         </PropertyRow>

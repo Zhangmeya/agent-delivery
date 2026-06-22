@@ -24,11 +24,13 @@
  * @see PLUGIN_SPEC.md §10 — Package Contract
  * @see PLUGIN_SPEC.md §12 — Process Model
  */
-import { existsSync, lstatSync, mkdirSync, symlinkSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readdir, readFile, rm, stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import type { Db } from "@penclipai/db";
 import type {
   PaperclipPluginManifestV1,
@@ -49,8 +51,15 @@ import type { PluginLifecycleManager } from "./plugin-lifecycle.js";
 import { pluginDatabaseService } from "./plugin-database.js";
 import { execNpmCommand, execPnpmCommand } from "./npm-command.js";
 
+const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, "../../..");
+export const REPO_ROOT = path.resolve(__dirname, "../../..");
+export const BUNDLED_LOCAL_PLUGIN_ROOT = process.env.PAPERCLIP_BUNDLED_PLUGINS_DIR?.trim()
+  ? path.resolve(process.env.PAPERCLIP_BUNDLED_PLUGINS_DIR)
+  : path.join(REPO_ROOT, "packages", "plugins");
+export const STANDALONE_BUNDLED_PLUGIN_ROOT = path.join(BUNDLED_LOCAL_PLUGIN_ROOT, "sandbox-providers");
+export const LOCAL_PLUGIN_AUTOBUILD_TIMEOUT_MS = 120_000;
+const STANDALONE_BUNDLED_PLUGIN_SDK_PACKAGE = "@paperclipai/plugin-sdk";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -182,6 +191,19 @@ export interface PluginDiscoveryResult {
   /** Source(s) that were scanned. */
   sources: PluginSource[];
 }
+
+type PluginEntrypointKey = "manifest" | "worker" | "ui";
+
+type PluginEntrypointPath = {
+  key: PluginEntrypointKey;
+  absolutePath: string;
+};
+
+type LocalPluginBuildCommand = {
+  file: string;
+  args: string[];
+  cwd: string;
+};
 
 function getDeclaredPageRoutePaths(manifest: PaperclipPluginManifestV1): string[] {
   return (manifest.ui?.slots ?? [])
@@ -568,7 +590,7 @@ export interface PluginLoader {
  */
 export function isPluginPackageName(name: string): boolean {
   if (name.startsWith(NPM_PLUGIN_PACKAGE_PREFIX)) return true;
-  // Also accept scoped packages like @acme/plugin-linear or @penclipai/plugin-*
+  // Also accept scoped packages like @acme/plugin-linear or @paperclipai/plugin-*
   if (name.includes("/")) {
     const localPart = name.split("/")[1] ?? "";
     return localPart.startsWith("plugin-");
@@ -594,129 +616,279 @@ async function readPackageJson(
   }
 }
 
-function isPathInside(parent: string, child: string): boolean {
-  const relative = path.relative(path.resolve(parent), path.resolve(child));
-  return relative === "" || (!!relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+function buildLocalPluginBuildCommand(pkgJson: Record<string, unknown>): string | null {
+  const packageName = pkgJson["name"];
+  if (typeof packageName !== "string" || packageName.trim().length === 0) return null;
+  return `pnpm --filter ${packageName} build`;
 }
 
-function getStringRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
+function readPackageDependencyNames(
+  pkgJson: Record<string, unknown>,
+  field: "dependencies" | "optionalDependencies",
+): string[] {
+  const deps = pkgJson[field];
+  if (deps === null || typeof deps !== "object" || Array.isArray(deps)) return [];
+  return Object.keys(deps as Record<string, unknown>);
 }
 
-function declaresDependency(pkgJson: Record<string, unknown>, packageName: string): boolean {
-  return [
-    getStringRecord(pkgJson["dependencies"]),
-    getStringRecord(pkgJson["devDependencies"]),
-    getStringRecord(pkgJson["peerDependencies"]),
-  ].some((deps) => packageName in deps);
+function resolvePackageInstallPath(packageRoot: string, packageName: string): string {
+  return path.join(packageRoot, "node_modules", ...packageName.split("/"));
 }
 
-function declaresWorkspaceDependency(pkgJson: Record<string, unknown>): boolean {
-  return [
-    getStringRecord(pkgJson["dependencies"]),
-    getStringRecord(pkgJson["devDependencies"]),
-    getStringRecord(pkgJson["peerDependencies"]),
-  ].some((deps) => Object.values(deps).some((value) => typeof value === "string" && value.startsWith("workspace:")));
+function isPathWithin(root: string, target: string): boolean {
+  const relativePath = path.relative(root, target);
+  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
 }
 
-function hasBuildScript(pkgJson: Record<string, unknown>): boolean {
-  const scripts = getStringRecord(pkgJson["scripts"]);
-  return typeof scripts["build"] === "string" && scripts["build"].trim().length > 0;
+export function isRepoBundledPluginPath(
+  packageRoot: string,
+  options: { repoRoot?: string } = {},
+): boolean {
+  const repoPluginsRoot = path.join(options.repoRoot ?? REPO_ROOT, "packages", "plugins");
+  return isPathWithin(repoPluginsRoot, packageRoot);
 }
 
-function formatPackageCommandError(error: unknown): string {
-  const maybeExecError = error as { stdout?: unknown; stderr?: unknown; message?: unknown };
-  const details = [
-    typeof maybeExecError.message === "string" ? maybeExecError.message : String(error),
-    typeof maybeExecError.stderr === "string" ? maybeExecError.stderr.trim() : "",
-    typeof maybeExecError.stdout === "string" ? maybeExecError.stdout.trim() : "",
-  ].filter((part) => part.length > 0);
-  return details.join("\n");
+export function isStandaloneBundledPluginPath(
+  packageRoot: string,
+  options: { repoRoot?: string } = {},
+): boolean {
+  const repoRoot = options.repoRoot ?? REPO_ROOT;
+  return isPathWithin(path.join(repoRoot, "packages", "plugins", "sandbox-providers"), packageRoot);
 }
 
-async function ensureLocalPluginSdkLink(packageRoot: string, pkgJson: Record<string, unknown>): Promise<void> {
-  if (!declaresDependency(pkgJson, "@paperclipai/plugin-sdk")) return;
-
-  const sdkDir = path.join(REPO_ROOT, "packages", "plugins", "sdk");
-  if (!existsSync(sdkDir)) return;
-
-  const scopeDir = path.join(packageRoot, "node_modules", "@paperclipai");
-  const linkTarget = path.join(scopeDir, "plugin-sdk");
-  mkdirSync(scopeDir, { recursive: true });
-
-  try {
-    const current = lstatSync(linkTarget);
-    if (!current.isSymbolicLink()) {
-      return;
-    }
-    await rm(linkTarget, { force: true });
-  } catch {
-    // target does not exist yet
-  }
-
-  const linkSource = process.platform === "win32" ? sdkDir : path.relative(scopeDir, sdkDir);
-  const linkType = process.platform === "win32" ? "junction" : "dir";
-  symlinkSync(linkSource, linkTarget, linkType);
-}
-
-async function runLocalPluginBuild(packageRoot: string, packageName: string): Promise<void> {
-  try {
-    await execPnpmCommand(["--dir", packageRoot, "run", "build"], { timeout: 180_000 });
-  } catch (error) {
-    throw new Error(
-      `Failed to build local plugin package ${packageName} at ${packageRoot}.\n${formatPackageCommandError(error)}`,
-    );
-  }
-}
-
-async function installStandaloneLocalPluginDeps(packageRoot: string, packageName: string): Promise<void> {
-  try {
-    await execPnpmCommand(
-      ["--dir", packageRoot, "install", "--ignore-scripts", "--ignore-workspace", "--lockfile=false"],
-      { timeout: 180_000 },
-    );
-  } catch (error) {
-    throw new Error(
-      `Failed to prepare dependencies for local plugin package ${packageName} at ${packageRoot}.\n${formatPackageCommandError(error)}`,
-    );
-  }
-}
-
-async function prepareLocalPluginPackage(
+export function resolveDeclaredPluginEntrypoints(
   packageRoot: string,
   pkgJson: Record<string, unknown>,
-  packageName: string,
-): Promise<Record<string, unknown>> {
-  await ensureLocalPluginSdkLink(packageRoot, pkgJson);
-
-  const manifestPath = resolveManifestPath(packageRoot, pkgJson);
-  if (!manifestPath || existsSync(manifestPath)) {
-    return pkgJson;
+): PluginEntrypointPath[] {
+  const paperclipPlugin = pkgJson["paperclipPlugin"];
+  if (
+    paperclipPlugin === null
+    || typeof paperclipPlugin !== "object"
+    || Array.isArray(paperclipPlugin)
+  ) {
+    return [];
   }
 
-  if (!hasBuildScript(pkgJson)) {
-    return pkgJson;
+  const entrypoints: PluginEntrypointPath[] = [];
+  for (const key of ["manifest", "worker", "ui"] as const) {
+    const relativePath = (paperclipPlugin as Record<string, unknown>)[key];
+    if (typeof relativePath === "string" && relativePath.length > 0) {
+      entrypoints.push({
+        key,
+        absolutePath: path.resolve(packageRoot, relativePath),
+      });
+    }
   }
 
-  const isRepoBundledPlugin = isPathInside(path.join(REPO_ROOT, "packages", "plugins"), packageRoot);
-  if (!isRepoBundledPlugin) {
-    return pkgJson;
+  return entrypoints;
+}
+
+export function listMissingDeclaredPluginEntrypoints(
+  packageRoot: string,
+  pkgJson: Record<string, unknown>,
+): PluginEntrypointPath[] {
+  return resolveDeclaredPluginEntrypoints(packageRoot, pkgJson).filter(
+    (entrypoint) => !existsSync(entrypoint.absolutePath),
+  );
+}
+
+function listMissingStandaloneBundledPluginRuntimeDependencies(
+  packageRoot: string,
+  pkgJson: Record<string, unknown>,
+): string[] {
+  // optionalDependencies are intentionally allowed to be absent (e.g.
+  // platform-specific packages), so they must not be treated as required here —
+  // otherwise post-build verification fails even when install/build succeeded.
+  const dependencyNames = new Set<string>([
+    STANDALONE_BUNDLED_PLUGIN_SDK_PACKAGE,
+    ...readPackageDependencyNames(pkgJson, "dependencies"),
+  ]);
+
+  return [...dependencyNames].filter(
+    (packageName) => !existsSync(resolvePackageInstallPath(packageRoot, packageName)),
+  );
+}
+
+function formatLocalPluginManualBuildHint(
+  packageRoot: string,
+  pkgJson: Record<string, unknown>,
+  options: { processEnv?: NodeJS.ProcessEnv; repoRoot?: string } = {},
+): string {
+  if (!isRepoBundledPluginPath(packageRoot, { repoRoot: options.repoRoot })) return "";
+
+  const manualBuildCommand = buildLocalPluginRecoveryCommand(packageRoot, pkgJson, { repoRoot: options.repoRoot });
+  if (!manualBuildCommand) return "";
+
+  const autoBuildDisabled = (options.processEnv ?? process.env)["PAPERCLIP_DISABLE_PLUGIN_AUTOBUILD"] === "1"
+    ? " Auto-build is disabled by PAPERCLIP_DISABLE_PLUGIN_AUTOBUILD=1."
+    : "";
+
+  return `${autoBuildDisabled} Run \`${manualBuildCommand}\` from the repo root and retry.`;
+}
+
+function buildStandaloneBundledPluginInstallArgs(
+  packageRoot: string,
+): string[] {
+  const packageLockfilePath = path.join(packageRoot, "pnpm-lock.yaml");
+  return existsSync(packageLockfilePath)
+    ? ["install", "--ignore-workspace", "--frozen-lockfile"]
+    : ["install", "--ignore-workspace", "--no-lockfile"];
+}
+
+function buildStandaloneBundledPluginInstallCommand(
+  packageRoot: string,
+): string {
+  return `pnpm ${buildStandaloneBundledPluginInstallArgs(packageRoot).join(" ")}`;
+}
+
+function buildLocalPluginRecoveryCommand(
+  packageRoot: string,
+  pkgJson: Record<string, unknown>,
+  options: { repoRoot?: string } = {},
+): string | null {
+  if (isStandaloneBundledPluginPath(packageRoot, { repoRoot: options.repoRoot })) {
+    const repoRoot = options.repoRoot ?? REPO_ROOT;
+    const relativePath = path.relative(repoRoot, packageRoot) || ".";
+    const installCommand = buildStandaloneBundledPluginInstallCommand(packageRoot);
+    return `cd ${relativePath} && ${installCommand} && pnpm build`;
   }
+
+  return buildLocalPluginBuildCommand(pkgJson);
+}
+
+function buildLocalPluginBuildCommands(
+  packageRoot: string,
+  pkgJson: Record<string, unknown>,
+  options: {
+    repoRoot?: string;
+    needsBuild?: boolean;
+    needsStandaloneRuntimeBootstrap?: boolean;
+  } = {},
+): LocalPluginBuildCommand[] {
+  if (isStandaloneBundledPluginPath(packageRoot, { repoRoot: options.repoRoot })) {
+    const commands: LocalPluginBuildCommand[] = [];
+    const shouldInstallStandaloneRuntime =
+      options.needsStandaloneRuntimeBootstrap === true
+      || (!existsSync(path.join(packageRoot, "node_modules")) && options.needsBuild !== false);
+
+    if (shouldInstallStandaloneRuntime) {
+      commands.push({
+        file: "pnpm",
+        args: buildStandaloneBundledPluginInstallArgs(packageRoot),
+        cwd: packageRoot,
+      });
+    }
+
+    if (options.needsBuild !== false) {
+      commands.push({
+        file: "pnpm",
+        args: ["build"],
+        cwd: packageRoot,
+      });
+    }
+    return commands;
+  }
+
+  const packageName = pkgJson["name"];
+  if (typeof packageName !== "string" || packageName.trim().length === 0) return [];
+  return [{
+    file: "pnpm",
+    args: ["--filter", packageName, "build"],
+    cwd: options.repoRoot ?? REPO_ROOT,
+  }];
+}
+
+export async function ensureLocalPluginBuilt(
+  packageRoot: string,
+  pkgJson: Record<string, unknown>,
+  options: {
+    processEnv?: NodeJS.ProcessEnv;
+    repoRoot?: string;
+    execFileAsyncImpl?: (
+      file: string,
+      args: readonly string[],
+      options: { cwd: string; timeout: number },
+    ) => Promise<{ stdout: string; stderr: string }>;
+  } = {},
+): Promise<void> {
+  const processEnv = options.processEnv ?? process.env;
+  if (processEnv["PAPERCLIP_DISABLE_PLUGIN_AUTOBUILD"] === "1") return;
+  if (!isRepoBundledPluginPath(packageRoot, { repoRoot: options.repoRoot })) return;
+
+  const missingEntrypoints = listMissingDeclaredPluginEntrypoints(packageRoot, pkgJson);
+  const missingStandaloneRuntimeDeps = isStandaloneBundledPluginPath(packageRoot, { repoRoot: options.repoRoot })
+    ? listMissingStandaloneBundledPluginRuntimeDependencies(packageRoot, pkgJson)
+    : [];
+  if (missingEntrypoints.length === 0 && missingStandaloneRuntimeDeps.length === 0) return;
+
+  const packageName = pkgJson["name"];
+  const manualBuildCommand = buildLocalPluginRecoveryCommand(packageRoot, pkgJson, { repoRoot: options.repoRoot });
+  if (typeof packageName !== "string" || packageName.trim().length === 0 || !manualBuildCommand) return;
+
+  const runExecFileAsync = options.execFileAsyncImpl ?? (async (
+    file: string,
+    args: readonly string[],
+    execOptions: { cwd: string; timeout: number },
+  ) => {
+    if (file === "pnpm") {
+      return await execPnpmCommand([...args], {
+        cwd: execOptions.cwd,
+        timeout: execOptions.timeout,
+      });
+    }
+    if (file === "npm") {
+      return await execNpmCommand([...args], {
+        cwd: execOptions.cwd,
+        timeout: execOptions.timeout,
+      });
+    }
+    return await execFileAsync(file, [...args], execOptions);
+  });
+  const buildCommands = buildLocalPluginBuildCommands(packageRoot, pkgJson, {
+    repoRoot: options.repoRoot,
+    needsBuild: missingEntrypoints.length > 0,
+    needsStandaloneRuntimeBootstrap: missingStandaloneRuntimeDeps.length > 0,
+  });
 
   try {
-    await runLocalPluginBuild(packageRoot, packageName);
-  } catch (buildError) {
-    if (declaresWorkspaceDependency(pkgJson)) {
-      throw buildError;
+    for (const command of buildCommands) {
+      await runExecFileAsync(
+        command.file,
+        command.args,
+        { cwd: command.cwd, timeout: LOCAL_PLUGIN_AUTOBUILD_TIMEOUT_MS },
+      );
     }
-    await installStandaloneLocalPluginDeps(packageRoot, packageName);
-    await ensureLocalPluginSdkLink(packageRoot, pkgJson);
-    await runLocalPluginBuild(packageRoot, packageName);
+  } catch (error) {
+    const stderr = typeof (error as { stderr?: unknown }).stderr === "string"
+      ? (error as { stderr: string }).stderr.trim()
+      : "";
+    const timeoutMessage = (error as { killed?: unknown }).killed === true
+      ? ` after timing out at ${LOCAL_PLUGIN_AUTOBUILD_TIMEOUT_MS}ms`
+      : "";
+    const stderrMessage = stderr.length > 0 ? ` stderr: ${stderr}` : "";
+    throw new Error(
+      `Failed to auto-build bundled local plugin ${packageName}${timeoutMessage}. ` +
+        `Run \`${manualBuildCommand}\` from the repo root and retry.${stderrMessage}`,
+    );
   }
 
-  return await readPackageJson(packageRoot) ?? pkgJson;
+  const stillMissingEntrypoints = listMissingDeclaredPluginEntrypoints(packageRoot, pkgJson);
+  const stillMissingStandaloneRuntimeDeps = isStandaloneBundledPluginPath(packageRoot, { repoRoot: options.repoRoot })
+    ? listMissingStandaloneBundledPluginRuntimeDependencies(packageRoot, pkgJson)
+    : [];
+  if (stillMissingEntrypoints.length > 0 || stillMissingStandaloneRuntimeDeps.length > 0) {
+    const missingDetails: string[] = [];
+    if (stillMissingEntrypoints.length > 0) {
+      missingDetails.push(`built entrypoints: ${stillMissingEntrypoints.map((entrypoint) => entrypoint.key).join(", ")}`);
+    }
+    if (stillMissingStandaloneRuntimeDeps.length > 0) {
+      missingDetails.push(`runtime dependencies: ${stillMissingStandaloneRuntimeDeps.join(", ")}`);
+    }
+    throw new Error(
+      `Bundled local plugin ${packageName} is still missing ${missingDetails.join("; ")} after auto-build. ` +
+        `Run \`${manualBuildCommand}\` from the repo root and retry.`,
+    );
+  }
 }
 
 /**
@@ -1021,7 +1193,7 @@ export function pluginLoader(
         // executing arbitrary code on the host before manifest validation.
         await execNpmCommand(
           ["install", spec, "--prefix", targetInstallDir, "--save", "--ignore-scripts"],
-          { timeout: 120_000 },
+          { timeout: 120_000 }, // 2 minute timeout for npm install
         );
       } catch (err) {
         throw new Error(`npm install failed for ${spec}: ${String(err)}`);
@@ -1048,16 +1220,20 @@ export function pluginLoader(
 
     // Step 3: Read and validate plugin manifest
     // Note: this.loadManifest (used via current context)
-    let pkgJson = await readPackageJson(resolvedPackagePath);
+    const pkgJson = await readPackageJson(resolvedPackagePath);
     if (!pkgJson) throw new Error(`Missing package.json at ${resolvedPackagePath}`);
+
     if (localPath) {
-      pkgJson = await prepareLocalPluginPackage(resolvedPackagePath, pkgJson, resolvedPackageName);
+      await ensureLocalPluginBuilt(resolvedPackagePath, pkgJson);
     }
 
     const manifestPath = resolveManifestPath(resolvedPackagePath, pkgJson);
     if (!manifestPath || !existsSync(manifestPath)) {
+      const manualBuildHint = localPath
+        ? formatLocalPluginManualBuildHint(resolvedPackagePath, pkgJson)
+        : "";
       throw new Error(
-        `Package ${resolvedPackageName} at ${resolvedPackagePath} does not appear to be a Paperclip plugin (no manifest found).`,
+        `Package ${resolvedPackageName} at ${resolvedPackagePath} does not appear to be a Paperclip plugin (no manifest found).${manualBuildHint}`,
       );
     }
 
@@ -1133,13 +1309,9 @@ export function pluginLoader(
 
   async function loadManifestFromPackageRoot(
     packageRoot: string,
-    packageName?: string,
   ): Promise<PaperclipPluginManifestV1 | null> {
-    let pkgJson = await readPackageJson(packageRoot);
+    const pkgJson = await readPackageJson(packageRoot);
     if (!pkgJson) return null;
-    if (packageName) {
-      pkgJson = await prepareLocalPluginPackage(packageRoot, pkgJson, packageName);
-    }
 
     const manifestPath = resolveManifestPath(packageRoot, pkgJson);
     if (!manifestPath || !existsSync(manifestPath)) return null;
@@ -1151,7 +1323,7 @@ export function pluginLoader(
     plugin: PluginRecord,
     packageRoot: string,
   ): Promise<PluginRecord> {
-    const manifest = await loadManifestFromPackageRoot(packageRoot, plugin.packageName);
+    const manifest = await loadManifestFromPackageRoot(packageRoot);
     if (!manifest) {
       throw new Error(`Plugin package ${plugin.packageName} no longer exposes a Paperclip manifest`);
     }
@@ -2012,7 +2184,7 @@ export function pluginLoader(
       // (for example @penclipai/shared exports). Run those workers through
       // the tsx loader so first-party example plugins work in development.
       if (activePlugin.packagePath && existsSync(DEV_TSX_LOADER_PATH)) {
-        workerOptions.execArgv = ["--import", pathToFileURL(DEV_TSX_LOADER_PATH).href];
+        workerOptions.execArgv = ["--import", DEV_TSX_LOADER_PATH];
       }
 
       await workerManager.startWorker(pluginId, workerOptions);
