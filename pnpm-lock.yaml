@@ -763,9 +763,6 @@ importers:
       '@penclipai/shared':
         specifier: workspace:*
         version: link:../packages/shared
-      '@penclipai/skills-catalog':
-        specifier: workspace:*
-        version: link:../packages/skills-catalog
       ajv:
         specifier: ^8.20.0
         version: 8.20.0

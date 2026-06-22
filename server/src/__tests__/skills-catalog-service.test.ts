@@ -214,6 +214,47 @@ describe("skills catalog service", () => {
     expect(mockRequireResolve).toHaveBeenCalledWith("@penclipai/skills-catalog/catalog.json");
   });
 
+  it("falls back to the server-bundled catalog layout when the package is not published", async () => {
+    const bundledMarkdown = "---\nname: bundled\n---\n\n# Bundled\n";
+    const bundledSkill = catalogSkill("bundled-skill", "Bundled Skill");
+    bundledSkill.files = [
+      {
+        path: "SKILL.md",
+        kind: "skill",
+        sizeBytes: Buffer.byteLength(bundledMarkdown),
+        sha256: sha256(bundledMarkdown),
+      },
+    ];
+    manifestJson = manifest([bundledSkill], "0.3.3");
+    mockRequireResolve.mockImplementation(() => {
+      const error = new Error("not found") as Error & { code?: string };
+      error.code = "ERR_MODULE_NOT_FOUND";
+      throw error;
+    });
+    mockExistsSync.mockImplementation((filePath: string) =>
+      filePath.replace(/\\/g, "/").endsWith("/server/src/skills-catalog/generated/catalog.json"),
+    );
+    mockReadFile.mockImplementationOnce(async () => Buffer.from(bundledMarkdown));
+    const service = await import("../services/skills-catalog.js");
+
+    expect(service.getCatalogPackageMetadata()).toEqual({
+      packageName: "@penclipai/skills-catalog",
+      packageVersion: "0.3.3",
+    });
+    await expect(service.readCatalogSkillFile(bundledSkill.id, "SKILL.md")).resolves.toMatchObject({
+      catalogSkillId: bundledSkill.id,
+      path: "SKILL.md",
+      content: bundledMarkdown,
+      markdown: true,
+    });
+    expect(String(mockReadFileSync.mock.calls[0]?.[0]).replace(/\\/g, "/")).toMatch(
+      /\/server\/src\/skills-catalog\/generated\/catalog\.json$/,
+    );
+    expect(String(mockReadFile.mock.calls[0]?.[0]).replace(/\\/g, "/")).toMatch(
+      /\/server\/src\/skills-catalog\/catalog\/bundled\/software-development\/bundled-skill\/SKILL\.md$/,
+    );
+  });
+
   it("returns an empty list, caches package-resolution failure, and logs only once when the manifest cannot be resolved", async () => {
     mockRequireResolve.mockImplementation(() => {
       const error = new Error("not found") as Error & { code?: string };

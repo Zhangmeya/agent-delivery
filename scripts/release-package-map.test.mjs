@@ -38,8 +38,8 @@ test("guard flags a publishFromCi:true package depending on a publishFromCi:fals
   ]);
 
   assert.equal(problems.length, 1);
-  assert.match(problems[0], /@paperclipai\/server/);
-  assert.match(problems[0], /@paperclipai\/skills-catalog/);
+  assert.match(problems[0], /@penclipai\/server/);
+  assert.match(problems[0], /@penclipai\/skills-catalog/);
 });
 
 test("guard inspects optional and peer dependency sections too", () => {
@@ -47,10 +47,10 @@ test("guard inspects optional and peer dependency sections too", () => {
     pkg("@penclipai/server", {
       publishFromCi: true,
       optionalDependencies: { "@paperclipai/opt": "workspace:^" },
-      peerDependencies: { "@paperclipai/peer": "workspace:*" },
+      peerDependencies: { "@penclipai/peer": "workspace:*" },
     }),
     pkg("@paperclipai/opt", { publishFromCi: false }),
-    pkg("@paperclipai/peer", { publishFromCi: false }),
+    pkg("@penclipai/peer", { publishFromCi: false }),
   ]);
 
   assert.equal(problems.length, 2);
@@ -74,6 +74,18 @@ test("guard allows true->true workspace edges", () => {
       dependencies: { "@penclipai/shared": "workspace:*" },
     }),
     pkg("@penclipai/shared", { publishFromCi: true }),
+  ]);
+
+  assert.deepEqual(problems, []);
+});
+
+test("guard allows upstream-compatible workspace aliases to published CN packages", () => {
+  const problems = findUnpublishableWorkspaceEdges([
+    pkg("@penclipai/plugin-workspace-diff", {
+      publishFromCi: true,
+      dependencies: { "@paperclipai/plugin-sdk": "workspace:@penclipai/plugin-sdk@*" },
+    }),
+    pkg("@penclipai/plugin-sdk", { publishFromCi: true }),
   ]);
 
   assert.deepEqual(problems, []);

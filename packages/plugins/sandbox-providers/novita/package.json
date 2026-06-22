@@ -1,5 +1,5 @@
 {
-  "name": "@paperclipai/plugin-novita-sandbox",
+  "name": "@penclipai/plugin-novita-sandbox",
   "version": "0.1.0",
   "description": "Novita Agent Sandbox provider plugin for Paperclip environments",
   "license": "MIT",

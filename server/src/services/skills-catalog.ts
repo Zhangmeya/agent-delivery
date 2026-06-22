@@ -27,6 +27,8 @@ const require = createRequire(import.meta.url);
 const catalogPackageName = "@penclipai/skills-catalog";
 const catalogPackageJsonSpecifier = `${catalogPackageName}/package.json`;
 const catalogManifestSpecifier = `${catalogPackageName}/catalog.json`;
+const bundledCatalogPackageRoot = path.resolve(serviceDir, "../skills-catalog");
+const bundledCatalogManifestPath = path.join(bundledCatalogPackageRoot, "generated/catalog.json");
 const devCatalogPackageRoot = path.join(repoRoot, "packages/skills-catalog");
 const devCatalogManifestPath = path.join(devCatalogPackageRoot, "generated/catalog.json");
 let cachedCatalogManifest: {
@@ -82,6 +84,14 @@ function resolvePublishedCatalogPaths() {
   };
 }
 
+function resolveBundledCatalogPaths() {
+  if (!existsSync(bundledCatalogManifestPath)) return null;
+  return {
+    packageRoot: bundledCatalogPackageRoot,
+    manifestPath: bundledCatalogManifestPath,
+  };
+}
+
 function resolveDevCatalogPaths() {
   if (!existsSync(devCatalogManifestPath)) return null;
   return {
@@ -102,6 +112,12 @@ function resolveCatalogPaths() {
     cachedCatalogPathsError = null;
     return cachedCatalogPaths;
   } catch (publishedError) {
+    const bundledPaths = resolveBundledCatalogPaths();
+    if (bundledPaths) {
+      cachedCatalogPaths = bundledPaths;
+      cachedCatalogPathsError = null;
+      return cachedCatalogPaths;
+    }
     const devPaths = resolveDevCatalogPaths();
     if (devPaths) {
       cachedCatalogPaths = devPaths;
