@@ -9,6 +9,8 @@ import { companiesApi } from "../api/companies";
 import { goalsApi } from "../api/goals";
 import { agentsApi } from "../api/agents";
 import { approvalsApi } from "../api/approvals";
+import { issuesApi } from "../api/issues";
+import { projectsApi } from "../api/projects";
 import { queryKeys } from "../lib/queryKeys";
 import { Dialog, DialogPortal } from "@/components/ui/dialog";
 import {
@@ -31,6 +33,12 @@ import { getAdapterDisplay } from "../adapters/adapter-display-registry";
 import { defaultCreateValues } from "./agent-config-defaults";
 import { parseOnboardingGoalInput } from "../lib/onboarding-goal";
 import { composeCeoInstructions } from "../lib/ceo-instructions";
+import {
+  buildOnboardingIssuePayload,
+  buildOnboardingProjectPayload,
+  selectDefaultCompanyGoalId,
+  selectReusableOnboardingProject,
+} from "../lib/onboarding-launch";
 import { buildNewAgentRuntimeConfig } from "../lib/new-agent-runtime-config";
 import { DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX } from "@penclipai/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@penclipai/adapter-cursor-local";
@@ -75,6 +83,14 @@ function buildMissionFromQuestionnaire(q1: string, q2: string, q3: string, q4: s
 }
 
 const ONBOARDING_STORAGE_KEY = "paperclip-onboarding-state";
+const DEFAULT_TASK_TITLE = "Hire your first engineer and create a hiring plan";
+const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the company.
+
+- hire a founding engineer
+- write a hiring plan
+- break the roadmap into concrete tasks and start delegating work`;
+const INCOMPLETE_ONBOARDING_STATE_MESSAGE =
+  "Onboarding state is incomplete. Please restart onboarding and try again.";
 
 function loadSavedState(): Record<string, unknown> | null {
   try {
@@ -173,6 +189,15 @@ export function OnboardingWizard() {
     string | null
   >((saved?.createdCompanyPrefix as string) ?? null);
   const [createdAgentId, setCreatedAgentId] = useState<string | null>((saved?.createdAgentId as string) ?? null);
+  const [createdCompanyGoalId, setCreatedCompanyGoalId] = useState<string | null>(
+    (saved?.createdCompanyGoalId as string) ?? null
+  );
+  const [createdProjectId, setCreatedProjectId] = useState<string | null>(
+    (saved?.createdProjectId as string) ?? null
+  );
+  const [createdIssueRef, setCreatedIssueRef] = useState<string | null>(
+    (saved?.createdIssueRef as string) ?? null
+  );
 
   // Reset the route-dismissed flag when navigating to a different path.
   useEffect(() => {
@@ -211,6 +236,7 @@ export function OnboardingWizard() {
       step, companyName, companyGoal, missionPath, missionConfirmed,
       q1, q2, q3, q4, agentName, adapterType, cwd, model, command, args, url,
       createdCompanyId, createdCompanyPrefix, createdAgentId,
+      createdCompanyGoalId, createdProjectId, createdIssueRef,
       onboardingPath, growWorkflows, growPainPoints, growAutomate,
     };
     localStorage.setItem(ONBOARDING_STORAGE_KEY, JSON.stringify(state));
@@ -218,6 +244,7 @@ export function OnboardingWizard() {
     effectiveOnboardingOpen, step, companyName, companyGoal, missionPath, missionConfirmed,
     q1, q2, q3, q4, agentName, adapterType, cwd, model, command, args, url,
     createdCompanyId, createdCompanyPrefix, createdAgentId,
+    createdCompanyGoalId, createdProjectId, createdIssueRef,
     onboardingPath, growWorkflows, growPainPoints, growAutomate,
   ]);
 
@@ -247,7 +274,6 @@ export function OnboardingWizard() {
     adapterType === "claude_local" ||
     adapterType === "codex_local" ||
     adapterType === "gemini_local" ||
-    adapterType === "hermes_local" ||
     adapterType === "opencode_local" ||
     adapterType === "pi_local" ||
     adapterType === "cursor";
@@ -274,7 +300,6 @@ export function OnboardingWizard() {
     claude_local: "claude",
     codex_local: "codex",
     gemini_local: "gemini",
-    hermes_local: "hermes",
     pi_local: "pi",
     cursor: "agent",
     opencode_local: "opencode",
@@ -366,6 +391,9 @@ export function OnboardingWizard() {
     setCreatedCompanyId(null);
     setCreatedCompanyPrefix(null);
     setCreatedAgentId(null);
+    setCreatedCompanyGoalId(null);
+    setCreatedProjectId(null);
+    setCreatedIssueRef(null);
   }
 
   function handleClose() {
@@ -378,11 +406,67 @@ export function OnboardingWizard() {
     setRouteDismissed(true);
   }
 
-  function handleLaunchToChat() {
-    const prefix = createdCompanyPrefix;
-    reset();
-    closeOnboarding();
-    navigate(prefix ? `/${prefix}/board-chat` : "/dashboard");
+  async function handleLaunchToDashboard() {
+    if (!createdCompanyId || !createdAgentId) {
+      setError(INCOMPLETE_ONBOARDING_STATE_MESSAGE);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      let goalId = createdCompanyGoalId;
+      if (!goalId) {
+        const goals = await goalsApi.list(createdCompanyId);
+        goalId = selectDefaultCompanyGoalId(goals);
+        setCreatedCompanyGoalId(goalId);
+      }
+
+      let projectId = createdProjectId;
+      if (!projectId) {
+        const projects = await projectsApi.list(createdCompanyId);
+        const existingOnboardingProject = selectReusableOnboardingProject(projects);
+        if (existingOnboardingProject) {
+          projectId = existingOnboardingProject.id;
+        } else {
+          const project = await projectsApi.create(
+            createdCompanyId,
+            buildOnboardingProjectPayload(goalId)
+          );
+          projectId = project.id;
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.projects.list(createdCompanyId)
+          });
+        }
+        setCreatedProjectId(projectId);
+      }
+
+      if (!createdIssueRef) {
+        const issue = await issuesApi.create(
+          createdCompanyId,
+          buildOnboardingIssuePayload({
+            title: DEFAULT_TASK_TITLE,
+            description: DEFAULT_TASK_DESCRIPTION,
+            assigneeAgentId: createdAgentId,
+            projectId,
+            goalId
+          })
+        );
+        setCreatedIssueRef(issue.identifier ?? issue.id);
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.issues.list(createdCompanyId)
+        });
+      }
+
+      const prefix = createdCompanyPrefix;
+      setSelectedCompanyId(createdCompanyId);
+      reset();
+      closeOnboarding();
+      navigate(prefix ? `/${prefix}/dashboard` : "/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to launch first task");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function buildAdapterConfig(): Record<string, unknown> {
@@ -470,7 +554,7 @@ export function OnboardingWizard() {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
 
       const parsedGoal = parseOnboardingGoalInput(companyGoal);
-      await goalsApi.create(company.id, {
+      const goal = await goalsApi.create(company.id, {
         title: parsedGoal.title,
         ...(parsedGoal.description
           ? { description: parsedGoal.description }
@@ -478,6 +562,7 @@ export function OnboardingWizard() {
         level: "company",
         status: "active"
       });
+      setCreatedCompanyGoalId(goal.id);
       queryClient.invalidateQueries({
         queryKey: queryKeys.goals.list(company.id)
       });
@@ -654,11 +739,14 @@ export function OnboardingWizard() {
       else if (step === 2 && companyName.trim() && companyGoal.trim()) handleConfirmMission();
       else if (step === 3 && agentName.trim()) setStep(4);
       else if (step === 4 && agentName.trim()) handleGiveHeartbeat();
-      else if (step === 5) handleLaunchToChat();
+      else if (step === 5) handleLaunchToDashboard();
     }
   }
 
   if (!effectiveOnboardingOpen) return null;
+
+  const launchStateIncomplete = step === 5 && (!createdCompanyId || !createdAgentId);
+  const visibleError = error ?? (launchStateIncomplete ? INCOMPLETE_ONBOARDING_STATE_MESSAGE : null);
 
   return (
     <Dialog
@@ -880,7 +968,7 @@ export function OnboardingWizard() {
                 </div>
               )}
 
-              {/* Step 1: Name your team (both paths) */}
+              {/* Step 1: Name your company (both paths) */}
               {step === 1 && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-3 mb-1">
@@ -888,9 +976,9 @@ export function OnboardingWizard() {
                       <Building2 className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <h3 className="font-medium">Name your team</h3>
+                      <h3 className="font-medium">Name your company</h3>
                       <p className="text-xs text-muted-foreground">
-                        What should we call your team?
+                        What should we call your company?
                       </p>
                     </div>
                   </div>
@@ -903,7 +991,7 @@ export function OnboardingWizard() {
                           : "text-muted-foreground group-focus-within:text-foreground"
                       )}
                     >
-                      Team name
+                      Company name
                     </label>
                     <input
                       className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
@@ -1122,7 +1210,7 @@ export function OnboardingWizard() {
                     className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                     onClick={() => setStep(1)}
                   >
-                    ← Change team name
+                    ← Change company name
                   </button>
                 </div>
               )}
@@ -1505,7 +1593,7 @@ export function OnboardingWizard() {
                   {/* Review checklist — everything that's now set up */}
                   <div className="space-y-1.5">
                     {[
-                      { label: "Team name", done: Boolean(companyName.trim()) },
+                      { label: "Company name", done: Boolean(companyName.trim()) },
                       { label: "Mission", done: Boolean(companyGoal.trim()) },
                       { label: "Agent created", done: Boolean(createdAgentId) },
                       { label: "Model connected", done: Boolean(createdAgentId) },
@@ -1534,15 +1622,15 @@ export function OnboardingWizard() {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground text-center">
-                    Start a conversation with {agentName} to discuss strategy and plan who to bring on.
+                    We'll create the first task for {agentName} and take you to the dashboard.
                   </p>
                 </div>
               )}
 
               {/* Error */}
-              {error && (
+              {visibleError && (
                 <div className="mt-3">
-                  <p className="text-xs text-destructive">{error}</p>
+                  <p className="text-xs text-destructive">{visibleError}</p>
                 </div>
               )}
 
@@ -1614,9 +1702,17 @@ export function OnboardingWizard() {
                     </Button>
                   )}
                   {step === 5 && (
-                    <Button size="sm" onClick={handleLaunchToChat}>
-                      <ArrowRight className="h-3.5 w-3.5 mr-1" />
-                      Get started
+                    <Button
+                      size="sm"
+                      onClick={handleLaunchToDashboard}
+                      disabled={loading || launchStateIncomplete}
+                    >
+                      {loading ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                      ) : (
+                        <ArrowRight className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      {loading ? "Launching..." : "Get started"}
                     </Button>
                   )}
                 </div>

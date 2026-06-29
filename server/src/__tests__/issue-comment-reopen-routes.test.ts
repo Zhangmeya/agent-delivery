@@ -79,6 +79,10 @@ const mockIssueRecoveryActionService = vi.hoisted(() => ({
 const mockIssueTreeControlService = vi.hoisted(() => ({
   getActivePauseHoldGate: vi.fn(async () => null),
 }));
+const mockExternalObjectService = vi.hoisted(() => ({
+  syncCommentSafely: vi.fn(async () => undefined),
+  syncIssueSafely: vi.fn(async () => undefined),
+}));
 
 function registerModuleMocks() {
   vi.doMock("@penclipai/shared/telemetry", () => ({
@@ -226,6 +230,10 @@ vi.mock("../services/index.js", () => ({
   workProductService: () => ({}),
 }));
 
+vi.mock("../services/external-objects.js", () => ({
+  externalObjectService: () => mockExternalObjectService,
+}));
+
 function createApp() {
   const app = express();
   app.use(express.json());
@@ -339,6 +347,8 @@ describe.sequential("issue comment reopen routes", () => {
     mockIssueThreadInteractionService.expireStaleRequestConfirmationsForIssueDocument.mockReset();
     mockIssueRecoveryActionService.getActiveForIssue.mockReset();
     mockIssueTreeControlService.getActivePauseHoldGate.mockReset();
+    mockExternalObjectService.syncCommentSafely.mockReset();
+    mockExternalObjectService.syncIssueSafely.mockReset();
     mockTxInsertValues.mockReset();
     mockTxInsert.mockReset();
     mockDbSelect.mockReset();
@@ -362,6 +372,8 @@ describe.sequential("issue comment reopen routes", () => {
     mockHeartbeatService.getRun.mockResolvedValue(null);
     mockHeartbeatService.getActiveRunForAgent.mockResolvedValue(null);
     mockHeartbeatService.cancelRun.mockResolvedValue(null);
+    mockExternalObjectService.syncCommentSafely.mockResolvedValue(undefined);
+    mockExternalObjectService.syncIssueSafely.mockResolvedValue(undefined);
     mockLogActivity.mockResolvedValue(undefined);
     mockFeedbackService.listIssueVotesForUser.mockResolvedValue([]);
     mockFeedbackService.saveIssueVote.mockResolvedValue({

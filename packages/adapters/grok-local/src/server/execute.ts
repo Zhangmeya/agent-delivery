@@ -326,6 +326,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         installCommand: ctx.runtimeCommandSpec?.installCommand ?? null,
         detectCommand: ctx.runtimeCommandSpec?.detectCommand ?? command,
         onProgress: (line) => onLog("stdout", line),
+        onRuntimeProgress: ctx.onRuntimeProgress,
       });
       restoreRemoteWorkspace = () =>
         preparedExecutionTargetRuntime.restoreWorkspace((line) => onLog("stdout", line));
@@ -477,6 +478,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         timeoutSec,
         graceSec,
         onSpawn,
+        onRuntimeProgress: ctx.onRuntimeProgress,
         onLog,
       });
       return {

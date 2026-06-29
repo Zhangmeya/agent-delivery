@@ -41,6 +41,7 @@ import { cn, formatDateTime, issueUrl, projectRouteRef, projectWorkspaceUrl } fr
 import {
   getWorkspaceSpecificRoutineVariableNames,
   routineHasWorkspaceSpecificVariables,
+  sortWorkspaceRoutinesByName,
 } from "../lib/workspace-routines";
 
 type WorkspaceFormState = {
@@ -469,7 +470,7 @@ function ExecutionWorkspaceRoutinesList({
   });
 
   const workspaceRoutines = useMemo(
-    () => (routines ?? []).filter(routineHasWorkspaceSpecificVariables),
+    () => sortWorkspaceRoutinesByName((routines ?? []).filter(routineHasWorkspaceSpecificVariables)),
     [routines],
   );
 
@@ -734,6 +735,7 @@ export function ExecutionWorkspaceDetail() {
       executionWorkspacesApi.controlRuntimeCommands(workspace!.id, request.action, request),
     onSuccess: (result, request) => {
       queryClient.setQueryData(queryKeys.executionWorkspaces.detail(result.workspace.id), result.workspace);
+      queryClient.invalidateQueries({ queryKey: queryKeys.executionWorkspaces.overview(result.workspace.companyId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.executionWorkspaces.workspaceOperations(result.workspace.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(result.workspace.projectId) });
       setRuntimeActionErrorMessage(null);
@@ -1289,6 +1291,7 @@ export function ExecutionWorkspaceDetail() {
         onOpenChange={setCloseDialogOpen}
         onClosed={(nextWorkspace) => {
           queryClient.setQueryData(queryKeys.executionWorkspaces.detail(nextWorkspace.id), nextWorkspace);
+          queryClient.invalidateQueries({ queryKey: queryKeys.executionWorkspaces.overview(nextWorkspace.companyId) });
           queryClient.invalidateQueries({ queryKey: queryKeys.executionWorkspaces.closeReadiness(nextWorkspace.id) });
           queryClient.invalidateQueries({ queryKey: queryKeys.executionWorkspaces.workspaceOperations(nextWorkspace.id) });
           if (project) {

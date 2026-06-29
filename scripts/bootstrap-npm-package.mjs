@@ -437,7 +437,7 @@ function publishPackage(pkg, stagingDir, otp) {
     );
   }
 
-  throw new Error(`${formatCommand("npm", publishArgs)} failed with status ${result.status ?? "unknown"}`);
+  throw new Error(`${formatCommand("pnpm", publishArgs)} failed with status ${result.status ?? "unknown"}`);
 }
 
 function main(argv) {

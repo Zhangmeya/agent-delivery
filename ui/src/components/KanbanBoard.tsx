@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useMemo, useState } from "react";
 import { Link } from "@/lib/router";
 import {
   DndContext,
@@ -22,11 +21,10 @@ import { StatusIcon } from "./StatusIcon";
 import { PriorityIcon } from "./PriorityIcon";
 import { Identity } from "./Identity";
 import type { Issue, IssueStatus } from "@penclipai/shared";
-import { buildDndAccessibility } from "../lib/dnd-accessibility";
-import { translateStatusLabel } from "../lib/i18n-labels";
 import { AlertTriangle } from "lucide-react";
 import { isSuccessfulRunHandoffRequired } from "../lib/successful-run-handoff";
 import { collectSubtreeLiveCounts } from "../lib/liveIssueIds";
+import { cn } from "../lib/utils";
 
 export const KANBAN_BOARD_HIGH_VOLUME_THRESHOLD = 100;
 export const KANBAN_COLUMN_PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -46,12 +44,61 @@ export const boardStatuses = [
   "cancelled",
 ] as const satisfies readonly IssueStatus[];
 
+const defaultKanbanColumnTone = {
+  rail: "border-border bg-muted/20",
+  railOver: "bg-accent/50 ring-1 ring-primary/20",
+  header: "text-muted-foreground",
+  count: "text-muted-foreground/60",
+  body: "bg-muted/20",
+  bodyOver: "bg-accent/40",
+  card: "",
+};
+
+export const kanbanColumnTones: Partial<Record<IssueStatus, typeof defaultKanbanColumnTone>> = {
+  in_review: {
+    rail: "border-violet-500/25 bg-violet-50/60 dark:bg-violet-950/20",
+    railOver: "bg-violet-100/70 ring-1 ring-violet-500/25 dark:bg-violet-950/35",
+    header: "text-violet-700 dark:text-violet-300",
+    count: "text-violet-700/65 dark:text-violet-300/65",
+    body: "bg-violet-50/45 ring-1 ring-inset ring-violet-500/15 dark:bg-violet-950/15",
+    bodyOver: "bg-violet-100/70 ring-1 ring-inset ring-violet-500/25 dark:bg-violet-950/30",
+    card: "",
+  },
+  done: {
+    rail: "border-green-500/25 bg-green-50/60 dark:bg-green-950/20",
+    railOver: "bg-green-100/70 ring-1 ring-green-500/25 dark:bg-green-950/35",
+    header: "text-green-700 dark:text-green-300",
+    count: "text-green-700/65 dark:text-green-300/65",
+    body: "bg-green-50/45 ring-1 ring-inset ring-green-500/15 dark:bg-green-950/15",
+    bodyOver: "bg-green-100/70 ring-1 ring-inset ring-green-500/25 dark:bg-green-950/30",
+    card: "",
+  },
+  cancelled: {
+    rail: "border-neutral-300/70 bg-muted/25 opacity-80 dark:border-neutral-700/70 dark:bg-neutral-900/20",
+    railOver: "bg-muted/45 opacity-90 ring-1 ring-neutral-400/25 dark:bg-neutral-900/35",
+    header: "text-muted-foreground/80",
+    count: "text-muted-foreground/50",
+    body: "bg-muted/25 ring-1 ring-inset ring-border/50",
+    bodyOver: "bg-muted/45 ring-1 ring-inset ring-neutral-400/25",
+    card: "bg-muted/35 text-muted-foreground opacity-80 hover:shadow-none",
+  },
+};
+
+export function getKanbanColumnTone(status: IssueStatus) {
+  return kanbanColumnTones[status] ?? defaultKanbanColumnTone;
+}
+
+function statusLabel(status: string): string {
+  return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function resolveKanbanTargetStatus(overId: string, issues: Issue[]): IssueStatus | null {
   if ((boardStatuses as readonly string[]).includes(overId)) {
     return overId as IssueStatus;
   }
   return issues.find((issue) => issue.id === overId)?.status ?? null;
 }
+
 interface Agent {
   id: string;
   name: string;
@@ -93,28 +140,30 @@ function KanbanColumn({
   revealIncrement: number;
   onShowMore: () => void;
 }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   const isEmpty = issues.length === 0;
   const visibleIssues = collapsed ? [] : issues.slice(0, visibleCount);
   const hiddenCount = Math.max(issues.length - visibleIssues.length, 0);
   const nextRevealCount = Math.min(revealIncrement, hiddenCount);
+  const tone = getKanbanColumnTone(status);
 
   if (collapsed) {
     return (
       <div
         ref={setNodeRef}
-        className={`flex min-h-[220px] w-[52px] shrink-0 flex-col items-center rounded-md border border-border bg-muted/20 px-1.5 py-2 transition-colors ${
-          isOver ? "bg-accent/50 ring-1 ring-primary/20" : ""
-        }`}
-        title={`${translateStatusLabel(t, status)}: ${issues.length}`}
+        className={cn(
+          "flex min-h-[220px] w-[52px] shrink-0 flex-col items-center rounded-md border px-1.5 py-2 transition-colors",
+          tone.rail,
+          isOver && tone.railOver,
+        )}
+        title={`${statusLabel(status)}: ${issues.length}`}
       >
         <StatusIcon status={status} />
-        <span className="mt-2 [writing-mode:vertical-rl] rotate-180 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {translateStatusLabel(t, status)}
+        <span className={cn("mt-2 [writing-mode:vertical-rl] rotate-180 text-[10px] font-semibold uppercase tracking-wide", tone.header)}>
+          {statusLabel(status)}
         </span>
-        <span className="mt-auto rounded-full bg-background px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+        <span className={cn("mt-auto rounded-full bg-background px-1.5 py-0.5 text-[10px] font-medium tabular-nums", tone.header)}>
           {issues.length}
         </span>
       </div>
@@ -127,10 +176,10 @@ function KanbanColumn({
         <StatusIcon status={status} />
         {(!isEmpty || isOver) && (
           <>
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {translateStatusLabel(t, status)}
+            <span className={cn("text-xs font-semibold uppercase tracking-wide", tone.header)}>
+              {statusLabel(status)}
             </span>
-            <span className="text-xs text-muted-foreground/60 ml-auto tabular-nums">
+            <span className={cn("ml-auto text-xs tabular-nums", tone.count)}>
               {issues.length}
             </span>
           </>
@@ -138,9 +187,10 @@ function KanbanColumn({
       </div>
       <div
         ref={setNodeRef}
-        className={`flex-1 min-h-[120px] rounded-md p-1 space-y-1 transition-colors ${
-          isOver ? "bg-accent/40" : "bg-muted/20"
-        }`}
+        className={cn(
+          "flex-1 min-h-[120px] rounded-md p-1 space-y-1 transition-colors",
+          isOver ? tone.bodyOver : tone.body,
+        )}
       >
         {/* Hidden cards are intentionally excluded from sort targets until revealed. */}
         <SortableContext
@@ -155,6 +205,7 @@ function KanbanColumn({
               isLive={liveIssueIds?.has(issue.id)}
               subtreeLiveCount={subtreeLiveCounts?.get(issue.id) ?? 0}
               compact={compactCards}
+              className={tone.card}
             />
           ))}
         </SortableContext>
@@ -186,6 +237,7 @@ function KanbanCard({
   subtreeLiveCount = 0,
   isOverlay,
   compact = false,
+  className,
 }: {
   issue: Issue;
   agents?: Agent[];
@@ -193,8 +245,8 @@ function KanbanCard({
   subtreeLiveCount?: number;
   isOverlay?: boolean;
   compact?: boolean;
+  className?: string;
 }) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const {
     attributes,
     listeners,
@@ -220,11 +272,13 @@ function KanbanCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`rounded-md border bg-card cursor-grab active:cursor-grabbing transition-shadow ${
-        isDragging && !isOverlay ? "opacity-30" : ""
-      } ${isOverlay ? "shadow-lg ring-1 ring-primary/20" : "hover:shadow-sm"} ${
-        compact ? "p-2" : "p-2.5"
-      }`}
+      className={cn(
+        "rounded-md border bg-card cursor-grab active:cursor-grabbing transition-shadow",
+        isDragging && !isOverlay ? "opacity-30" : "",
+        isOverlay ? "shadow-lg ring-1 ring-primary/20" : "hover:shadow-sm",
+        compact ? "p-2" : "p-2.5",
+        className,
+      )}
     >
       <Link
         to={`/issues/${issue.identifier ?? issue.id}`}
@@ -242,15 +296,11 @@ function KanbanCard({
           {isSuccessfulRunHandoffRequired(issue) ? (
             <span
               className="inline-flex items-center gap-1 rounded-full border border-amber-400/45 bg-amber-50/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-300/35 dark:bg-amber-400/10 dark:text-amber-300"
-              title={t("kanban.nextStepTitle", {
-                defaultValue: "This issue needs a next step",
-              })}
-              aria-label={t("kanban.nextStepAriaLabel", {
-                defaultValue: "Needs next step",
-              })}
+              title="This task needs a next step"
+              aria-label="Needs next step"
             >
               <AlertTriangle className="h-3 w-3" />
-              {t("kanban.nextStepBadge", { defaultValue: "Next step" })}
+              Next step
             </span>
           ) : null}
           {isLive && (
@@ -303,19 +353,18 @@ export function KanbanBoard({
   revealIncrement = KANBAN_COLUMN_REVEAL_INCREMENT,
   onUpdateIssue,
 }: KanbanBoardProps) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [visibleCountByStatus, setVisibleCountByStatus] = useState<Record<string, number>>({});
+  const paginationKey = `${initialVisibleCount}:${revealIncrement}`;
+  const [visibleState, setVisibleState] = useState<{
+    paginationKey: string;
+    counts: Record<string, number>;
+  }>({ paginationKey, counts: {} });
+  const visibleCountByStatus = visibleState.paginationKey === paginationKey ? visibleState.counts : {};
   const collapsedStatusSet = useMemo(() => new Set(collapsedStatuses), [collapsedStatuses]);
-
-  useEffect(() => {
-    setVisibleCountByStatus({});
-  }, [initialVisibleCount, revealIncrement]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
-  const dndAccessibility = useMemo(() => buildDndAccessibility(t), [t]);
 
   const columnIssues = useMemo(() => {
     const grouped: Record<IssueStatus, Issue[]> = {} as Record<IssueStatus, Issue[]>;
@@ -369,7 +418,6 @@ export function KanbanBoard({
   return (
     <DndContext
       sensors={sensors}
-      accessibility={dndAccessibility}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
@@ -388,10 +436,16 @@ export function KanbanBoard({
             visibleCount={visibleCountByStatus[status] ?? initialVisibleCount}
             revealIncrement={revealIncrement}
             onShowMore={() => {
-              setVisibleCountByStatus((current) => ({
-                ...current,
-                [status]: (current[status] ?? initialVisibleCount) + revealIncrement,
-              }));
+              setVisibleState((current) => {
+                const counts = current.paginationKey === paginationKey ? current.counts : {};
+                return {
+                  paginationKey,
+                  counts: {
+                    ...counts,
+                    [status]: (counts[status] ?? initialVisibleCount) + revealIncrement,
+                  },
+                };
+              });
             }}
           />
         ))}

@@ -2,28 +2,6 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { buildSandboxNpmInstallCommand } from "@penclipai/adapter-utils";
 import type { ServerAdapterModule } from "../adapters/index.js";
 
-const hermesExecuteMock = vi.hoisted(() =>
-  vi.fn(async () => ({
-    exitCode: 0,
-    signal: null,
-    timedOut: false,
-  })),
-);
-
-vi.mock("hermes-paperclip-adapter/server", () => ({
-  execute: hermesExecuteMock,
-  testEnvironment: async () => ({
-    adapterType: "hermes_local",
-    status: "pass",
-    checks: [],
-    testedAt: new Date(0).toISOString(),
-  }),
-  sessionCodec: null,
-  listSkills: async () => [],
-  syncSkills: async () => ({ entries: [] }),
-  detectModel: async () => null,
-}));
-
 import {
   detectAdapterModel,
   findActiveServerAdapter,
@@ -60,17 +38,18 @@ const externalAdapter: ServerAdapterModule = {
 describe("server adapter registry", () => {
   beforeEach(() => {
     unregisterServerAdapter("external_test");
+    unregisterServerAdapter("hermes_local");
+    unregisterServerAdapter("hermes_gateway");
     unregisterServerAdapter("claude_local");
     setOverridePaused("claude_local", false);
-    setOverridePaused("hermes_local", true);
   });
 
   afterEach(() => {
     unregisterServerAdapter("external_test");
+    unregisterServerAdapter("hermes_local");
+    unregisterServerAdapter("hermes_gateway");
     unregisterServerAdapter("claude_local");
     setOverridePaused("claude_local", false);
-    setOverridePaused("hermes_local", false);
-    hermesExecuteMock.mockClear();
   });
 
   it("registers external adapters and exposes them through lookup helpers", async () => {
@@ -150,6 +129,77 @@ describe("server adapter registry", () => {
     expect(resolved.models).toEqual([
       { id: "plugin-model", label: "Plugin Override" },
     ]);
+  });
+
+  it("keeps Hermes external-only while accepting external registrations", () => {
+    const hermesLocalExternalAdapter: ServerAdapterModule = {
+      type: "hermes_local",
+      execute: async () => ({ exitCode: 0, signal: null, timedOut: false }),
+      testEnvironment: async () => ({
+        adapterType: "hermes_local",
+        status: "pass",
+        checks: [],
+        testedAt: new Date(0).toISOString(),
+      }),
+      supportsLocalAgentJwt: true,
+      supportsInstructionsBundle: true,
+      instructionsPathKey: "instructionsFilePath",
+      requiresMaterializedRuntimeSkills: false,
+      listSkills: async () => ({
+        adapterType: "hermes_local",
+        supported: true,
+        mode: "ephemeral",
+        desiredSkills: [],
+        entries: [],
+        warnings: [],
+      }),
+      getConfigSchema: () => ({ fields: [{ key: "provider", label: "Provider", type: "text" }] }),
+      detectModel: async () => ({
+        model: "hermes-model",
+        provider: "openrouter",
+        source: "test",
+      }),
+    };
+
+    const hermesGatewayExternalAdapter: ServerAdapterModule = {
+      type: "hermes_gateway",
+      execute: async () => ({ exitCode: 0, signal: null, timedOut: false }),
+      testEnvironment: async () => ({
+        adapterType: "hermes_gateway",
+        status: "pass",
+        checks: [],
+        testedAt: new Date(0).toISOString(),
+      }),
+      supportsLocalAgentJwt: false,
+      supportsInstructionsBundle: false,
+      requiresMaterializedRuntimeSkills: false,
+      getConfigSchema: () => ({
+        fields: [{ key: "apiBaseUrl", label: "API URL", type: "text" }],
+      }),
+    };
+
+    expect(findServerAdapter("hermes_local")).toBeNull();
+    expect(findServerAdapter("hermes_gateway")).toBeNull();
+
+    registerServerAdapter(hermesLocalExternalAdapter);
+
+    expect(requireServerAdapter("hermes_local")).toBe(hermesLocalExternalAdapter);
+    expect(findActiveServerAdapter("hermes_local")?.supportsLocalAgentJwt).toBe(true);
+
+    unregisterServerAdapter("hermes_local");
+
+    expect(findServerAdapter("hermes_local")).toBeNull();
+    expect(() => requireServerAdapter("hermes_local")).toThrow("Unknown adapter type: hermes_local");
+
+    registerServerAdapter(hermesGatewayExternalAdapter);
+
+    expect(requireServerAdapter("hermes_gateway")).toBe(hermesGatewayExternalAdapter);
+    expect(findActiveServerAdapter("hermes_gateway")?.supportsLocalAgentJwt).toBe(false);
+
+    unregisterServerAdapter("hermes_gateway");
+
+    expect(findServerAdapter("hermes_gateway")).toBeNull();
+    expect(() => requireServerAdapter("hermes_gateway")).toThrow("Unknown adapter type: hermes_gateway");
   });
 
   it("exposes capability flags from registered adapters", () => {
@@ -308,19 +358,6 @@ describe("server adapter registry", () => {
     expect(await listAdapterModels("claude_local")).toEqual(builtIn?.models ?? []);
     expect(await detectAdapterModel("claude_local")).toBeNull();
     expect(detectModel).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps Hermes removable as an external-only adapter in the CN fork", async () => {
-    await waitForExternalAdapters();
-
-    unregisterServerAdapter("hermes_local");
-
-    expect(findServerAdapter("hermes_local")).toBeNull();
-    expect(findActiveServerAdapter("hermes_local")).toBeNull();
-    expect(() => requireServerAdapter("hermes_local")).toThrow(
-      "Unknown adapter type: hermes_local",
-    );
-    expect(hermesExecuteMock).not.toHaveBeenCalled();
   });
 });
 

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../lib/utils";
-import { MarkdownBody } from "./MarkdownBody";
+import { MarkdownBody, type MarkdownExternalReferenceMap } from "./MarkdownBody";
 import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "./MarkdownEditor";
 import { useAutosaveIndicator } from "../hooks/useAutosaveIndicator";
 import { FoldCurtain } from "./FoldCurtain";
@@ -22,6 +22,11 @@ interface InlineEditorProps {
   foldable?: boolean;
   /** Transforms read-only preview text without changing the saved/editable value. */
   previewTransform?: (value: string) => string;
+  /**
+   * Optional host-resolved external object metadata. Forwarded to the read-mode
+   * `MarkdownBody` so resolved URLs render with the inline status icon prefix.
+   */
+  externalReferences?: MarkdownExternalReferenceMap;
 }
 
 /** Shared padding so display and edit modes occupy the exact same box. */
@@ -59,6 +64,7 @@ export function InlineEditor({
   mentions,
   foldable = false,
   previewTransform,
+  externalReferences,
 }: InlineEditorProps) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
@@ -294,12 +300,18 @@ export function InlineEditor({
         >
           {foldable ? (
             <FoldCurtain>
-              <MarkdownBody className={cn("paperclip-edit-in-place-content", className)}>
+              <MarkdownBody
+                className={cn("paperclip-edit-in-place-content", className)}
+                externalReferences={externalReferences}
+              >
                 {renderedPreviewValue}
               </MarkdownBody>
             </FoldCurtain>
           ) : (
-            <MarkdownBody className={cn("paperclip-edit-in-place-content", className)}>
+            <MarkdownBody
+              className={cn("paperclip-edit-in-place-content", className)}
+              externalReferences={externalReferences}
+            >
               {renderedPreviewValue}
             </MarkdownBody>
           )}

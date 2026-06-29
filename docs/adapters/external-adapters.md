@@ -15,6 +15,13 @@ Paperclip supports external adapter plugins that can be installed from npm packa
 | Distribution | Ships with Paperclip | Published to npm or linked via `file:` |
 | Updates | Requires Paperclip release | Independent versioning |
 
+### Hermes plugin compatibility note
+
+Hermes adapters are distributed through the external adapter manager in this fork.
+Install a Hermes adapter package or a local `file:` path, then let the package
+declare the type key it provides, such as `hermes_local` or `hermes_gateway`.
+Core Paperclip does not depend on a built-in Hermes package.
+
 ## Quick Start
 
 ### Minimal Package Structure

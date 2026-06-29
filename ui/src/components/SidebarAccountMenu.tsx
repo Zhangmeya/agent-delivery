@@ -21,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
+import { SidebarServerInfo } from "./SidebarServerInfo";
 
 const PROFILE_SETTINGS_PATH = "/company/settings/instance/profile";
 const DOCS_URL = "https://docs.paperclip.ing/";
@@ -275,6 +276,7 @@ export function SidebarAccountMenu({
                   </span>
                 </button>
               ) : null}
+              <SidebarServerInfo />
             </div>
           </div>
         </PopoverContent>

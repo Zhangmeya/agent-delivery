@@ -1678,6 +1678,7 @@ function ConfigurationTab({
   }, [onSavingChange, isConfigSaving]);
 
   const canCreateAgents = Boolean(agent.permissions?.canCreateAgents);
+  const canCreateSkills = agent.permissions?.canCreateSkills !== false;
   const canAssignTasks = Boolean(agent.access?.canAssignTasks);
   const taskAssignSource = agent.access?.taskAssignSource ?? "none";
   const taskAssignLocked = agent.role === "ceo" || canCreateAgents;
@@ -1725,6 +1726,7 @@ function ConfigurationTab({
         onChange={(nextPermissions) =>
           updatePermissions.mutate({
             canCreateAgents,
+            canCreateSkills,
             canAssignTasks,
             ...buildPermissionsForTrustPreset(nextPermissions, nextPermissions.trustPreset === "low_trust_review" ? "low_trust_review" : "standard"),
           })
@@ -1738,7 +1740,9 @@ function ConfigurationTab({
             <div className="space-y-1">
               <div>{t("agentDetail.canCreateAgents")}</div>
               <p className="text-xs text-muted-foreground">
-                Lets this agent create or hire agents and implicitly assign tasks.
+                {t("agentDetail.canCreateAgentsDescription", {
+                  defaultValue: "Lets this agent create or hire agents. This also grants task assignment authority.",
+                })}
               </p>
             </div>
             <ToggleSwitch
@@ -1746,7 +1750,30 @@ function ConfigurationTab({
               onCheckedChange={() =>
                 updatePermissions.mutate({
                   canCreateAgents: !canCreateAgents,
+                  canCreateSkills,
                   canAssignTasks: !canCreateAgents ? true : canAssignTasks,
+                })
+              }
+              disabled={updatePermissions.isPending}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 text-sm">
+            <div className="space-y-1">
+              <div>{t("agentDetail.canCreateSkills", { defaultValue: "Can create/import skills" })}</div>
+              <p className="text-xs text-muted-foreground">
+                {t("agentDetail.canCreateSkillsDescription", {
+                  defaultValue:
+                    "Lets this agent install, import, create, and scan company skills without creating agents.",
+                })}
+              </p>
+            </div>
+            <ToggleSwitch
+              checked={canCreateSkills}
+              onCheckedChange={() =>
+                updatePermissions.mutate({
+                  canCreateAgents,
+                  canCreateSkills: !canCreateSkills,
+                  canAssignTasks,
                 })
               }
               disabled={updatePermissions.isPending}
@@ -1764,6 +1791,7 @@ function ConfigurationTab({
               onCheckedChange={() =>
                 updatePermissions.mutate({
                   canCreateAgents,
+                  canCreateSkills,
                   canAssignTasks: !canAssignTasks,
                 })
               }

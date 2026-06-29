@@ -23,11 +23,15 @@ describe("ui adapter registry", () => {
   beforeEach(() => {
     unregisterUIAdapter("external_test");
     unregisterUIAdapter("hermes_local");
+    unregisterUIAdapter("hermes_gateway");
+    syncExternalAdapters([]);
   });
 
   afterEach(() => {
     unregisterUIAdapter("external_test");
     unregisterUIAdapter("hermes_local");
+    unregisterUIAdapter("hermes_gateway");
+    syncExternalAdapters([]);
   });
 
   it("registers adapters for lookup and listing", () => {

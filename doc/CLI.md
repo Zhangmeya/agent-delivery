@@ -282,7 +282,7 @@ pnpm penclip agent local-cli <agent-id-or-shortname> --company-id <company-id>
 Agent configuration and runtime endpoints:
 
 ```sh
-pnpm penclip agent permissions:update <agent-id> --payload-json '{"canCreateAgents":true,"canAssignTasks":true}'
+pnpm penclip agent permissions:update <agent-id> --payload-json '{"canCreateAgents":true,"canCreateSkills":true,"canAssignTasks":true}'
 pnpm penclip agent configuration <agent-id>
 pnpm penclip agent config-revisions <agent-id>
 pnpm penclip agent config-revision:get <agent-id> <revision-id>
@@ -398,6 +398,11 @@ By default the command creates a `todo` issue assigned to the target agent and w
 
 Required Paperclip runtime skills (heartbeat, etc.) remain server-enforced and
 are added on top of whatever the desired set names.
+
+Company skill mutations (`skills install`, `skills import`, `skills create`, and
+`skills scan-projects`) require board authentication, an explicit `skills:create`
+grant, or an agent whose permissions keep `canCreateSkills` enabled. They do not
+require `agents:create` unless the command also creates agents.
 
 ### Catalog (app-shipped skills)
 
@@ -682,6 +687,14 @@ pnpm penclip llm agent-configuration
 pnpm penclip llm agent-configuration:adapter <adapter-type>
 pnpm penclip llm agent-icons
 ```
+
+Hermes gateway uses the generic invite/join commands above rather than
+`openclaw invite-prompt`. Create an agent invite, read
+`invite onboarding:text`, submit a join request with
+`adapterType: "hermes_gateway"` and `agentDefaultsPayload.apiBaseUrl` /
+`agentDefaultsPayload.apiKey`, then approve and claim the key with the `join`
+commands. Install a Hermes gateway adapter plugin first so the type key is
+available at runtime.
 
 ## Adapter, Asset, And Skill Commands
 

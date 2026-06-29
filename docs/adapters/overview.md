@@ -78,9 +78,10 @@ my-adapter/
 
 ## Choosing an Adapter
 
-- **Need a coding agent?** Use `claude_local`, `codex_local`, `opencode_local`, `hermes_local`, or install `droid_local` as an external plugin
+- **Need a coding agent?** Use `claude_local`, `codex_local`, `opencode_local`, or install `hermes_local`/`droid_local` as external plugins
+- **Need Hermes on another host or already running as a service?** Install a Hermes gateway adapter plugin that provides `hermes_gateway`
 - **Need to run a script or command?** Use `process`
-- **Need to call an external service?** Use `http`
+- **Need to call a custom external service?** Use `http`
 - **Need something custom?** [Create your own adapter](/adapters/creating-an-adapter) or [build an external adapter plugin](/adapters/external-adapters)
 
 ## UI Parser Contract

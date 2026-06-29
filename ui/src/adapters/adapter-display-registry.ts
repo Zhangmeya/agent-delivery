@@ -18,7 +18,6 @@ import {
 import { CodeBuddyLogoIcon } from "@/components/CodeBuddyLogoIcon";
 import { OpenCodeLogoIcon } from "@/components/OpenCodeLogoIcon";
 import { QwenLogoIcon } from "@/components/QwenLogoIcon";
-import { HermesIcon } from "@/components/HermesIcon";
 import { translateInstant } from "../i18n";
 
 // ---------------------------------------------------------------------------
@@ -95,11 +94,6 @@ const adapterDisplayMap: Record<string, AdapterDisplayInfo> = {
     label: "OpenCode",
     description: "Local multi-provider agent",
     icon: OpenCodeLogoIcon,
-  },
-  hermes_local: {
-    label: "Hermes Agent",
-    description: "Local Hermes CLI agent",
-    icon: HermesIcon,
   },
   pi_local: {
     label: "Pi",

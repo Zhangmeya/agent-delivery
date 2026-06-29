@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TranscriptEntry } from "../../adapters";
-import { translateInstant } from "../../i18n";
-import { MarkdownBody } from "../MarkdownBody";
-import { cn, formatTokens, formatUsdAmount } from "../../lib/utils";
+import { MarkdownBody, type MarkdownExternalReferenceMap } from "../MarkdownBody";
+import { cn, formatTokens } from "../../lib/utils";
 import {
   Check,
   ChevronDown,
@@ -32,6 +31,7 @@ interface RunTranscriptViewProps {
   emptyMessage?: string;
   className?: string;
   thinkingClassName?: string;
+  externalReferences?: MarkdownExternalReferenceMap;
 }
 
 type TranscriptBlock =
@@ -215,9 +215,7 @@ function summarizeToolInput(name: string, input: unknown, density: TranscriptDen
   const record = asRecord(input);
   if (!record) {
     const serialized = compactWhitespace(formatUnknown(input));
-    return serialized
-      ? truncate(serialized, compactMax)
-      : translateInstant("Inspect {{name}} input", { name, defaultValue: `Inspect ${name} input` });
+    return serialized ? truncate(serialized, compactMax) : `Inspect ${name} input`;
   }
 
   const command = typeof record.command === "string"
@@ -243,23 +241,9 @@ function summarizeToolInput(name: string, input: unknown, density: TranscriptDen
   }
 
   const keys = Object.keys(record);
-  if (keys.length === 0) {
-    return translateInstant("No {{name}} input", { name, defaultValue: `No ${name} input` });
-  }
-  if (keys.length === 1) {
-    return truncate(
-      translateInstant("{{key}} payload", { key: keys[0], defaultValue: `${keys[0]} payload` }),
-      compactMax,
-    );
-  }
-  return truncate(
-    translateInstant("{{count}} fields: {{fields}}", {
-      count: keys.length,
-      fields: keys.slice(0, 3).join(", "),
-      defaultValue: `${keys.length} fields: ${keys.slice(0, 3).join(", ")}`,
-    }),
-    compactMax,
-  );
+  if (keys.length === 0) return `No ${name} input`;
+  if (keys.length === 1) return truncate(`${keys[0]} payload`, compactMax);
+  return truncate(`${keys.length} fields: ${keys.slice(0, 3).join(", ")}`, compactMax);
 }
 
 function parseStructuredToolResult(result: string | undefined) {
@@ -301,25 +285,20 @@ function isCommandTool(name: string, input: unknown): boolean {
 }
 
 function displayToolName(name: string, input: unknown): string {
-  if (isCommandTool(name, input)) return translateInstant("Executing command");
+  if (isCommandTool(name, input)) return "Executing command";
   return humanizeLabel(name);
 }
 
 function summarizeToolResult(result: string | undefined, isError: boolean | undefined, density: TranscriptDensity): string {
-  if (!result) return isError ? translateInstant("Tool failed") : translateInstant("Waiting for result");
+  if (!result) return isError ? "Tool failed" : "Waiting for result";
   const structured = parseStructuredToolResult(result);
   if (structured) {
     if (structured.body) {
       return truncate(structured.body.split("\n")[0] ?? structured.body, density === "compact" ? 84 : 140);
     }
-    if (structured.status === "completed") return translateInstant("Completed");
+    if (structured.status === "completed") return "Completed";
     if (structured.status === "failed" || structured.status === "error") {
-      return structured.exitCode
-        ? translateInstant("Failed with exit code {{exitCode}}", {
-            exitCode: structured.exitCode,
-            defaultValue: `Failed with exit code ${structured.exitCode}`,
-          })
-        : translateInstant("Failed");
+      return structured.exitCode ? `Failed with exit code ${structured.exitCode}` : "Failed";
     }
   }
   const lines = result
@@ -335,20 +314,9 @@ function parseSystemActivity(text: string): { activityId?: string; name: string;
   if (!match) return null;
   return {
     status: match[1].toLowerCase() === "started" ? "running" : "completed",
-    name: humanizeLabel(match[2] ?? translateInstant("Activity")),
+    name: humanizeLabel(match[2] ?? "Activity"),
     activityId: match[3] || undefined,
   };
-}
-
-function translateSystemEventText(text: string): string {
-  const compact = compactWhitespace(text);
-  if (/^step started\b/i.test(compact)) {
-    return compact.replace(/^step started\b/i, translateInstant("step started"));
-  }
-  if (/^step completed\b/i.test(compact)) {
-    return compact.replace(/^step completed\b/i, translateInstant("step completed"));
-  }
-  return text;
 }
 
 function shouldHideNiceModeStderr(text: string): boolean {
@@ -532,7 +500,7 @@ export function normalizeTranscript(entries: TranscriptEntry[], streaming: boole
       blocks.push({
         type: "event",
         ts: entry.ts,
-        label: translateInstant("init"),
+        label: "init",
         tone: "info",
         text: `model ${entry.model}${entry.sessionId ? ` • session ${entry.sessionId}` : ""}`,
       });
@@ -543,12 +511,12 @@ export function normalizeTranscript(entries: TranscriptEntry[], streaming: boole
       blocks.push({
         type: "event",
         ts: entry.ts,
-        label: translateInstant("result"),
+        label: "result",
         tone: entry.isError ? "error" : "info",
-        text: entry.text.trim() || entry.errors[0] || (entry.isError ? translateInstant("Run failed") : translateInstant("Completed")),
+        text: entry.text.trim() || entry.errors[0] || (entry.isError ? "Run failed" : "Completed"),
         detail:
           !entry.isError && entry.text.trim().length > 0
-            ? `${formatTokens(entry.inputTokens)} / ${formatTokens(entry.outputTokens)} / ${formatUsdAmount(entry.costUsd, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}`
+            ? `${formatTokens(entry.inputTokens)} / ${formatTokens(entry.outputTokens)} / $${entry.costUsd.toFixed(6)}`
             : undefined,
       });
       continue;
@@ -605,14 +573,14 @@ export function normalizeTranscript(entries: TranscriptEntry[], streaming: boole
       // Batch consecutive system events into a single collapsible group
       const prev = blocks[blocks.length - 1];
       if (prev && prev.type === "system_group") {
-        prev.lines.push({ ts: entry.ts, text: translateSystemEventText(entry.text) });
+        prev.lines.push({ ts: entry.ts, text: entry.text });
         prev.endTs = entry.ts;
       } else {
         blocks.push({
           type: "system_group",
           ts: entry.ts,
           endTs: entry.ts,
-          lines: [{ ts: entry.ts, text: translateSystemEventText(entry.text) }],
+          lines: [{ ts: entry.ts, text: entry.text }],
         });
       }
       continue;
@@ -669,9 +637,11 @@ export function normalizeTranscript(entries: TranscriptEntry[], streaming: boole
 function TranscriptMessageBlock({
   block,
   density,
+  externalReferences,
 }: {
   block: Extract<TranscriptBlock, { type: "message" }>;
   density: TranscriptDensity;
+  externalReferences?: MarkdownExternalReferenceMap;
 }) {
   const isAssistant = block.role === "assistant";
   const compact = density === "compact";
@@ -681,7 +651,7 @@ function TranscriptMessageBlock({
       {!isAssistant && (
         <div className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           <User className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
-          <span>{translateInstant("User")}</span>
+          <span>User</span>
         </div>
       )}
       <MarkdownBody
@@ -689,6 +659,7 @@ function TranscriptMessageBlock({
           "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           compact ? "text-xs leading-5 text-foreground/85" : "text-sm",
         )}
+        externalReferences={externalReferences}
       >
         {block.text}
       </MarkdownBody>
@@ -698,7 +669,7 @@ function TranscriptMessageBlock({
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-70" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
           </span>
-          {translateInstant("Streaming")}
+          Streaming
         </div>
       )}
     </div>
@@ -709,10 +680,12 @@ function TranscriptThinkingBlock({
   block,
   density,
   className,
+  externalReferences,
 }: {
   block: Extract<TranscriptBlock, { type: "thinking" }>;
   density: TranscriptDensity;
   className?: string;
+  externalReferences?: MarkdownExternalReferenceMap;
 }) {
   return (
     <MarkdownBody
@@ -721,6 +694,7 @@ function TranscriptThinkingBlock({
         density === "compact" ? "text-[11px] leading-5" : "text-sm leading-6",
         className,
       )}
+      externalReferences={externalReferences}
     >
       {block.text}
     </MarkdownBody>
@@ -739,10 +713,10 @@ function TranscriptToolCard({
   const parsedResult = parseStructuredToolResult(block.result);
   const statusLabel =
     block.status === "running"
-      ? translateInstant("Running")
+      ? "Running"
       : block.status === "error"
-        ? translateInstant("Errored")
-        : translateInstant("Completed");
+        ? "Errored"
+        : "Completed";
   const statusTone =
     block.status === "running"
       ? "text-cyan-700 dark:text-cyan-300"
@@ -794,7 +768,7 @@ function TranscriptToolCard({
           type="button"
           className="mt-0.5 inline-flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
           onClick={() => setOpen((value) => !value)}
-          aria-label={open ? translateInstant("Collapse tool details") : translateInstant("Expand tool details")}
+          aria-label={open ? "Collapse tool details" : "Expand tool details"}
         >
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
@@ -805,21 +779,21 @@ function TranscriptToolCard({
             <div className={cn("grid gap-3", compact ? "grid-cols-1" : "lg:grid-cols-2")}>
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  {translateInstant("Input")}
+                  Input
                 </div>
                 <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] text-foreground/80">
-                  {formatToolPayload(block.input) || translateInstant("<empty>")}
+                  {formatToolPayload(block.input) || "<empty>"}
                 </pre>
               </div>
               <div>
                 <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  {translateInstant("Result")}
+                  Result
                 </div>
                 <pre className={cn(
                   "overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px]",
                   block.status === "error" ? "text-red-700 dark:text-red-300" : "text-foreground/80",
                 )}>
-                  {block.result ? formatToolPayload(block.result) : translateInstant("Waiting for result...")}
+                  {block.result ? formatToolPayload(block.result) : "Waiting for result..."}
                 </pre>
               </div>
             </div>
@@ -850,13 +824,10 @@ function TranscriptCommandGroup({
   const isRunning = Boolean(runningItem);
   const showExpandedErrorState = open && hasError;
   const title = isRunning
-    ? translateInstant("Executing command")
+    ? "Executing command"
     : block.items.length === 1
-      ? translateInstant("Executed command")
-      : translateInstant("Executed {{count}} commands", {
-          count: block.items.length,
-          defaultValue: `Executed ${block.items.length} commands`,
-        });
+      ? "Executed command"
+      : `Executed ${block.items.length} commands`;
   const subtitle = runningItem
     ? summarizeToolInput("command_execution", runningItem.input, density)
     : null;
@@ -909,7 +880,7 @@ function TranscriptCommandGroup({
           )}
           {!subtitle && latestItem?.status === "error" && open && (
             <div className={cn("mt-1", compact ? "text-xs" : "text-sm", statusTone)}>
-              {translateInstant("Command failed")}
+              Command failed
             </div>
           )}
         </div>
@@ -923,7 +894,7 @@ function TranscriptCommandGroup({
             event.stopPropagation();
             setOpen((value) => !value);
           }}
-          aria-label={open ? translateInstant("Collapse command details") : translateInstant("Expand command details")}
+          aria-label={open ? "Collapse command details" : "Expand command details"}
         >
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
@@ -979,25 +950,12 @@ function TranscriptToolGroup({
   const toolLabel =
     uniqueNames.length === 1
       ? humanizeLabel(uniqueNames[0])
-      : translateInstant("{{count}} tools", {
-          count: uniqueNames.length,
-          defaultValue: `${uniqueNames.length} tools`,
-        });
+      : `${uniqueNames.length} tools`;
   const title = isRunning
-    ? translateInstant("Using {{toolLabel}}", {
-        toolLabel,
-        defaultValue: `Using ${toolLabel}`,
-      })
+    ? `Using ${toolLabel}`
     : block.items.length === 1
-      ? translateInstant("Used {{toolLabel}}", {
-          toolLabel,
-          defaultValue: `Used ${toolLabel}`,
-        })
-      : translateInstant("Used {{toolLabel}} ({{count}} calls)", {
-          toolLabel,
-          count: block.items.length,
-          defaultValue: `Used ${toolLabel} (${block.items.length} calls)`,
-        });
+      ? `Used ${toolLabel}`
+      : `Used ${toolLabel} (${block.items.length} calls)`;
   const subtitle = runningItem
     ? summarizeToolInput(runningItem.name, runningItem.input, density)
     : null;
@@ -1051,7 +1009,7 @@ function TranscriptToolGroup({
           type="button"
           className={cn("inline-flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground", subtitle && "mt-0.5")}
           onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-          aria-label={open ? translateInstant("Collapse tool details") : translateInstant("Expand tool details")}
+          aria-label={open ? "Collapse tool details" : "Expand tool details"}
         >
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
@@ -1079,23 +1037,19 @@ function TranscriptToolGroup({
                   : item.status === "error" ? "text-red-700 dark:text-red-300"
                   : "text-emerald-700 dark:text-emerald-300"
                 )}>
-                  {item.status === "running"
-                    ? translateInstant("Running")
-                    : item.status === "error"
-                      ? translateInstant("Errored")
-                      : translateInstant("Completed")}
+                  {item.status === "running" ? "Running" : item.status === "error" ? "Errored" : "Completed"}
                 </span>
               </div>
               <div className={cn("grid gap-2 pl-7", compact ? "grid-cols-1" : "lg:grid-cols-2")}>
                 <div>
-                  <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{translateInstant("Input")}</div>
+                  <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Input</div>
                   <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] text-foreground/80">
-                    {formatToolPayload(item.input) || translateInstant("<empty>")}
+                    {formatToolPayload(item.input) || "<empty>"}
                   </pre>
                 </div>
                 {item.result && (
                   <div>
-                    <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{translateInstant("Result")}</div>
+                    <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Result</div>
                     <pre className={cn(
                       "overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px]",
                       item.status === "error" ? "text-red-700 dark:text-red-300" : "text-foreground/80",
@@ -1143,9 +1097,11 @@ function TranscriptActivityRow({
 function TranscriptEventRow({
   block,
   density,
+  externalReferences,
 }: {
   block: Extract<TranscriptBlock, { type: "event" }>;
   density: TranscriptDensity;
+  externalReferences?: MarkdownExternalReferenceMap;
 }) {
   const compact = density === "compact";
   const toneClasses =
@@ -1174,6 +1130,7 @@ function TranscriptEventRow({
                 "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0 text-sky-700 dark:text-sky-300",
                 compact ? "text-[11px] leading-5" : "text-xs leading-5",
               )}
+              externalReferences={externalReferences}
             >
               {block.text}
             </MarkdownBody>
@@ -1312,10 +1269,7 @@ function TranscriptStderrGroup({
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((v) => !v); } }}
       >
         <span className={cn("text-[10px] font-semibold uppercase tracking-[0.14em]")}>
-          {translateInstant("{{count}} log lines", {
-            count: block.lines.length,
-            defaultValue: `${block.lines.length} log lines`,
-          })}
+          {block.lines.length} log {block.lines.length === 1 ? "line" : "lines"}
         </span>
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
       </div>
@@ -1385,13 +1339,13 @@ function TranscriptStdoutRow({
     <div>
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-          {translateInstant("stdout")}
+          stdout
         </span>
         <button
           type="button"
           className="inline-flex h-5 w-5 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
           onClick={() => setOpen((value) => !value)}
-          aria-label={open ? translateInstant("Collapse stdout") : translateInstant("Expand stdout")}
+          aria-label={open ? "Collapse stdout" : "Expand stdout"}
         >
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
@@ -1428,7 +1382,7 @@ function rawEntryContent(entry: TranscriptEntry): string {
     return formatToolPayload(entry.content);
   }
   if (entry.kind === "result") {
-    return `${entry.text}\n${formatTokens(entry.inputTokens)} / ${formatTokens(entry.outputTokens)} / ${formatUsdAmount(entry.costUsd, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}`;
+    return `${entry.text}\n${formatTokens(entry.inputTokens)} / ${formatTokens(entry.outputTokens)} / $${entry.costUsd.toFixed(6)}`;
   }
   if (entry.kind === "init") {
     return `model=${entry.model}${entry.sessionId ? ` session=${entry.sessionId}` : ""}`;
@@ -1526,9 +1480,10 @@ export function RunTranscriptView({
   limit,
   streaming = false,
   collapseStdout = false,
-  emptyMessage = translateInstant("No transcript yet."),
+  emptyMessage = "No transcript yet.",
   className,
   thinkingClassName,
+  externalReferences,
 }: RunTranscriptViewProps) {
   const blocks = useMemo(
     () => (mode === "raw" ? [] : normalizeTranscript(entries, streaming)),
@@ -1560,9 +1515,20 @@ export function RunTranscriptView({
           key={`${block.type}-${block.ts}-${index}`}
           className={cn(index === visibleBlocks.length - 1 && streaming && "animate-in fade-in slide-in-from-bottom-1 duration-300")}
         >
-          {block.type === "message" && <TranscriptMessageBlock block={block} density={density} />}
+          {block.type === "message" && (
+            <TranscriptMessageBlock
+              block={block}
+              density={density}
+              externalReferences={externalReferences}
+            />
+          )}
           {block.type === "thinking" && (
-            <TranscriptThinkingBlock block={block} density={density} className={thinkingClassName} />
+            <TranscriptThinkingBlock
+              block={block}
+              density={density}
+              className={thinkingClassName}
+              externalReferences={externalReferences}
+            />
           )}
           {block.type === "tool" && <TranscriptToolCard block={block} density={density} />}
           {block.type === "command_group" && <TranscriptCommandGroup block={block} density={density} />}
@@ -1574,7 +1540,13 @@ export function RunTranscriptView({
             <TranscriptStdoutRow block={block} density={density} collapseByDefault={collapseStdout} />
           )}
           {block.type === "activity" && <TranscriptActivityRow block={block} density={density} />}
-          {block.type === "event" && <TranscriptEventRow block={block} density={density} />}
+          {block.type === "event" && (
+            <TranscriptEventRow
+              block={block}
+              density={density}
+              externalReferences={externalReferences}
+            />
+          )}
         </div>
       ))}
     </div>

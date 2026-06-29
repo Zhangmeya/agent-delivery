@@ -115,12 +115,14 @@ describe("adapter routes", () => {
     adapterRoutes = routes.adapterRoutes;
     errorHandler = middleware.errorHandler;
     setOverridePaused("claude_local", false);
+    unregisterServerAdapter("hermes_local");
     unregisterServerAdapter("claude_local");
     registerServerAdapter(overridingConfigSchemaAdapter);
   });
 
   afterEach(() => {
     setOverridePaused("claude_local", false);
+    unregisterServerAdapter("hermes_local");
     unregisterServerAdapter("claude_local");
   });
 
@@ -268,6 +270,28 @@ describe("adapter routes", () => {
     expect(keys).not.toContain("instructionsFilePath");
     expect(keys).not.toContain("promptTemplate");
     expect(keys).not.toContain("bootstrapPromptTemplate");
+  });
+
+  it("serves built-in Hermes config schemas", async () => {
+    const app = createApp();
+
+    const local = await request(app).get("/api/adapters/hermes_local/config-schema");
+    expect(local.status, JSON.stringify(local.body)).toBe(200);
+    expect(local.body.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "provider" }),
+        expect.objectContaining({ key: "timeoutSec" }),
+      ]),
+    );
+
+    const gateway = await request(app).get("/api/adapters/hermes_gateway/config-schema");
+    expect(gateway.status, JSON.stringify(gateway.body)).toBe(200);
+    expect(gateway.body.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "apiBaseUrl", required: true }),
+        expect.objectContaining({ key: "apiKey", required: true }),
+      ]),
+    );
   });
 
   it("GET /api/adapters includes ACPX model availability", async () => {

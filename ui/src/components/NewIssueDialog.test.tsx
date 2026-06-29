@@ -7,21 +7,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NewIssueDialog } from "./NewIssueDialog";
 
-vi.mock("react-i18next", async () => {
-  const actual = await vi.importActual<typeof import("react-i18next")>("react-i18next");
-  const enCommon = (await import("../../public/locales/en/common.json")).default as Record<string, string>;
-  return {
-    ...actual,
-    useTranslation: () => ({
-      t: (key: string, options?: Record<string, unknown>) => {
-        const template = typeof options?.defaultValue === "string" ? options.defaultValue : enCommon[key] ?? key;
-        return template.replace(/\{\{(\w+)\}\}/g, (_match, token) => String(options?.[token] ?? ""));
-      },
-      i18n: { language: "en", resolvedLanguage: "en" },
-    }),
-  };
-});
-
 const dialogState = vi.hoisted(() => ({
   newIssueOpen: true,
   newIssueDefaults: {} as Record<string, unknown>,
@@ -236,7 +221,9 @@ vi.mock("@/components/ui/toggle-switch", () => ({
 vi.mock("@/components/ui/popover", () => ({
   Popover: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   PopoverTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
-  PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  PopoverContent: ({ children, disablePortal }: { children: ReactNode; disablePortal?: boolean }) => (
+    <div data-disable-portal={String(Boolean(disablePortal))}>{children}</div>
+  ),
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -313,9 +300,16 @@ function renderDialog(container: HTMLDivElement) {
 
 describe("NewIssueDialog", () => {
   let container: HTMLDivElement;
+  let originalResizeObserver: typeof ResizeObserver | undefined;
 
   beforeEach(() => {
     vi.useRealTimers();
+    originalResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
     container = document.createElement("div");
     document.body.appendChild(container);
     dialogState.newIssueOpen = true;
@@ -352,6 +346,7 @@ describe("NewIssueDialog", () => {
   });
 
   afterEach(() => {
+    globalThis.ResizeObserver = originalResizeObserver!;
     document.body.innerHTML = "";
   });
 
@@ -367,11 +362,11 @@ describe("NewIssueDialog", () => {
     const { root } = renderDialog(container);
     await flush();
 
-    expect(container.textContent).toContain("New sub-issue");
-    expect(container.textContent).toContain("Sub-issue of");
+    expect(container.textContent).toContain("New sub-task");
+    expect(container.textContent).toContain("Sub-task of");
     expect(container.textContent).toContain("PAP-1");
     expect(container.textContent).toContain("Parent issue");
-    expect(container.textContent).toContain("Create Sub-Issue");
+    expect(container.textContent).toContain("Create Sub-Task");
 
     act(() => root.unmount());
 
@@ -379,9 +374,9 @@ describe("NewIssueDialog", () => {
     const rerendered = renderDialog(container);
     await flush();
 
-    expect(container.textContent).toContain("New issue");
-    expect(container.textContent).toContain("Create Issue");
-    expect(container.textContent).not.toContain("Sub-issue of");
+    expect(container.textContent).toContain("New task");
+    expect(container.textContent).toContain("Create Task");
+    expect(container.textContent).not.toContain("Sub-task of");
 
     act(() => rerendered.root.unmount());
   });
@@ -436,7 +431,7 @@ describe("NewIssueDialog", () => {
     expect(mockExecutionWorkspacesApi.list).not.toHaveBeenCalled();
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Sub-Issue"));
+      .find((button) => button.textContent?.includes("Create Sub-Task"));
     expect(submitButton).not.toBeUndefined();
     await waitForAssertion(() => {
       expect(submitButton?.hasAttribute("disabled")).toBe(false);
@@ -475,7 +470,7 @@ describe("NewIssueDialog", () => {
     expect(planningButton?.className).toContain("bg-accent");
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Issue"));
+      .find((button) => button.textContent?.includes("Create Task"));
     expect(submitButton).not.toBeUndefined();
     await vi.waitFor(() => {
       expect(submitButton?.hasAttribute("disabled")).toBe(false);
@@ -510,7 +505,7 @@ describe("NewIssueDialog", () => {
     expect(askButton?.className).toContain("bg-accent");
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Issue"));
+      .find((button) => button.textContent?.includes("Create Task"));
     expect(submitButton).not.toBeUndefined();
     await vi.waitFor(() => {
       expect(submitButton?.hasAttribute("disabled")).toBe(false);
@@ -581,14 +576,14 @@ describe("NewIssueDialog", () => {
     const { root } = renderDialog(container);
     await flush();
 
-    expect(container.textContent).toContain("New issue");
-    expect(container.textContent).not.toContain("New sub-issue");
+    expect(container.textContent).toContain("New task");
+    expect(container.textContent).not.toContain("New sub-task");
     await waitForAssertion(() => {
       expect(container.textContent).toContain("Reusing PAP-100");
     });
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Issue"));
+      .find((button) => button.textContent?.includes("Create Task"));
     expect(submitButton).not.toBeUndefined();
 
     await act(async () => {
@@ -613,6 +608,57 @@ describe("NewIssueDialog", () => {
     act(() => root.unmount());
   });
 
+  it("keeps the reusable workspace search popover inside the modal", async () => {
+    mockProjectsApi.list.mockResolvedValue([
+      {
+        id: "project-1",
+        name: "Alpha",
+        description: null,
+        archivedAt: null,
+        color: "#445566",
+        workspaces: [
+          {
+            id: "project-workspace-1",
+            name: "Primary",
+            isPrimary: true,
+          },
+        ],
+        executionWorkspacePolicy: {
+          enabled: true,
+          defaultMode: "shared_workspace",
+        },
+      },
+    ]);
+    mockExecutionWorkspacesApi.listSummaries.mockResolvedValue([
+      {
+        id: "workspace-1",
+        name: "PAP-11446-on-mobile-the-agent-chat",
+        mode: "isolated_workspace",
+        status: "active",
+        branchName: "PAP-11446-on-mobile-the-agent-chat",
+        cwd: "/tmp/workspace-1",
+        projectWorkspaceId: "project-workspace-1",
+        lastUsedAt: new Date("2026-04-06T16:00:00.000Z"),
+      },
+    ]);
+    mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableIsolatedWorkspaces: true });
+    dialogState.newIssueDefaults = {
+      title: "Follow-up issue",
+      projectId: "project-1",
+      executionWorkspaceId: "workspace-1",
+    };
+
+    const { root } = renderDialog(container);
+    await flush();
+
+    await waitForAssertion(() => {
+      const workspaceInput = container.querySelector('input[placeholder="Search workspaces..."]');
+      expect(workspaceInput?.closest("[data-disable-portal]")?.getAttribute("data-disable-portal")).toBe("true");
+    });
+
+    act(() => root.unmount());
+  });
+
   it("submits the latest locally typed title and description", async () => {
     let resolveProjects: (projects: Array<{
       id: string;
@@ -628,7 +674,7 @@ describe("NewIssueDialog", () => {
     const { root } = renderDialog(container);
     await flush();
 
-    const titleInput = container.querySelector('textarea[placeholder="Issue title"]') as HTMLTextAreaElement | null;
+    const titleInput = container.querySelector('textarea[placeholder="Task title"]') as HTMLTextAreaElement | null;
     const descriptionInput = container.querySelector('textarea[aria-label="Add description..."]') as HTMLTextAreaElement | null;
     expect(titleInput).not.toBeNull();
     expect(descriptionInput).not.toBeNull();
@@ -651,7 +697,7 @@ describe("NewIssueDialog", () => {
     await flush();
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Issue"));
+      .find((button) => button.textContent?.includes("Create Task"));
     expect(submitButton).not.toBeUndefined();
     await vi.waitFor(() => {
       expect(submitButton?.hasAttribute("disabled")).toBe(false);
@@ -685,7 +731,7 @@ describe("NewIssueDialog", () => {
     const { root } = renderDialog(container);
     await flush();
 
-    const titleInput = container.querySelector('textarea[placeholder="Issue title"]') as HTMLTextAreaElement | null;
+    const titleInput = container.querySelector('textarea[placeholder="Task title"]') as HTMLTextAreaElement | null;
     const descriptionInput = container.querySelector('textarea[aria-label="Add description..."]') as HTMLTextAreaElement | null;
     expect(titleInput).not.toBeNull();
     expect(descriptionInput).not.toBeNull();
@@ -694,7 +740,7 @@ describe("NewIssueDialog", () => {
     await typeTextareaValue(descriptionInput!, description);
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Issue"));
+      .find((button) => button.textContent?.includes("Create Task"));
     expect(submitButton).not.toBeUndefined();
     await vi.waitFor(() => {
       expect(submitButton?.hasAttribute("disabled")).toBe(false);
@@ -721,7 +767,7 @@ describe("NewIssueDialog", () => {
     const { root } = renderDialog(container);
     await flush();
 
-    const titleInput = container.querySelector('textarea[placeholder="Issue title"]') as HTMLTextAreaElement | null;
+    const titleInput = container.querySelector('textarea[placeholder="Task title"]') as HTMLTextAreaElement | null;
     expect(titleInput).not.toBeNull();
     await typeTextareaValue(titleInput!, "Plan this first");
 
@@ -733,7 +779,7 @@ describe("NewIssueDialog", () => {
     await flush();
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Issue"));
+      .find((button) => button.textContent?.includes("Create Task"));
     expect(submitButton).not.toBeUndefined();
     await vi.waitFor(() => {
       expect(submitButton?.hasAttribute("disabled")).toBe(false);
@@ -759,7 +805,7 @@ describe("NewIssueDialog", () => {
     const { root } = renderDialog(container);
     await flush();
 
-    const titleInput = container.querySelector('textarea[placeholder="Issue title"]') as HTMLTextAreaElement | null;
+    const titleInput = container.querySelector('textarea[placeholder="Task title"]') as HTMLTextAreaElement | null;
     expect(titleInput).not.toBeNull();
     await typeTextareaValue(titleInput!, "Answer this first");
 
@@ -771,7 +817,7 @@ describe("NewIssueDialog", () => {
     await flush();
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Issue"));
+      .find((button) => button.textContent?.includes("Create Task"));
     expect(submitButton).not.toBeUndefined();
     await vi.waitFor(() => {
       expect(submitButton?.hasAttribute("disabled")).toBe(false);
@@ -848,7 +894,7 @@ describe("NewIssueDialog", () => {
     await flush();
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Sub-Issue"));
+      .find((button) => button.textContent?.includes("Create Sub-Task"));
     expect(submitButton).not.toBeUndefined();
 
     await act(async () => {
@@ -882,12 +928,14 @@ describe("NewIssueDialog", () => {
     expect(dialogContent?.getAttribute("style")).toContain("env(safe-area-inset-top)");
     expect(dialogContent?.getAttribute("style")).toContain("env(safe-area-inset-bottom)");
 
+    const titleInput = container.querySelector('textarea[placeholder="Task title"]');
     const descriptionInput = container.querySelector('textarea[aria-label="Add description..."]');
     const bodyScrollRegion = Array.from(container.querySelectorAll("div")).find((element) =>
       typeof element.className === "string" && element.className.includes("overscroll-contain"),
     );
     expect(bodyScrollRegion?.className).toContain("flex-1");
     expect(bodyScrollRegion?.className).toContain("overflow-y-auto");
+    expect(bodyScrollRegion?.contains(titleInput ?? null)).toBe(true);
     expect(bodyScrollRegion?.contains(descriptionInput ?? null)).toBe(true);
 
     act(() => root.unmount());
@@ -988,7 +1036,7 @@ describe("NewIssueDialog", () => {
     await flush();
     await flush();
 
-    expect(container.textContent).not.toContain("will no longer use the parent issue workspace");
+    expect(container.textContent).not.toContain("will no longer use the parent task workspace");
 
     const selects = Array.from(container.querySelectorAll("select"));
     const modeSelect = selects[0] as HTMLSelectElement | undefined;
@@ -1000,7 +1048,7 @@ describe("NewIssueDialog", () => {
     });
     await flush();
 
-    expect(container.textContent).toContain("will no longer use the parent issue workspace");
+    expect(container.textContent).toContain("will no longer use the parent task workspace");
     expect(container.textContent).toContain("Parent workspace");
 
     act(() => root.unmount());
@@ -1064,7 +1112,7 @@ describe("NewIssueDialog", () => {
     expect(container.textContent).toContain("Keep it moving");
 
     const submitButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Create Issue"));
+      .find((button) => button.textContent?.includes("Create Task"));
     expect(submitButton).not.toBeUndefined();
     await vi.waitFor(() => {
       expect(submitButton?.hasAttribute("disabled")).toBe(false);
@@ -1086,52 +1134,24 @@ describe("NewIssueDialog", () => {
     act(() => root.unmount());
   });
 
-  // PAP-139/PAP-140: work-mode labels and status hues branch on the Conference
-  // Room Chat experimental flag — OFF (default) must match master exactly.
-  describe("Conference Room Chat flag parity (PAP-140)", () => {
+  describe("graduated work-mode labels and status hues", () => {
     function workModeOption(value: string) {
       return container.querySelector(`[data-issue-work-mode="${value}"]`);
     }
 
-    async function openStatusMenu() {
-      const trigger = container.querySelector('[data-testid="new-issue-status-chip"]') as HTMLButtonElement | null;
-      expect(trigger).toBeTruthy();
-      await act(async () => {
-        trigger!.click();
+    function statusOptionIconClass(label: string, description?: string) {
+      const button = Array.from(container.querySelectorAll("button")).find((candidate) => {
+        const text = candidate.textContent ?? "";
+        return (
+          candidate.querySelector("svg") !== null &&
+          text.includes(label) &&
+          (description === undefined || text.includes(description))
+        );
       });
-      await flush();
-    }
-
-    function statusOptionIconClass(value: string) {
-      const button = container.querySelector(`[data-issue-status="${value}"]`) as HTMLButtonElement | null;
       return button?.querySelector("svg")?.getAttribute("class") ?? "";
     }
 
-    it("uses master's work-mode labels and status hues when the flag is off (default)", async () => {
-      const { root } = renderDialog(container);
-      await flush();
-
-      expect(workModeOption("standard")?.textContent).toContain("Standard");
-      expect(workModeOption("standard")?.textContent).not.toContain("Agent mode");
-      expect(workModeOption("ask")?.textContent).toContain("Ask");
-      expect(workModeOption("planning")?.textContent).toContain("Planning");
-      expect(workModeOption("planning")?.textContent).not.toContain("Plan mode");
-
-      await openStatusMenu();
-
-      // Master palette: todo → blue, in_progress → yellow.
-      expect(statusOptionIconClass("todo")).toContain("text-blue-600");
-      expect(statusOptionIconClass("in_progress")).toContain("text-yellow-600");
-
-      act(() => root.unmount());
-    });
-
-    it("uses NUX work-mode labels and brand status hues when the flag is on", async () => {
-      mockInstanceSettingsApi.getExperimental.mockResolvedValue({
-        enableConferenceRoomChat: true,
-        enableIsolatedWorkspaces: false,
-      });
-
+    it("uses agent-mode labels and brand status hues by default", async () => {
       const { root } = renderDialog(container);
       await waitForAssertion(() => {
         expect(workModeOption("standard")?.textContent).toContain("Agent mode");
@@ -1141,11 +1161,8 @@ describe("NewIssueDialog", () => {
       expect(workModeOption("ask")?.textContent).toContain("Ask mode");
       expect(workModeOption("planning")?.textContent).toContain("Plan mode");
 
-      await openStatusMenu();
-
-      // PAP-75 brand palette: todo → amber, in_progress → blue.
-      expect(statusOptionIconClass("todo")).toContain("text-amber-600");
-      expect(statusOptionIconClass("in_progress")).toContain("text-blue-600");
+      expect(statusOptionIconClass("Todo", "Executable — assignee will be woken")).toContain("text-amber-600");
+      expect(statusOptionIconClass("In Progress")).toContain("text-blue-600");
 
       act(() => root.unmount());
     });
