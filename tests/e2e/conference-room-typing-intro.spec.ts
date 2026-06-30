@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { localized } from "./localized-selectors";
 
 /**
  * E2E: post-wizard onboarding launch.
@@ -56,34 +57,32 @@ test.describe("Dashboard launch after onboarding wizard", () => {
 
     // Launcher card path (existing companies) — enter the wizard if the
     // route shows a launcher instead of opening the wizard directly.
-    const startBtn = page.getByRole("button", { name: /Start Onboarding/i });
+    const startBtn = page.getByRole("button", { name: localized.startOnboarding });
     if (await startBtn.count()) await startBtn.first().click();
 
     // Step 0: front door (skipped when the wizard opens on the create path).
-    const frontDoor = page.getByText("Build a new company");
+    const frontDoor = page.getByText(localized.buildNewTeam);
     if (await frontDoor.count()) await frontDoor.first().click();
 
     // Step 1: company name.
     await page.getByPlaceholder("Acme Corp").fill(COMPANY_NAME);
-    await page.getByRole("button", { name: /^Next/ }).click();
+    await page.getByRole("button", { name: localized.next }).click();
 
     // Step 2: mission (direct path default).
     await page
-      .getByPlaceholder("What is your team trying to achieve?")
+      .getByPlaceholder(localized.missionPlaceholder)
       .fill(MISSION);
-    await page.getByRole("button", { name: /Confirm mission/ }).click();
+    await page.getByRole("button", { name: localized.confirmMission }).click();
 
     // Step 3: lead name (prefilled) → Next.
-    await page.waitForSelector('input[placeholder="Chief of staff"]', {
-      timeout: 15_000,
-    });
-    await page.getByRole("button", { name: /^Next/ }).click();
+    await page.getByPlaceholder(localized.chiefOfStaffPlaceholder).waitFor({ timeout: 15_000 });
+    await page.getByRole("button", { name: localized.next }).click();
 
     // Step 4: adapter (claude_local default); heartbeat is intercepted.
-    await page.getByRole("button", { name: /Give it a heartbeat/ }).click();
+    await page.getByRole("button", { name: localized.giveItAHeartbeat }).click();
 
     // Step 5: review → Get started creates the first task and opens dashboard.
-    const getStarted = page.getByRole("button", { name: /Get started/ });
+    const getStarted = page.getByRole("button", { name: localized.getStarted });
     await getStarted.waitFor({ timeout: 20_000 });
     await getStarted.click();
 

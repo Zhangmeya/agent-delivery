@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { localized } from "./localized-selectors";
 
 /**
  * E2E: Onboarding wizard flow (NUX Phase 2 expanded wizard).
@@ -43,37 +44,35 @@ test.describe("Onboarding wizard", () => {
     // The wizard may open on a launcher card or directly on the capsule
     // wizard; the front door (step 0) requires a click into the create path.
     const startBtn = page.getByRole("button", {
-      name: /Start Onboarding|New Company|Add Agent/,
+      name: localized.startOnboarding,
     });
     if (await startBtn.count()) {
       await startBtn.first().click();
     }
-    const createCard = page.getByRole("button", { name: /Build a new company/ });
+    const createCard = page.getByRole("button", { name: localized.buildNewTeam });
     if (await createCard.count()) {
       await createCard.first().click();
     }
 
     // Step 1 — Name your company.
     await expect(
-      page.getByRole("heading", { name: "Name your company" }),
+      page.getByRole("heading", { name: localized.nameYourTeam }),
     ).toBeVisible({ timeout: 15_000 });
     await page.getByPlaceholder("Acme Corp").fill(COMPANY_NAME);
-    await page.getByRole("button", { name: /^Next/ }).click();
+    await page.getByRole("button", { name: localized.next }).click();
 
     // Step 2 — Define your mission (direct entry is the default path).
     await expect(
-      page.getByRole("heading", { name: "Define your mission" }),
+      page.getByRole("heading", { name: localized.defineMission }),
     ).toBeVisible({ timeout: 10_000 });
     await page
-      .getByPlaceholder("What is your team trying to achieve?")
+      .getByPlaceholder(localized.missionPlaceholder)
       .fill(MISSION);
 
     // "Confirm mission" creates the company + a company-level goal, then
     // advances to the team-lead naming step of the capsule wizard.
-    await page.getByRole("button", { name: /Confirm mission/ }).click();
-    await page.waitForSelector('input[placeholder="Chief of staff"]', {
-      timeout: 30_000,
-    });
+    await page.getByRole("button", { name: localized.confirmMission }).click();
+    await page.getByPlaceholder(localized.chiefOfStaffPlaceholder).waitFor({ timeout: 30_000 });
 
     // Verify the company + company-level goal were persisted.
     const baseUrl = page.url().split("/").slice(0, 3).join("/");

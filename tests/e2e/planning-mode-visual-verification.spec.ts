@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { localized } from "./localized-selectors";
 
 const AGENT_NAME = "Chief of staff";
 const TASK_TITLE = "Hire your first engineer and create a hiring plan";
@@ -41,31 +42,32 @@ test("captures planning mode UI for desktop and mobile", async ({ page }) => {
   });
 
   await page.goto("/onboarding");
-  const startBtn = page.getByRole("button", { name: /Start Onboarding|New Company|Add Agent/ });
+  const startBtn = page.getByRole("button", { name: localized.startOnboarding });
   if (await startBtn.count()) await startBtn.first().click();
 
-  const createCard = page.getByRole("button", { name: /Build a new company/ });
+  const createCard = page.getByRole("button", { name: localized.buildNewTeam });
   if (await createCard.count()) await createCard.first().click();
 
-  await expect(page.getByRole("heading", { name: "Name your company" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: localized.nameYourTeam })).toBeVisible({ timeout: 15_000 });
 
   await page.locator('input[placeholder="Acme Corp"]').fill(companyName);
-  await page.getByRole("button", { name: /^Next/ }).click();
+  await page.getByRole("button", { name: localized.next }).click();
 
-  await expect(page.getByRole("heading", { name: "Define your mission" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: localized.defineMission })).toBeVisible({ timeout: 30_000 });
   await page
-    .getByPlaceholder("What is your team trying to achieve?")
+    .getByPlaceholder(localized.missionPlaceholder)
     .fill("Capture planning mode visual evidence for the graduated task UI.");
-  await page.getByRole("button", { name: /Confirm mission/ }).click();
+  await page.getByRole("button", { name: localized.confirmMission }).click();
 
-  await page.waitForSelector('input[placeholder="Chief of staff"]', { timeout: 30_000 });
-  await expect(page.locator('input[placeholder="Chief of staff"]')).toHaveValue(AGENT_NAME);
+  const leadNameInput = page.getByPlaceholder(localized.chiefOfStaffPlaceholder);
+  await leadNameInput.waitFor({ timeout: 30_000 });
+  await expect(leadNameInput).toHaveValue(AGENT_NAME);
 
-  await page.getByRole("button", { name: /^Next/ }).click();
-  await page.getByRole("button", { name: /Give it a heartbeat/ }).click();
+  await page.getByRole("button", { name: localized.next }).click();
+  await page.getByRole("button", { name: localized.giveItAHeartbeat }).click();
 
-  await expect(page.getByRole("heading", { name: "Review" })).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: /Get started/ }).click();
+  await expect(page.getByRole("heading", { name: localized.review })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: localized.getStarted }).click();
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 
   const baseOrigin = new URL(page.url()).origin;
@@ -107,7 +109,7 @@ test("captures planning mode UI for desktop and mobile", async ({ page }) => {
   await setMode("planning");
 
   await page.goto(issuePath);
-  await expect(page.getByText("Plan mode").first()).toBeVisible();
+  await expect(page.getByText(localized.planMode).first()).toBeVisible();
   await expect(page.getByTestId("issue-chat-composer")).toHaveAttribute("data-pending-work-mode", "planning");
   const desktopPlanningToggle = page.getByTestId("issue-chat-composer-work-mode-toggle");
   await expect(desktopPlanningToggle).toBeVisible();
@@ -141,7 +143,7 @@ test("captures planning mode UI for desktop and mobile", async ({ page }) => {
   await setMode("planning");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(issuePath);
-  await expect(page.getByText("Plan mode").first()).toBeVisible();
+  await expect(page.getByText(localized.planMode).first()).toBeVisible();
   const mobilePlanningToggle = page.getByTestId("issue-chat-composer-work-mode-toggle");
   await expect(mobilePlanningToggle).toBeVisible();
   await expect(mobilePlanningToggle).toHaveAttribute("data-pending-work-mode", "planning");

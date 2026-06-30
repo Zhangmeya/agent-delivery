@@ -1,4 +1,5 @@
 import { test, expect, request as pwRequest, type APIRequestContext, type Page } from "@playwright/test";
+import { localized } from "./localized-selectors";
 
 /**
  * E2E: Signoff execution policy flow.
@@ -237,7 +238,7 @@ async function createIssueWithPolicy(ctx: TestContext, title: string, stages?: u
 
 async function expectIssueStatusVisible(page: Page) {
   await expect(
-    page.getByRole("button", { name: /^(In review|审核中)(\s+(In review|审核中))?$/ }),
+    page.getByRole("button", { name: localized.inReviewStatusButton }),
   ).toBeVisible({ timeout: 10_000 });
 }
 
