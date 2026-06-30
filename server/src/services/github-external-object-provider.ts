@@ -1,5 +1,5 @@
-import type { Db } from "@paperclipai/db";
-import type { ExternalObjectCanonicalUrl } from "@paperclipai/shared";
+import type { Db } from "@penclipai/db";
+import type { ExternalObjectCanonicalUrl } from "@penclipai/shared";
 import { ghFetch, gitHubApiBase } from "./github-fetch.js";
 import { secretService } from "./secrets.js";
 import type {

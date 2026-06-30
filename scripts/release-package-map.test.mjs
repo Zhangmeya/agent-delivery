@@ -24,15 +24,13 @@ test("release package list only contains CI-enrolled packages", () => {
   assert.ok(enabledPackages.every((pkg) => pkg.publishFromCi === true));
 });
 
-test("Hermes release surface publishes the unified built-in package and keeps gateway as a shim", () => {
+test("release surface keeps Hermes adapters external to the CN fork", () => {
   const packages = buildReleasePackagePlan();
   const hermes = packages.find((pkg) => pkg.name === "@paperclipai/hermes-paperclip-adapter");
   const gatewayShim = packages.find((pkg) => pkg.name === "@paperclipai/adapter-hermes-gateway");
 
-  assert.equal(hermes?.dir, "packages/adapters/hermes");
-  assert.equal(hermes?.publishFromCi, true);
-  assert.equal(gatewayShim?.dir, "packages/adapters/hermes-gateway");
-  assert.equal(gatewayShim?.publishFromCi, false);
+  assert.equal(hermes, undefined);
+  assert.equal(gatewayShim, undefined);
 });
 
 test("release package configuration validates successfully", () => {

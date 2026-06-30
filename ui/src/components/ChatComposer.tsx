@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, Check, Loader2, Paperclip, Send } from "lucide-react";
 import { cn } from "../lib/utils";
 
@@ -135,6 +136,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   },
   forwardedRef,
 ) {
+  const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
@@ -254,7 +256,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         >
           <span className="inline-flex items-center gap-2">
             <Paperclip className="h-3.5 w-3.5" />
-            Drop to attach
+            {t("chatComposer.dropToAttach", { defaultValue: "Drop to attach" })}
           </span>
         </div>
       ) : null}
@@ -288,12 +290,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             const sizeLabel = formatAttachmentSize(attachment.size);
             const statusLabel =
               attachment.status === "uploading"
-                ? "Uploading…"
+                ? t("issueChat.attachmentUploadingToTask", { defaultValue: "Uploading to task" })
                 : attachment.status === "error"
-                  ? attachment.error ?? "Upload failed"
+                  ? attachment.error ?? t("issueChat.attachmentUploadFailed", { defaultValue: "Upload failed" })
                   : attachment.inline
-                    ? "Inserted inline"
-                    : "Attached";
+                    ? t("issueChat.attachmentInsertedInline", { defaultValue: "Inserted inline" })
+                    : t("issueChat.attachmentAttachedToTask", { defaultValue: "Attached to task" });
             return (
               <div
                 key={attachment.id}
@@ -342,8 +344,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
               type="button"
               onClick={triggerFilePicker}
               disabled={disabled || attaching}
-              aria-label="Attach files"
-              title="Attach files"
+              aria-label={t("chatComposer.attachFiles")}
+              title={t("chatComposer.attachFiles")}
               className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               {attaching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}

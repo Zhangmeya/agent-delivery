@@ -218,12 +218,13 @@ function InboxRootRedirect() {
 }
 
 function LegacySettingsRedirect() {
+  const { t } = useTranslation();
   const location = useLocation();
   const { companies, selectedCompany, loading } = useCompany();
   const { companyPrefix } = useParams<{ companyPrefix?: string }>();
 
   if (loading) {
-    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">Loading...</div>;
+    return <div className="mx-auto max-w-xl py-10 text-sm text-muted-foreground">{t("Loading...", { defaultValue: "Loading..." })}</div>;
   }
 
   const targetCompany =

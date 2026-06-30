@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { groupWarningsByStage, LOW_TRUST_REVIEW_PRESET } from "@paperclipai/shared";
+import { useTranslation } from "react-i18next";
+import { groupWarningsByStage, LOW_TRUST_REVIEW_PRESET } from "@penclipai/shared";
 import type {
   Agent,
   AskUserQuestionsAnswer,
@@ -19,7 +20,7 @@ import type {
   RequestCheckboxConfirmationInteraction,
   RequestConfirmationInteraction,
   SuggestTasksInteraction,
-} from "@paperclipai/shared";
+} from "@penclipai/shared";
 import { AlertTriangle, ArrowUpDown, ArrowUpRight, BookOpenText, Check, ChevronDown, ChevronRight, ChevronUp, CircleDot, Download, ExternalLink, FileText, GitBranch, Hexagon, Image as ImageIcon, Info, Layers, List, ListTree, Loader2, MessageSquare, MoreHorizontal, Package, Paperclip, Plus, Search, Settings, Trash2, X } from "lucide-react";
 import {
   DndContext,
@@ -427,6 +428,11 @@ function pipelineActivityTime(pipeline: PipelineListItem) {
 type PipelineSortField = "name" | "activity" | "review" | "inMotion" | "openItems";
 type PipelineSortDir = "asc" | "desc";
 
+function PipelineText({ k, defaultValue }: { k: string; defaultValue: string }) {
+  const { t } = useTranslation();
+  return <>{t(k, { defaultValue })}</>;
+}
+
 const PIPELINE_SORT_OPTIONS: ReadonlyArray<readonly [PipelineSortField, string]> = [
   ["name", "Name"],
   ["activity", "Last activity"],
@@ -615,6 +621,7 @@ export function PipelinesIndexTable({
   search,
   onSearchChange,
 }: PipelinesIndexTableProps) {
+  const { t } = useTranslation();
   const [collapsedPipelineIds, setCollapsedPipelineIds] = useState<Set<string>>(() => new Set());
   const [sortField, setSortField] = useState<PipelineSortField>("name");
   const [sortDir, setSortDir] = useState<PipelineSortDir>("asc");
@@ -659,12 +666,12 @@ export function PipelinesIndexTable({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 border-y border-border py-4 lg:flex-row lg:items-center lg:justify-between">
         <label className="relative block w-full max-w-md">
-          <span className="sr-only">Search pipelines</span>
+          <span className="sr-only">{t("pipelines.searchPipelines", { defaultValue: "Search pipelines" })}</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search pipelines"
+            placeholder={t("pipelines.searchPipelines", { defaultValue: "Search pipelines" })}
             className="h-10 pl-9"
           />
         </label>
@@ -680,7 +687,7 @@ export function PipelinesIndexTable({
               )}
               disabled={!connectionsAvailable}
               onClick={() => onViewModeChange("nested")}
-              title="Nested view"
+              title={t("pipelines.nestedView", { defaultValue: "Nested view" })}
             >
               <ListTree className="h-3.5 w-3.5" />
             </button>
@@ -693,7 +700,7 @@ export function PipelinesIndexTable({
                   : "text-muted-foreground hover:text-foreground",
               )}
               onClick={() => onViewModeChange("flat")}
-              title="Flat list"
+              title={t("pipelines.flatList", { defaultValue: "Flat list" })}
             >
               <List className="h-3.5 w-3.5" />
             </button>
@@ -701,7 +708,7 @@ export function PipelinesIndexTable({
 
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Sort">
+              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title={t("Sort", { defaultValue: "Sort" })}>
                 <ArrowUpDown className="h-3.5 w-3.5" />
               </Button>
             </PopoverTrigger>
@@ -730,17 +737,17 @@ export function PipelinesIndexTable({
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState icon={Hexagon} message="No pipelines match your search." />
+        <EmptyState icon={Hexagon} message={t("pipelines.noSearchMatches", { defaultValue: "No pipelines match your search." })} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[780px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                <th className="py-2 pl-3 pr-4">Name</th>
-                <th className="px-4 py-2">Attention</th>
-                <th className="px-4 py-2">Open items</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2">Last activity</th>
+                <th className="py-2 pl-3 pr-4">{t("pipelines.name", { defaultValue: "Name" })}</th>
+                <th className="px-4 py-2">{t("pipelines.attention", { defaultValue: "Attention" })}</th>
+                <th className="px-4 py-2">{t("pipelines.openItems", { defaultValue: "Open items" })}</th>
+                <th className="px-4 py-2">{t("pipelines.status", { defaultValue: "Status" })}</th>
+                <th className="px-4 py-2">{t("pipelines.lastActivity", { defaultValue: "Last activity" })}</th>
               </tr>
             </thead>
             <tbody>
@@ -830,6 +837,7 @@ function NewPipelineDialog({
   pending: boolean;
   error: string | null;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
@@ -852,16 +860,18 @@ function NewPipelineDialog({
       <DialogContent>
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
-            <DialogTitle>New pipeline</DialogTitle>
-            <DialogDescription>Name the pipeline and add a short description.</DialogDescription>
+            <DialogTitle>{t("pipelines.newPipeline", { defaultValue: "New pipeline" })}</DialogTitle>
+            <DialogDescription>
+              {t("pipelines.newPipelineDescription", { defaultValue: "Name the pipeline and add a short description." })}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <label className="block space-y-1.5 text-sm font-medium">
-              <span>Name</span>
+              <span>{t("pipelines.name", { defaultValue: "Name" })}</span>
               <Input value={name} onChange={(event) => setName(event.target.value)} autoFocus />
             </label>
             <label className="block space-y-1.5 text-sm font-medium">
-              <span>Description</span>
+              <span>{t("pipelines.description", { defaultValue: "Description" })}</span>
               <Textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
@@ -895,6 +905,7 @@ export function pipelineKeyFromName(name: string) {
 }
 
 function PipelinesIndex() {
+  const { t } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const navigate = useNavigate();
@@ -903,7 +914,7 @@ function PipelinesIndex() {
   const [viewMode, setViewMode] = useState<PipelineViewMode>("nested");
   const [newPipelineOpen, setNewPipelineOpen] = useState(false);
 
-  useEffect(() => setBreadcrumbs([{ label: "Pipelines" }]), [setBreadcrumbs]);
+  useEffect(() => setBreadcrumbs([{ label: t("pipelines.title", { defaultValue: "Pipelines" }) }]), [setBreadcrumbs, t]);
 
   const pipelinesQuery = useQuery({
     queryKey: selectedCompanyId ? queryKeys.pipelines.list(selectedCompanyId) : ["pipelines", "missing-company"],
@@ -939,7 +950,7 @@ function PipelinesIndex() {
   });
 
   if (!selectedCompanyId) {
-    return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground">Select a company to view pipelines.</div>;
+    return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground">{t("pipelines.selectCompany", { defaultValue: "Select a company to view pipelines." })}</div>;
   }
   if (pipelinesQuery.isLoading) return <PageSkeleton />;
 
@@ -950,27 +961,31 @@ function PipelinesIndex() {
     <div className="w-full max-w-6xl px-6 py-8">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Work</p>
-          <h1 className="text-2xl font-semibold text-foreground">Pipelines</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t("pipelines.work", { defaultValue: "Work" })}</p>
+          <h1 className="text-2xl font-semibold text-foreground">{t("pipelines.title", { defaultValue: "Pipelines" })}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {formatNumber(pipelines.length)} pipeline{pipelines.length === 1 ? "" : "s"}. Connected ones are grouped from upstream work into downstream work.
+            {t("pipelines.indexSummary", {
+              defaultValue: "{{count}} pipeline. Connected ones are grouped from upstream work into downstream work.",
+              count: pipelines.length,
+              formattedCount: formatNumber(pipelines.length),
+            })}
           </p>
         </div>
         <Button onClick={() => setNewPipelineOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          New pipeline
+          {t("pipelines.newPipeline", { defaultValue: "New pipeline" })}
         </Button>
       </div>
 
       {pipelinesQuery.error ? (
-        <p className="mb-4 text-sm text-destructive">Could not load pipelines.</p>
+        <p className="mb-4 text-sm text-destructive">{t("pipelines.loadFailed", { defaultValue: "Could not load pipelines." })}</p>
       ) : null}
 
       {pipelines.length === 0 && !pipelinesQuery.error ? (
         <EmptyState
           icon={Hexagon}
-          message="No pipelines yet."
-          action="New pipeline"
+          message={t("pipelines.empty", { defaultValue: "No pipelines yet." })}
+          action={t("pipelines.newPipeline", { defaultValue: "New pipeline" })}
           onAction={() => setNewPipelineOpen(true)}
         />
       ) : (
@@ -1420,6 +1435,7 @@ function PipelineBoardColumn({
 }
 
 function PipelineBoard({ pipelineId }: { pipelineId: string }) {
+  const { t } = useTranslation();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { pushToast } = useToastActions();
   const { selectedCompanyId } = useCompany();
@@ -1689,10 +1705,10 @@ function PipelineBoard({ pipelineId }: { pipelineId: string }) {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: "Pipelines", href: "/pipelines" },
-      { label: pipeline?.name ?? "Pipeline" },
+      { label: t("pipelines.title", { defaultValue: "Pipelines" }), href: "/pipelines" },
+      { label: pipeline?.name ?? t("pipelines.pipeline", { defaultValue: "Pipeline" }) },
     ]);
-  }, [pipeline?.name, setBreadcrumbs]);
+  }, [pipeline?.name, setBreadcrumbs, t]);
 
   useEffect(() => {
     setGroupByState({ pipelineId, value: readStoredPipelineBoardGroupBy(pipelineId) });
@@ -1700,21 +1716,21 @@ function PipelineBoard({ pipelineId }: { pipelineId: string }) {
 
   if (pipelineQuery.isLoading || casesQuery.isLoading) return <PageSkeleton />;
   if (!pipeline) {
-    return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground">Pipeline not found.</div>;
+    return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground">{t("pipelines.notFound", { defaultValue: "Pipeline not found." })}</div>;
   }
 
   if (orderedStages.length === 0) {
     return (
       <div className="mx-auto max-w-6xl space-y-4 px-6 py-8">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pipeline</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t("pipelines.pipeline", { defaultValue: "Pipeline" })}</p>
           <h1 className="text-2xl font-semibold text-foreground">{pipeline.name}</h1>
-          <p className="text-sm text-muted-foreground">No stages are set up for this pipeline yet.</p>
+          <p className="text-sm text-muted-foreground">{t("pipelines.noStages", { defaultValue: "No stages are set up for this pipeline yet." })}</p>
         </div>
         <EmptyState
           icon={Hexagon}
-          message="Add stages in pipeline settings to enable the board."
-          action="Open settings"
+          message={t("pipelines.addStagesToEnableBoard", { defaultValue: "Add stages in pipeline settings to enable the board." })}
+          action={t("pipelines.openSettings", { defaultValue: "Open settings" })}
           onAction={() => navigate(`/pipelines/${pipelineId}/settings`)}
         />
       </div>
@@ -1727,10 +1743,12 @@ function PipelineBoard({ pipelineId }: { pipelineId: string }) {
     <div className="w-full space-y-4 px-6 py-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Pipeline</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t("pipelines.pipeline", { defaultValue: "Pipeline" })}</p>
           <h1 className="text-2xl font-semibold text-foreground">{pipeline.name}</h1>
           {pipeline.description ? <p className="mt-1 text-sm text-muted-foreground">{pipeline.description}</p> : null}
-          <p className="mt-1 text-xs text-muted-foreground">{cases.length} total item{cases.length === 1 ? "" : "s"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("pipelines.totalItems", { defaultValue: "{{count}} total item", count: cases.length, formattedCount: formatNumber(cases.length) })}
+          </p>
           {fedByPipelines.length > 0 ? (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {fedByPipelines.map((source) => (
@@ -1738,10 +1756,10 @@ function PipelineBoard({ pipelineId }: { pipelineId: string }) {
                   key={source.id}
                   to={`/pipelines/${source.id}`}
                   className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-                  title={`Fed by ${source.name}`}
+                  title={t("pipelines.fedByName", { defaultValue: "Fed by {{name}}", name: source.name })}
                 >
                   <span className="shrink-0">←</span>
-                  <span className="truncate">Fed by {source.name}</span>
+                  <span className="truncate">{t("pipelines.fedByName", { defaultValue: "Fed by {{name}}", name: source.name })}</span>
                 </Link>
               ))}
             </div>
@@ -1749,23 +1767,27 @@ function PipelineBoard({ pipelineId }: { pipelineId: string }) {
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
           <Select value={groupBy} onValueChange={handleGroupByChange}>
-            <SelectTrigger className="h-9 w-[148px]" aria-label="Group by" title="Group by">
+            <SelectTrigger className="h-9 w-[148px]" aria-label={t("pipelines.groupBy", { defaultValue: "Group by" })} title={t("pipelines.groupBy", { defaultValue: "Group by" })}>
               <Layers className="h-4 w-4 text-muted-foreground" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              <SelectItem value="builtFor">Built for</SelectItem>
+              <SelectItem value="none">{t("None", { defaultValue: "None" })}</SelectItem>
+              <SelectItem value="builtFor">{t("pipelines.builtFor", { defaultValue: "Built for" })}</SelectItem>
             </SelectContent>
           </Select>
           <Button asChild>
             <Link to={`/pipelines/${pipelineId}/add`}>
               <Plus className="mr-2 h-4 w-4" />
-              Add items
+              {t("pipelines.addItems", { defaultValue: "Add items" })}
             </Link>
           </Button>
           <Button variant="outline" size="icon" asChild>
-            <Link to={`/pipelines/${pipelineId}/settings`} aria-label="Pipeline settings" title="Pipeline settings">
+            <Link
+              to={`/pipelines/${pipelineId}/settings`}
+              aria-label={t("pipelines.openSettings", { defaultValue: "Open settings" })}
+              title={t("pipelines.openSettings", { defaultValue: "Open settings" })}
+            >
               <Settings className="h-4 w-4" />
             </Link>
           </Button>
@@ -1859,12 +1881,12 @@ function PipelineBoard({ pipelineId }: { pipelineId: string }) {
           </DialogHeader>
           {pendingMove && !pendingMove.allowed ? (
             <label className="block space-y-1.5 text-sm font-medium">
-              <span>Reason</span>
+              <span><PipelineText k="pipelines.reason" defaultValue="Reason" /></span>
               <Textarea
                 value={overrideReason}
                 onChange={(event) => setOverrideReason(event.target.value)}
                 rows={3}
-                placeholder="Explain why this item should skip the normal flow."
+                placeholder={t("pipelines.skipReasonPlaceholder", { defaultValue: "Explain why this item should skip the normal flow." })}
                 autoFocus
               />
             </label>
@@ -1931,7 +1953,7 @@ function NavigateToItem({ pipelineId, caseId }: { pipelineId: string; caseId: st
 }
 
 function NavigateMissingItem() {
-  return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground">Item not found.</div>;
+  return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground"><PipelineText k="pipelines.itemNotFound" defaultValue="Item not found." /></div>;
 }
 
 function LinkRedirect({ to }: { to: string }) {
@@ -1949,6 +1971,7 @@ export function PipelineItemDetail() {
 }
 
 export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: string; caseId: string }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -2718,7 +2741,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
 
   if (pipeline.isLoading || item.isLoading) return <PageSkeleton />;
   if (!detail || !pipeline.data) {
-    return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground">Item not found.</div>;
+    return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground"><PipelineText k="pipelines.itemNotFound" defaultValue="Item not found." /></div>;
   }
 
   const workReferences = extractWorkReferences(detail.case);
@@ -2759,14 +2782,16 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
         <Button asChild>
           <Link to={conversationIssuePath!} state={conversationIssueState} issuePrefetch={conversationIssueDetail.data ?? null}>
             <MessageSquare className="mr-2 h-4 w-4" />
-            Open conversation
+            {t("pipelines.openConversation", { defaultValue: "Open conversation" })}
           </Link>
         </Button>
       )
     : (
         <Button onClick={() => startConversation.mutate()} disabled={startConversation.isPending}>
           <MessageSquare className="mr-2 h-4 w-4" />
-          {startConversation.isPending ? "Starting..." : "Start a conversation"}
+          {startConversation.isPending
+            ? t("pipelines.startingConversation", { defaultValue: "Starting..." })
+            : t("pipelines.startConversation", { defaultValue: "Start a conversation" })}
         </Button>
       );
   const reviewPanel = detail.stage.kind === "review" && reviewConfig ? (
@@ -2787,7 +2812,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
       <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-8">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <Link to="/pipelines" className="hover:text-foreground">Pipelines</Link>
+            <Link to="/pipelines" className="hover:text-foreground"><PipelineText k="pipelines.title" defaultValue="Pipelines" /></Link>
             <ChevronRight className="h-3.5 w-3.5" />
             <Link to={`/pipelines/${pipelineId}`} className="hover:text-foreground">{pipeline.data.name}</Link>
           </div>
@@ -2835,7 +2860,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
             {primaryAction}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" aria-label="Item actions">
+                <Button variant="outline" size="icon" aria-label={t("pipelines.itemActions", { defaultValue: "Item actions" })}>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -2904,7 +2929,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
       <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Move to stage</DialogTitle>
+            <DialogTitle><PipelineText k="pipelines.moveToStage" defaultValue="Move to stage" /></DialogTitle>
             <DialogDescription>
               Manual moves can bypass the normal agent handoff for this item. Let automation move work when possible;
               use this override only when the board needs to correct the item state.
@@ -2921,10 +2946,10 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
               </div>
             </div>
             <label className="block space-y-2">
-              <span className="text-sm font-medium text-foreground">Stage</span>
+              <span className="text-sm font-medium text-foreground"><PipelineText k="pipelines.stage" defaultValue="Stage" /></span>
               <Select value={moveStageKey} onValueChange={setMoveStageKey}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Choose a stage" />
+                  <SelectValue placeholder={t("pipelines.chooseStage", { defaultValue: "Choose a stage" })} />
                 </SelectTrigger>
                 <SelectContent>
                   {moveStageOptions.map((stage) => (
@@ -2984,18 +3009,18 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
             <div className="space-y-4 py-2">
               <div className="grid gap-3 text-sm sm:grid-cols-2">
                 <div>
-                  <div className="text-xs font-medium uppercase text-muted-foreground">From</div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground"><PipelineText k="pipelines.from" defaultValue="From" /></div>
                   <div className="mt-1 font-medium text-foreground">{retryPlan.data.currentStage.name}</div>
                 </div>
                 <div>
-                  <div id="retry-runs-at-label" className="text-xs font-medium uppercase text-muted-foreground">Runs at</div>
+                  <div id="retry-runs-at-label" className="text-xs font-medium uppercase text-muted-foreground"><PipelineText k="pipelines.runsAt" defaultValue="Runs at" /></div>
                   {retryShowTargetDropdown ? (
                     <Select
                       value={retrySelectedTargetId}
                       onValueChange={(value) => setRetryTargetStageId(value)}
                     >
                       <SelectTrigger className="mt-1 w-full" aria-labelledby="retry-runs-at-label">
-                        <SelectValue placeholder="Choose a step" />
+                        <SelectValue placeholder={t("pipelines.chooseStep", { defaultValue: "Choose a step" })} />
                       </SelectTrigger>
                       <SelectContent>
                         {retryAvailableTargets.map((stage) => (
@@ -3010,7 +3035,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                   )}
                 </div>
                 <div className="sm:col-span-2">
-                  <div className="text-xs font-medium uppercase text-muted-foreground">Automation</div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground"><PipelineText k="pipelines.automation" defaultValue="Automation" /></div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-foreground">
                     {retryPlan.data.routine ? (
                       <>
@@ -3029,7 +3054,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                             {retryPlan.data.routine.assigneeAgent.name}
                           </Link>
                         ) : (
-                          <span className="font-medium text-muted-foreground">No assignee</span>
+                          <span className="font-medium text-muted-foreground"><PipelineText k="pipelines.noAssignee" defaultValue="No assignee" /></span>
                         )}
                       </>
                     ) : (
@@ -3165,7 +3190,9 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
       {banner.visible ? (
         <section className="mb-5 flex flex-col gap-3 border-y border-border bg-muted/20 py-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">Ready to move to {banner.stageName}?</h2>
+            <h2 className="text-sm font-semibold text-foreground">
+              {t("pipelines.readyToMoveToStage", { stage: banner.stageName, defaultValue: "Ready to move to {{stage}}?" })}
+            </h2>
             {banner.rationale ? <p className="mt-1 text-sm text-muted-foreground">{banner.rationale}</p> : null}
           </div>
           {banner.suggestionId ? (
@@ -3176,7 +3203,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                 disabled={resolveSuggestion.isPending}
               >
                 <Check className="mr-2 h-4 w-4" />
-                Approve
+                {t("common.approve", { defaultValue: "Approve" })}
               </Button>
               <Button
                 size="sm"
@@ -3185,7 +3212,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                 disabled={resolveSuggestion.isPending}
               >
                 <X className="mr-2 h-4 w-4" />
-                Not yet
+                {t("pipelines.notYet", { defaultValue: "Not yet" })}
               </Button>
             </div>
           ) : null}
@@ -3207,19 +3234,35 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
             onClick={() => acknowledgeChange.mutate()}
             disabled={acknowledgeChange.isPending}
           >
-            Acknowledge
+            {t("common.acknowledge", { defaultValue: "Acknowledge" })}
           </Button>
         </section>
       ) : null}
 
       {(childrenGate || (breakdown?.waitForPieces ?? false)) && waitingChildren.length > 0 ? (
-        <section aria-label="Waiting child items" className="mb-5 border-y border-border px-4 py-4">
+        <section
+          aria-label={t("pipelines.waitingChildItems", { defaultValue: "Waiting child items" })}
+          className="mb-5 border-y border-border px-4 py-4"
+        >
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <ListTree className="h-4 w-4 text-muted-foreground" />
               {breakdown
-                ? `Waiting on ${waitingChildren.length} of ${pieceCountTotal} ${pieceLabel(pieceCountTotal)} · ${pieceCountDone} finished`
-                : `Waiting on ${waitingChildren.length} of ${pieceCountTotal} child ${pieceCountTotal === 1 ? "item" : "items"}`}
+                ? t("pipelines.waitingOnPieces", {
+                  waiting: waitingChildren.length,
+                  total: pieceCountTotal,
+                  label: pieceLabel(pieceCountTotal),
+                  done: pieceCountDone,
+                  defaultValue: "Waiting on {{waiting}} of {{total}} {{label}} · {{done}} finished",
+                })
+                : t("pipelines.waitingOnChildItems", {
+                  waiting: waitingChildren.length,
+                  total: pieceCountTotal,
+                  label: pieceCountTotal === 1
+                    ? t("pipelines.childItem", { defaultValue: "child item" })
+                    : t("pipelines.childItems", { defaultValue: "child items" }),
+                  defaultValue: "Waiting on {{waiting}} of {{total}} {{label}}",
+                })}
             </div>
             <ul className="divide-y divide-border">
               {waitingChildren.map((row) => (
@@ -3251,9 +3294,13 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
             <details className="group rounded-md border border-border">
               <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-90" />
-                More details
+                {t("pipelines.moreDetails", { defaultValue: "More details" })}
                 <span className="text-[11px] font-normal text-muted-foreground">
-                  {mainPaneFields.length} {mainPaneFields.length === 1 ? "field" : "fields"}
+                  {t("pipelines.fieldCount", {
+                    count: mainPaneFields.length,
+                    defaultValue: "{{count}} field",
+                    defaultValue_plural: "{{count}} fields",
+                  })}
                 </span>
               </summary>
               <div className="space-y-5 border-t border-border px-3 py-3">
@@ -3278,7 +3325,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
             onRetry={() => outputs.refetch()}
           />
 
-          <DetailSection title="Conversation">
+          <DetailSection title={t("pipelines.conversation", { defaultValue: "Conversation" })}>
             {activeConversationIssue ? (
               <div className="py-3">
                 <IssueChatThread
@@ -3333,10 +3380,12 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
               </div>
             ) : (
               <div className="flex flex-col items-start gap-3 py-3 text-sm text-muted-foreground">
-                <p>No active conversation yet.</p>
+                <p><PipelineText k="pipelines.noActiveConversation" defaultValue="No active conversation yet." /></p>
                 <Button size="sm" variant="outline" onClick={() => startConversation.mutate()} disabled={startConversation.isPending}>
                   <MessageSquare className="mr-2 h-4 w-4" />
-                  {startConversation.isPending ? "Starting..." : "Start a conversation"}
+                  {startConversation.isPending
+                    ? t("pipelines.startingConversation", { defaultValue: "Starting..." })
+                    : t("pipelines.startConversation", { defaultValue: "Start a conversation" })}
                 </Button>
               </div>
             )}
@@ -3346,7 +3395,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
         <aside className="min-w-0 space-y-8">
           {reviewPanel}
 
-          <DetailSection title="Linked work">
+          <DetailSection title={t("pipelines.linkedWork", { defaultValue: "Linked work" })}>
             <PipelineWorkReferences references={workReferences} />
           </DetailSection>
 
@@ -3354,19 +3403,40 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
             title={
               breakdown
                 ? pieceCountTotal > 0
-                  ? `Built from ${pieceCountTotal} ${pieceLabel(pieceCountTotal)}`
-                  : `No ${pieceNounPluralLabel} needed`
-                : `Built from ${pieceCountTotal} ${pieceCountTotal === 1 ? "item" : "items"}`
+                  ? t("pipelines.builtFromPieces", {
+                    count: pieceCountTotal,
+                    label: pieceLabel(pieceCountTotal),
+                    defaultValue: "Built from {{count}} {{label}}",
+                  })
+                  : t("pipelines.noPiecesNeeded", {
+                    label: pieceNounPluralLabel,
+                    defaultValue: "No {{label}} needed",
+                  })
+                : t("pipelines.builtFromItems", {
+                  count: pieceCountTotal,
+                  label: pieceCountTotal === 1
+                    ? t("pipelines.item", { defaultValue: "item" })
+                    : t("pipelines.items", { defaultValue: "items" }),
+                  defaultValue: "Built from {{count}} {{label}}",
+                })
             }
           >
             {breakdown && pieceCountTotal > 0 ? (
               <p className="py-2 text-sm text-muted-foreground">
-                {pieceCountDone} of {pieceCountTotal} {pieceLabel(pieceCountTotal)} finished
+                {t("pipelines.piecesFinished", {
+                  done: pieceCountDone,
+                  total: pieceCountTotal,
+                  label: pieceLabel(pieceCountTotal),
+                  defaultValue: "{{done}} of {{total}} {{label}} finished",
+                })}
               </p>
             ) : null}
             {breakdown && pieceCountTotal === 0 ? (
               <p className="py-2 text-sm text-muted-foreground">
-                Nothing was worth splitting — this case moved straight ahead without creating any {pieceNounPluralLabel}.
+                {t("pipelines.noSplitNeeded", {
+                  label: pieceNounPluralLabel,
+                  defaultValue: "Nothing was worth splitting - this case moved straight ahead without creating any {{label}}.",
+                })}
               </p>
             ) : (
               <BuiltFromTree rows={childRows} />
@@ -3376,12 +3446,15 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                 to={`/pipelines/${breakdown.targetPipelineId}`}
                 className="mt-2 inline-block text-sm font-medium text-foreground hover:underline"
               >
-                Open all {pieceNounPluralLabel} →
+                {t("pipelines.openAllPieces", {
+                  label: pieceNounPluralLabel,
+                  defaultValue: "Open all {{label}} ->",
+                })}
               </Link>
             ) : null}
           </DetailSection>
 
-          <DetailSection title="Details">
+          <DetailSection title={t("pipelines.details", { defaultValue: "Details" })}>
             {itemFields.length > 0 ? (
               <dl className="divide-y divide-border">
                 {itemFields.map((field) => (
@@ -3392,11 +3465,11 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                 ))}
               </dl>
             ) : (
-              <p className="py-3 text-sm text-muted-foreground">No added details.</p>
+              <p className="py-3 text-sm text-muted-foreground"><PipelineText k="pipelines.noAddedDetails" defaultValue="No added details." /></p>
             )}
           </DetailSection>
 
-          <DetailSection title="Activity">
+          <DetailSection title={t("pipelines.activity", { defaultValue: "Activity" })}>
             {eventRows.length > 0 ? (
               <ol className="divide-y divide-border">
                 {eventRows.map((event) => (
@@ -3409,7 +3482,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                 ))}
               </ol>
             ) : (
-              <p className="py-3 text-sm text-muted-foreground">No activity yet.</p>
+              <p className="py-3 text-sm text-muted-foreground"><PipelineText k="pipelines.noActivity" defaultValue="No activity yet." /></p>
             )}
           </DetailSection>
         </aside>
@@ -3418,13 +3491,13 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
       <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove item</DialogTitle>
+            <DialogTitle><PipelineText k="pipelines.removeItem" defaultValue="Remove item" /></DialogTitle>
             <DialogDescription>
               This moves the item out of active work. It stays visible in the pipeline history.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRemoveDialogOpen(false)}>Keep item</Button>
+            <Button variant="outline" onClick={() => setRemoveDialogOpen(false)}><PipelineText k="pipelines.keepItem" defaultValue="Keep item" /></Button>
             <Button variant="destructive" onClick={() => removeItem.mutate()} disabled={removeItem.isPending || !removeStage}>
               {removeItem.isPending ? "Removing..." : "Remove item"}
             </Button>
@@ -3643,13 +3716,13 @@ function ReviewDecisionPanel({
 
   return (
     <section>
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Review</h2>
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"><PipelineText k="pipelines.review" defaultValue="Review" /></h2>
       <div className="border-y border-amber-300 bg-amber-50/70 p-5 text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100 sm:p-6">
         <div className="space-y-5">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-1 h-5 w-5 shrink-0" />
             <div>
-              <p className="text-2xl font-semibold leading-tight">In review</p>
+              <p className="text-2xl font-semibold leading-tight"><PipelineText k="pipelines.inReview" defaultValue="In review" /></p>
               <p className="mt-1 text-sm opacity-80">
                 Decide where this item goes next.
               </p>
@@ -3657,7 +3730,7 @@ function ReviewDecisionPanel({
           </div>
 
           <label className="block space-y-1.5 text-sm font-medium">
-            <span>Reason</span>
+            <span><PipelineText k="pipelines.reason" defaultValue="Reason" /></span>
             <Textarea
               value={note}
               onChange={(event) => onNoteChange(event.target.value)}
@@ -3704,7 +3777,7 @@ function ReviewDecisionPanel({
               Next in this review queue: <span className="font-medium">{nextItemTitle}</span>
             </p>
           ) : (
-            <p className="text-xs opacity-75">No other item is waiting in this pipeline review queue.</p>
+            <p className="text-xs opacity-75"><PipelineText k="pipelines.noOtherReviewItem" defaultValue="No other item is waiting in this pipeline review queue." /></p>
           )}
         </div>
       </div>
@@ -3904,6 +3977,7 @@ function ItemOutputMeta({ item, children }: { item: PipelineCaseOutputItem; chil
 }
 
 function ItemOutputDocumentRow({ item }: { item: PipelineCaseDocumentOutputItem }) {
+  const { t } = useTranslation();
   const deliverable = deliverableDocumentLabel(item);
   const lowTrust = isLowTrustOutput(item);
   const href = documentAnchorPath(item);
@@ -3926,8 +4000,8 @@ function ItemOutputDocumentRow({ item }: { item: PipelineCaseDocumentOutputItem 
       <Link
         to={href}
         className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-        aria-label={`Open ${item.title}`}
-        title="Open document"
+        aria-label={t("pipelines.openNamedItem", { defaultValue: "Open {{name}}", name: item.title })}
+        title={t("pipelines.openDocument", { defaultValue: "Open document" })}
       >
         <ArrowUpRight className="h-4 w-4" />
       </Link>
@@ -3936,6 +4010,7 @@ function ItemOutputDocumentRow({ item }: { item: PipelineCaseDocumentOutputItem 
 }
 
 function ItemOutputWorkProductRow({ item }: { item: PipelineCaseWorkProductOutputItem }) {
+  const { t } = useTranslation();
   const lowTrust = isLowTrustOutput(item);
   const href = item.url ?? issueDetailPath({ id: item.sourceIssueId, identifier: item.sourceIssueIdentifier });
   return (
@@ -3954,8 +4029,8 @@ function ItemOutputWorkProductRow({ item }: { item: PipelineCaseWorkProductOutpu
       <OutputLink
         to={href}
         className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-        ariaLabel={`Open ${item.title}`}
-        title="Open work product"
+        ariaLabel={t("pipelines.openNamedItem", { defaultValue: "Open {{name}}", name: item.title })}
+        title={t("pipelines.openWorkProduct", { defaultValue: "Open work product" })}
       >
         <ArrowUpRight className="h-4 w-4" />
       </OutputLink>
@@ -3964,6 +4039,7 @@ function ItemOutputWorkProductRow({ item }: { item: PipelineCaseWorkProductOutpu
 }
 
 function ItemOutputAttachmentRow({ item }: { item: PipelineCaseAttachmentOutputItem }) {
+  const { t } = useTranslation();
   const filename = item.filename ?? item.title ?? "Attachment";
   const isImage = item.contentType?.startsWith("image/");
   return (
@@ -3977,7 +4053,7 @@ function ItemOutputAttachmentRow({ item }: { item: PipelineCaseAttachmentOutputI
           target="_blank"
           rel="noreferrer"
           className="mt-0.5 block h-[30px] w-10 shrink-0 overflow-hidden rounded-sm border border-border bg-accent/10"
-          aria-label={`Open ${filename}`}
+          aria-label={t("pipelines.openNamedItem", { defaultValue: "Open {{name}}", name: filename })}
         >
           <img src={item.contentPath} alt={filename} className="h-full w-full object-cover" loading="lazy" />
         </a>
@@ -4007,16 +4083,16 @@ function ItemOutputAttachmentRow({ item }: { item: PipelineCaseAttachmentOutputI
           target="_blank"
           rel="noreferrer"
           className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label={`Open ${filename}`}
-          title="Open"
+          aria-label={t("pipelines.openNamedItem", { defaultValue: "Open {{name}}", name: filename })}
+          title={t("common.open", { defaultValue: "Open" })}
         >
           <ArrowUpRight className="h-4 w-4" />
         </a>
         <a
           href={item.downloadPath}
           className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label={`Download ${filename}`}
-          title="Download"
+          aria-label={t("pipelines.downloadNamedItem", { defaultValue: "Download {{name}}", name: filename })}
+          title={t("common.download", { defaultValue: "Download" })}
         >
           <Download className="h-4 w-4" />
         </a>
@@ -4036,6 +4112,7 @@ function ItemOutputsSection({
   error: boolean;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation();
   if (!loading && !error && items.length === 0) return null;
 
   const documents = items.filter((item): item is PipelineCaseDocumentOutputItem => item.kind === "document");
@@ -4046,7 +4123,7 @@ function ItemOutputsSection({
   if (documents.length > 0) {
     groups.push({
       key: "document",
-      label: "Documents",
+      label: t("newIssue.documents", { defaultValue: "Documents" }),
       icon: <FileText className="h-4 w-4 text-muted-foreground" />,
       rows: documents.map((item) => <ItemOutputDocumentRow key={item.id} item={item} />),
     });
@@ -4054,7 +4131,7 @@ function ItemOutputsSection({
   if (workProducts.length > 0) {
     groups.push({
       key: "work_product",
-      label: "Work products",
+      label: t("pipelines.workProducts", { defaultValue: "Work products" }),
       icon: <Package className="h-4 w-4 text-muted-foreground" />,
       rows: workProducts.map((item) => <ItemOutputWorkProductRow key={item.id} item={item} />),
     });
@@ -4062,7 +4139,7 @@ function ItemOutputsSection({
   if (attachments.length > 0) {
     groups.push({
       key: "attachment",
-      label: "Attachments",
+      label: t("newIssue.attachments", { defaultValue: "Attachments" }),
       icon: <Paperclip className="h-4 w-4 text-muted-foreground" />,
       rows: attachments.map((item) => <ItemOutputAttachmentRow key={item.id} item={item} />),
     });
@@ -4070,7 +4147,7 @@ function ItemOutputsSection({
 
   return (
     <DetailSection
-      title="Item outputs"
+      title={t("pipelines.itemOutputs", { defaultValue: "Item outputs" })}
       trailing={
         loading ? null : (
           <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium normal-case tracking-normal text-muted-foreground">
@@ -4091,13 +4168,13 @@ function ItemOutputsSection({
       ) : error ? (
         <div className="flex items-center gap-2 py-2.5 text-xs text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>Couldn't load item outputs.</span>
+          <span><PipelineText k="pipelines.itemOutputsLoadFailed" defaultValue="Couldn't load item outputs." /></span>
           <button
             type="button"
             onClick={onRetry}
             className="ml-auto rounded-sm border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            Retry
+            {t("common.retry", { defaultValue: "Retry" })}
           </button>
         </div>
       ) : (
@@ -4124,7 +4201,7 @@ function BuiltFromTree({
   rows: Array<{ case: PipelineCase; stage: PipelineStage }>;
 }) {
   if (rows.length === 0) {
-    return <p className="py-3 text-sm text-muted-foreground">No built-from items.</p>;
+    return <p className="py-3 text-sm text-muted-foreground"><PipelineText k="pipelines.noBuiltFromItems" defaultValue="No built-from items." /></p>;
   }
   return (
     <ul className="divide-y divide-border">
@@ -4218,7 +4295,7 @@ function PipelineAddItems({ pipelineId }: { pipelineId: string }) {
 
   if (pipeline.isLoading || intake.isLoading) return <PageSkeleton />;
   if (!pipeline.data || !intake.data) {
-    return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground">Pipeline not found.</div>;
+    return <div className="mx-auto max-w-3xl py-10 text-sm text-muted-foreground"><PipelineText k="pipelines.notFound" defaultValue="Pipeline not found." /></div>;
   }
 
   const firstStageName = intake.data.stageName ?? pipeline.data.stages[0]?.name ?? "first stage";
@@ -4229,7 +4306,7 @@ function PipelineAddItems({ pipelineId }: { pipelineId: string }) {
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           Add to {pipeline.data.name}
         </p>
-        <h1 className="text-2xl font-semibold text-foreground">Build your list, then submit it all at once</h1>
+        <h1 className="text-2xl font-semibold text-foreground"><PipelineText k="pipelines.addItemsTitle" defaultValue="Build your list, then submit it all at once" /></h1>
         <p className="text-sm text-muted-foreground">
           Items will be added to the first stage ({firstStageName}).
         </p>
@@ -4313,7 +4390,9 @@ function DraftItemRow({
   onRemove: () => void;
   onChange: (fieldKey: string, value: string) => void;
 }) {
-  const title = row.values.title?.trim() || `Item ${index + 1}`;
+  const { t } = useTranslation();
+  const itemNumberLabel = t("pipelines.itemNumber", { number: index + 1, defaultValue: "Item {{number}}" });
+  const title = row.values.title?.trim() || itemNumberLabel;
   const preview = fields
     .filter((field) => field.key !== "title")
     .map((field) => row.values[field.key])
@@ -4325,16 +4404,25 @@ function DraftItemRow({
     <section className={cn("border border-border bg-background", row.expanded && "border-primary")}>
       <div className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3">
         <button type="button" className="min-w-0 text-left" onClick={onToggle}>
-          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Item {index + 1}</span>
+          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {itemNumberLabel}
+          </span>
           <span className="block truncate text-sm font-semibold text-foreground">{title}</span>
           {!row.expanded && preview ? <span className="block truncate text-xs text-muted-foreground">{preview}</span> : null}
           {!row.expanded && row.serverError ? <span className="block text-xs text-destructive">{row.serverError}</span> : null}
         </button>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={onToggle} aria-label={row.expanded ? "Collapse item" : "Expand item"}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onToggle}
+            aria-label={row.expanded
+              ? t("pipelines.collapseItem", { defaultValue: "Collapse item" })
+              : t("pipelines.expandItem", { defaultValue: "Expand item" })}
+          >
             {row.expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
-          <Button variant="outline" size="icon" onClick={onRemove} aria-label="Remove item">
+          <Button variant="outline" size="icon" onClick={onRemove} aria-label={t("pipelines.removeItem", { defaultValue: "Remove item" })}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
@@ -4355,9 +4443,9 @@ function DraftItemRow({
             {row.serverError ? <p className="md:col-span-2 text-sm text-destructive">{row.serverError}</p> : null}
           </div>
           <aside className="border border-border p-4 text-sm">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Preview</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"><PipelineText k="pipelines.preview" defaultValue="Preview" /></p>
             <p className="font-semibold text-foreground">{title}</p>
-            <p className="mt-3 text-xs text-muted-foreground">First stage on submit:</p>
+            <p className="mt-3 text-xs text-muted-foreground"><PipelineText k="pipelines.firstStageOnSubmit" defaultValue="First stage on submit:" /></p>
             <p className="font-semibold text-foreground">{intake.stageName ?? "First stage"}</p>
           </aside>
         </div>
@@ -4377,17 +4465,18 @@ export function GeneratedField({
   error?: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const inputId = `pipeline-intake-${field.key}`;
   return (
     <label className={cn("block space-y-1", field.type === "multiline" && "md:col-span-2")}>
       <span className="text-sm font-medium text-foreground">
         {field.label}
-        {field.required ? <span className="ml-1 font-normal text-destructive">required</span> : null}
+        {field.required ? <span className="ml-1 font-normal text-destructive">{t("common.required", { defaultValue: "required" })}</span> : null}
       </span>
       {field.type === "select" ? (
         <Select value={value} onValueChange={onChange}>
           <SelectTrigger id={inputId} aria-invalid={Boolean(error)} className="w-full">
-            <SelectValue placeholder="Choose..." />
+            <SelectValue placeholder={t("pipelines.choose", { defaultValue: "Choose..." })} />
           </SelectTrigger>
           <SelectContent>
             {(field.options ?? []).map((option) => (
@@ -4613,12 +4702,12 @@ function ReviewQueueDetailDialog({
 
         <div className="space-y-5">
           <section className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">What is being decided</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground"><PipelineText k="pipelines.whatIsBeingDecided" defaultValue="What is being decided" /></p>
             <p className="text-sm text-foreground">{row?.prompt}</p>
           </section>
 
           <section className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Item preview</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground"><PipelineText k="pipelines.itemPreview" defaultValue="Item preview" /></p>
             {fields.length > 0 ? (
               <div className="divide-y divide-border rounded-md border border-border">
                 {fields.map(([key, value]) => (
@@ -4647,7 +4736,7 @@ function ReviewQueueDetailDialog({
 
           {canDecide ? (
             <label className="block space-y-1.5 text-sm font-medium">
-              <span>Note</span>
+              <span><PipelineText k="pipelines.note" defaultValue="Note" /></span>
               <Textarea
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
@@ -5057,7 +5146,7 @@ export function ReviewQueue() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-normal text-foreground">Review queue</h1>
+          <h1 className="text-2xl font-semibold tracking-normal text-foreground"><PipelineText k="pipelines.reviewQueue" defaultValue="Review queue" /></h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Needs your attention ({formatNumber(visibleRows.length)})
           </p>
@@ -5073,7 +5162,7 @@ export function ReviewQueue() {
       </div>
 
       {attentionQuery.error || reviewCasesQuery.error ? (
-        <p className="text-sm text-amber-700 dark:text-amber-300">Some items need attention. Try again in a moment.</p>
+        <p className="text-sm text-amber-700 dark:text-amber-300"><PipelineText k="pipelines.reviewQueueAttentionError" defaultValue="Some items need attention. Try again in a moment." /></p>
       ) : null}
 
       {visibleRows.length === 0 ? (
@@ -5109,7 +5198,7 @@ export function ReviewQueue() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Shortcuts: <span className="font-semibold">j</span>/<span className="font-semibold">k</span> or arrow keys move, <span className="font-semibold">Enter</span> opens item, <span className="font-semibold">a</span> approves.
+        <PipelineText k="pipelines.reviewQueueShortcutsPrefix" defaultValue="Shortcuts:" /> <span className="font-semibold">j</span>/<span className="font-semibold">k</span> <PipelineText k="pipelines.reviewQueueShortcutsMove" defaultValue="or arrow keys move," /> <span className="font-semibold">Enter</span> <PipelineText k="pipelines.reviewQueueShortcutsOpen" defaultValue="opens item," /> <span className="font-semibold">a</span> <PipelineText k="pipelines.reviewQueueShortcutsApprove" defaultValue="approves." />
       </p>
 
       <ReviewQueueDetailDialog
@@ -5186,7 +5275,7 @@ export function Learnings() {
   return (
     <div className="space-y-6">
       <div className="border-b border-border pb-5">
-        <h1 className="text-2xl font-semibold tracking-normal text-foreground">Learnings</h1>
+        <h1 className="text-2xl font-semibold tracking-normal text-foreground"><PipelineText k="pipelines.learnings" defaultValue="Learnings" /></h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Patterns from review decisions and hand moves, in plain words.
         </p>
@@ -5203,7 +5292,7 @@ export function Learnings() {
       </div>
 
       {learningsQuery.error ? (
-        <p className="text-sm text-destructive">Could not load learnings.</p>
+        <p className="text-sm text-destructive"><PipelineText k="pipelines.learningsLoadFailed" defaultValue="Could not load learnings." /></p>
       ) : groups.length === 0 ? (
         <EmptyState icon={BookOpenText} message="No learnings yet." />
       ) : (

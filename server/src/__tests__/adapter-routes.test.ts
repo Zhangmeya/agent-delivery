@@ -116,6 +116,7 @@ describe("adapter routes", () => {
     errorHandler = middleware.errorHandler;
     setOverridePaused("claude_local", false);
     unregisterServerAdapter("hermes_local");
+    unregisterServerAdapter("hermes_gateway");
     unregisterServerAdapter("claude_local");
     registerServerAdapter(overridingConfigSchemaAdapter);
   });
@@ -123,6 +124,7 @@ describe("adapter routes", () => {
   afterEach(() => {
     setOverridePaused("claude_local", false);
     unregisterServerAdapter("hermes_local");
+    unregisterServerAdapter("hermes_gateway");
     unregisterServerAdapter("claude_local");
   });
 
@@ -272,26 +274,16 @@ describe("adapter routes", () => {
     expect(keys).not.toContain("bootstrapPromptTemplate");
   });
 
-  it("serves built-in Hermes config schemas", async () => {
+  it("keeps Hermes config schemas behind external adapter installation", async () => {
     const app = createApp();
 
     const local = await request(app).get("/api/adapters/hermes_local/config-schema");
-    expect(local.status, JSON.stringify(local.body)).toBe(200);
-    expect(local.body.fields).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: "provider" }),
-        expect.objectContaining({ key: "timeoutSec" }),
-      ]),
-    );
+    expect(local.status, JSON.stringify(local.body)).toBe(404);
+    expect(local.body.error).toContain('Adapter "hermes_local" is not registered.');
 
     const gateway = await request(app).get("/api/adapters/hermes_gateway/config-schema");
-    expect(gateway.status, JSON.stringify(gateway.body)).toBe(200);
-    expect(gateway.body.fields).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ key: "apiBaseUrl", required: true }),
-        expect.objectContaining({ key: "apiKey", required: true }),
-      ]),
-    );
+    expect(gateway.status, JSON.stringify(gateway.body)).toBe(404);
+    expect(gateway.body.error).toContain('Adapter "hermes_gateway" is not registered.');
   });
 
   it("GET /api/adapters includes ACPX model availability", async () => {

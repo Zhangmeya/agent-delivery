@@ -453,9 +453,11 @@ describeEmbeddedPostgres("heartbeat plugin environments", () => {
 
     const acquireCalls = workerManager.call.mock.calls
       .filter(([, method]) => method === "environmentAcquireLease");
+    const sharedAcquireCall = acquireCalls.find(([, , payload]) => payload.runId === sharedRun!.id);
+    const overrideAcquireCall = acquireCalls.find(([, , payload]) => payload.runId === overrideRun!.id);
 
     expect(acquireCalls).toHaveLength(2);
-    expect(acquireCalls[0]?.[2]).toMatchObject({
+    expect(sharedAcquireCall?.[2]).toMatchObject({
       companyId: companyAId,
       environmentId: sharedEnvironmentId,
       config: { template: "shared" },
@@ -463,7 +465,7 @@ describeEmbeddedPostgres("heartbeat plugin environments", () => {
       runId: sharedRun!.id,
       adapterType: "codex_local",
     });
-    expect(acquireCalls[1]?.[2]).toMatchObject({
+    expect(overrideAcquireCall?.[2]).toMatchObject({
       companyId: companyBId,
       environmentId: overrideEnvironmentId,
       config: { template: "override" },

@@ -216,7 +216,9 @@ export function CompanyEnvironments() {
   });
   const createSecret = useMutation({
     mutationFn: (input: { name: string; value: string }) => {
-      if (!selectedCompanyId) throw new Error("Select a company to create secrets");
+      if (!selectedCompanyId) {
+        throw new Error(t("agentConfig.selectCompanyToCreateSecrets", { defaultValue: "Select a company before creating secrets." }));
+      }
       return secretsApi.create(selectedCompanyId, input);
     },
     onSuccess: async () => {

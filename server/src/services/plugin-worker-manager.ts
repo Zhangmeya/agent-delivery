@@ -21,7 +21,9 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import path from "node:path";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
+import { pathToFileURL } from "node:url";
 import type { PaperclipPluginManifestV1 } from "@penclipai/shared";
 import {
   JSONRPC_VERSION,
@@ -90,6 +92,7 @@ const CRASH_WINDOW_MS = 10 * 60 * 1_000;
 
 /** Maximum number of stderr characters retained for worker failure context. */
 const MAX_STDERR_EXCERPT_CHARS = 8_000;
+const NODE_ESM_SPECIFIER_FLAGS = new Set(["--import", "--loader", "--experimental-loader"]);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,6 +155,51 @@ export function formatWorkerFailureMessage(message: string, stderrExcerpt: strin
   if (!excerpt) return message;
   if (message.includes(excerpt)) return message;
   return `${message}\n\nWorker stderr:\n${excerpt}`;
+}
+
+function windowsPathToFileUrl(filePath: string): string {
+  const normalized = path.win32.resolve(filePath).replace(/\\/g, "/");
+  if (normalized.startsWith("//")) {
+    return new URL(`file:${normalized}`).href;
+  }
+  return new URL(`file:///${normalized}`).href;
+}
+
+function normalizeNodeEsmSpecifier(specifier: string): string {
+  if (path.win32.isAbsolute(specifier)) return windowsPathToFileUrl(specifier);
+  if (path.posix.isAbsolute(specifier)) return pathToFileURL(specifier).href;
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(specifier)) return specifier;
+  return specifier;
+}
+
+export function normalizePluginWorkerExecArgv(execArgv: readonly string[] = []): string[] {
+  const normalized: string[] = [];
+
+  for (let index = 0; index < execArgv.length; index += 1) {
+    const arg = execArgv[index]!;
+    if (NODE_ESM_SPECIFIER_FLAGS.has(arg)) {
+      normalized.push(arg);
+      const specifier = execArgv[index + 1];
+      if (specifier !== undefined) {
+        normalized.push(normalizeNodeEsmSpecifier(specifier));
+        index += 1;
+      }
+      continue;
+    }
+
+    const equalsIndex = arg.indexOf("=");
+    if (equalsIndex > 0) {
+      const flag = arg.slice(0, equalsIndex);
+      if (NODE_ESM_SPECIFIER_FLAGS.has(flag)) {
+        normalized.push(`${flag}=${normalizeNodeEsmSpecifier(arg.slice(equalsIndex + 1))}`);
+        continue;
+      }
+    }
+
+    normalized.push(arg);
+  }
+
+  return normalized;
 }
 
 /**
@@ -729,7 +777,7 @@ export function createPluginWorkerHandle(
 
     const child = fork(options.entrypointPath, [], {
       stdio: ["pipe", "pipe", "pipe", "ipc"],
-      execArgv: options.execArgv ?? [],
+      execArgv: normalizePluginWorkerExecArgv(options.execArgv),
       env: workerEnv,
       // Don't let the child keep the parent alive
       detached: false,

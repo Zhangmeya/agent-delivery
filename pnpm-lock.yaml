@@ -543,7 +543,7 @@ importers:
       '@paperclipai/plugin-sdk':
         specifier: workspace:@penclipai/plugin-sdk@*
         version: link:../../sdk
-      '@paperclipai/shared':
+      '@penclipai/shared':
         specifier: workspace:@penclipai/shared@*
         version: link:../../../shared
     devDependencies:

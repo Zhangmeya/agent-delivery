@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Agent, Environment } from "@paperclipai/shared";
+import type { Agent, Environment } from "@penclipai/shared";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AgentConfigForm } from "./AgentConfigForm";
 
@@ -265,11 +265,10 @@ describe("AgentConfigForm environment selector", () => {
 
     expect(text).toContain("Environment");
     expect(text).toContain("Environment override");
-    expect(selector?.textContent).toContain("Default: Local");
+    expect(selector?.textContent).toContain("Inherit instance default (Local)");
     expect(selector?.textContent).toContain("E2B · sandbox");
     expect(text).not.toContain("Execution");
     expect(text).not.toContain("Leave this unset to inherit the instance default");
-    expect(text).not.toContain("Inherit instance default");
   });
 
   it("keeps an existing non-runnable override visible so it can be cleared", async () => {
@@ -291,7 +290,7 @@ describe("AgentConfigForm environment selector", () => {
     const selector = result.container.querySelector("select");
 
     expect(text).toContain("Environment override");
-    expect(selector?.textContent).toContain("Default: Local");
+    expect(selector?.textContent).toContain("Inherit instance default (Local)");
     expect(selector?.textContent).toContain("Fake Sandbox · sandbox");
   });
 
@@ -335,7 +334,7 @@ describe("AgentConfigForm environment selector", () => {
     roots.push(result.root);
 
     const testButton = Array.from(result.container.querySelectorAll("button")).find(
-      (button) => button.textContent?.trim() === "Test",
+      (button) => button.textContent?.trim() === "Test environment",
     );
     expect(testButton).toBeTruthy();
 
@@ -378,7 +377,7 @@ describe("AgentConfigForm environment selector", () => {
     roots.push(result.root);
 
     const testButton = Array.from(result.container.querySelectorAll("button")).find(
-      (button) => button.textContent?.trim() === "Test",
+      (button) => button.textContent?.trim() === "Test environment",
     );
     expect(testButton).toBeTruthy();
 

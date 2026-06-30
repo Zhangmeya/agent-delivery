@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, History, RotateCcw } from "lucide-react";
 import { ApiError } from "../api/client";
@@ -29,6 +30,7 @@ export function PipelineStageHistoryPanel({
   hasDocument: boolean;
   onRestored: (body: string, baseRevisionId: string | null) => void;
 }) {
+  const { t } = useTranslation(undefined, { useSuspense: false });
   const { pushToast } = useToastActions();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -55,15 +57,21 @@ export function PipelineStageHistoryPanel({
       ]);
       onRestored(result.revision.body, result.revision.id);
       pushToast({
-        title: `Restored revision ${result.restoredFromRevisionNumber}`,
-        body: `Saved as revision ${result.revision.revisionNumber}.`,
+        title: t("pipelineStageHistory.restoredRevision", {
+          defaultValue: "Restored revision {{number}}",
+          number: result.restoredFromRevisionNumber,
+        }),
+        body: t("pipelineStageHistory.savedAsRevision", {
+          defaultValue: "Saved as revision {{number}}.",
+          number: result.revision.revisionNumber,
+        }),
         tone: "success",
       });
     },
     onError: (error) => {
       pushToast({
-        title: "Failed to restore revision",
-        body: error instanceof Error ? error.message : "Paperclip could not restore the revision.",
+        title: t("pipelineStageHistory.restoreFailed", { defaultValue: "Failed to restore revision" }),
+        body: error instanceof Error ? error.message : t("pipelineStageHistory.restoreFailedBody", { defaultValue: "Paperclip could not restore the revision." }),
         tone: "error",
       });
     },
@@ -77,8 +85,8 @@ export function PipelineStageHistoryPanel({
         <div className="flex items-center gap-2">
           <History className="h-4 w-4 text-muted-foreground" />
           <div>
-            <p className="text-sm font-medium">History</p>
-            <p className="text-xs text-muted-foreground">Past versions of these instructions.</p>
+            <p className="text-sm font-medium">{t("pipelineStageHistory.title", { defaultValue: "History" })}</p>
+            <p className="text-xs text-muted-foreground">{t("pipelineStageHistory.description", { defaultValue: "Past versions of these instructions." })}</p>
           </div>
         </div>
         {open ? (
@@ -90,16 +98,16 @@ export function PipelineStageHistoryPanel({
       <CollapsibleContent className="border-t border-border/70">
         {!hasDocument ? (
           <p className="px-4 py-3 text-xs text-muted-foreground">
-            No history yet. Save the instructions to create the first revision.
+            {t("pipelineStageHistory.noHistory", { defaultValue: "No history yet. Save the instructions to create the first revision." })}
           </p>
         ) : revisionsQuery.isLoading ? (
-          <p className="px-4 py-3 text-xs text-muted-foreground">Loading revisions…</p>
+          <p className="px-4 py-3 text-xs text-muted-foreground">{t("documentDiff.loadingRevisions", { defaultValue: "Loading revisions..." })}</p>
         ) : revisionsQuery.error ? (
           <p className="px-4 py-3 text-xs text-destructive">
-            {revisionsQuery.error instanceof Error ? revisionsQuery.error.message : "Could not load revisions."}
+            {revisionsQuery.error instanceof Error ? revisionsQuery.error.message : t("pipelineStageHistory.loadFailed", { defaultValue: "Could not load revisions." })}
           </p>
         ) : revisions.length === 0 ? (
-          <p className="px-4 py-3 text-xs text-muted-foreground">No revisions recorded yet.</p>
+          <p className="px-4 py-3 text-xs text-muted-foreground">{t("pipelineStageHistory.noRevisions", { defaultValue: "No revisions recorded yet." })}</p>
         ) : (
           <ul className="divide-y divide-border/70">
             {revisions.map((revision) => {
@@ -111,10 +119,10 @@ export function PipelineStageHistoryPanel({
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium">
-                      Revision {revision.revisionNumber}
+                      {t("pipelineStageHistory.revision", { defaultValue: "Revision {{number}}", number: revision.revisionNumber })}
                       {isCurrent ? (
                         <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                          Current
+                          {t("documentFrame.current", { defaultValue: "Current" })}
                         </span>
                       ) : null}
                     </p>
@@ -132,7 +140,7 @@ export function PipelineStageHistoryPanel({
                       onClick={() => restore.mutate(revision.id)}
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
-                      Restore
+                      {t("pipelineStageHistory.restore", { defaultValue: "Restore" })}
                     </Button>
                   )}
                 </li>

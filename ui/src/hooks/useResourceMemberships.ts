@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type {
   ResourceMembershipResourceType,
   ResourceMembershipState,
@@ -72,11 +73,14 @@ export function useResourceMemberships(companyId: string | null | undefined) {
 export function useResourceMembershipMutation(companyId: string | null | undefined) {
   const queryClient = useQueryClient();
   const { pushToast } = useToastActions();
+  const { t } = useTranslation();
   const queryKey = queryKeys.resourceMemberships.mine(companyId ?? "__none__");
 
   return useMutation({
     mutationFn: (variables: MutationVariables) => {
-      if (!companyId) throw new Error("Select a company first.");
+      if (!companyId) {
+        throw new Error(t("resourceMemberships.selectCompanyFirst", { defaultValue: "Select a company first." }));
+      }
       return variables.resourceType === "project"
         ? resourceMembershipsApi.updateProject(companyId, variables.resourceId, { state: variables.state })
         : resourceMembershipsApi.updateAgent(companyId, variables.resourceId, { state: variables.state });
@@ -94,10 +98,11 @@ export function useResourceMembershipMutation(companyId: string | null | undefin
       if (context?.previous) {
         queryClient.setQueryData(queryKey, context.previous);
       }
-      const verb = variables.state === "left" ? "leave" : "join";
       pushToast({
-        title: `Couldn't ${verb} ${variables.resourceName}.`,
-        body: error instanceof Error ? error.message : "Try again.",
+        title: variables.state === "left"
+          ? t("resourceMemberships.leaveFailed", { name: variables.resourceName, defaultValue: "Couldn't leave {{name}}." })
+          : t("resourceMemberships.joinFailed", { name: variables.resourceName, defaultValue: "Couldn't join {{name}}." }),
+        body: error instanceof Error ? error.message : t("common.tryAgain", { defaultValue: "Try again" }),
         tone: "error",
       });
     },

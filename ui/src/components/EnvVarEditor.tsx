@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { CompanySecret, EnvBinding, SecretVersionSelector } from "@penclipai/shared";
 import { AlertCircle, KeyRound, X } from "lucide-react";
 import { cn } from "../lib/utils";
@@ -105,6 +106,7 @@ export function EnvVarEditor({
    */
   recentlyUsedSecrets?: CompanySecret[];
 }) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<Row[]>(() => toRows(value));
   const [sealError, setSealError] = useState<string | null>(null);
   const valueRef = useRef(value);
@@ -244,12 +246,12 @@ export function EnvVarEditor({
                 })
               }
             >
-              <SelectTrigger className={cn(selectTriggerClass, "flex-[1]")} aria-label="Binding mode">
+              <SelectTrigger className={cn(selectTriggerClass, "flex-[1]")} aria-label={t("envVarEditor.bindingMode")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="plain">Plain</SelectItem>
-                <SelectItem value="secret">Secret</SelectItem>
+                <SelectItem value="plain">{t("envVarEditor.plain")}</SelectItem>
+                <SelectItem value="secret">{t("envVarEditor.secret")}</SelectItem>
               </SelectContent>
             </Select>
             {row.source === "secret" ? (
@@ -261,7 +263,7 @@ export function EnvVarEditor({
                   }
                 >
                   <SelectTrigger
-                    aria-label="Secret"
+                    aria-label={t("envVarEditor.secret")}
                     className={cn(
                       selectTriggerClass,
                       "flex-[3]",
@@ -270,12 +272,12 @@ export function EnvVarEditor({
                         "border-destructive text-destructive",
                     )}
                   >
-                    <SelectValue placeholder="Select secret..." />
+                    <SelectValue placeholder={t("envVarEditor.selectSecret")} />
                   </SelectTrigger>
                   <SelectContent>
                     {row.secretId && !secrets.some((s) => s.id === row.secretId) ? (
                       <SelectItem value={row.secretId}>
-                        Missing ({row.secretId.slice(0, 8)}…)
+                        {t("envVarEditor.missingSecret", { id: row.secretId.slice(0, 8) })}
                       </SelectItem>
                     ) : null}
                     {secrets.map((secret) => (
@@ -295,7 +297,7 @@ export function EnvVarEditor({
                   }
                   disabled={!row.secretId}
                 >
-                  <SelectTrigger className={cn(selectTriggerClass, "flex-[1]")} aria-label="Version">
+                  <SelectTrigger className={cn(selectTriggerClass, "flex-[1]")} aria-label={t("Version")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -320,9 +322,9 @@ export function EnvVarEditor({
                   className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent/50 transition-colors shrink-0"
                   onClick={() => sealRow(index)}
                   disabled={!row.key.trim() || !row.plainValue}
-                  title="Create secret from current plain value"
+                  title={t("envVarEditor.createSecretFromPlainValue")}
                 >
-                  New
+                  {t("New")}
                 </button>
               </>
             ) : (
@@ -338,9 +340,9 @@ export function EnvVarEditor({
                   className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent/50 transition-colors shrink-0"
                   onClick={() => sealRow(index)}
                   disabled={!row.key.trim() || !row.plainValue}
-                  title="Store value as secret and replace with reference"
+                  title={t("envVarEditor.storeValueAsSecret")}
                 >
-                  Seal
+                  {t("envVarEditor.seal")}
                 </button>
               </>
             )}

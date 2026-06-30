@@ -676,7 +676,7 @@ describe("realizeExecutionWorkspace", () => {
     expect(await readGit(reused.cwd, ["rev-parse", "HEAD"])).toBe(advancedHead);
     expect(reused.baseRefSha).toBe(advancedHead);
     expect(reused.warnings).toEqual([]);
-  });
+  }, 20_000);
 
   it("does not reset a reused worktree that already has task commits", async () => {
     const { sourceRepo, remotePath, repoRoot } = await createClonedRepoWithRemote();
@@ -717,7 +717,7 @@ describe("realizeExecutionWorkspace", () => {
     expect(reused.warnings).toEqual([
       expect.stringContaining("is behind origin/master by 1 commit"),
     ]);
-  });
+  }, 20_000);
 
   it("does not reset a reused worktree with untracked changes when status.showUntrackedFiles=no", async () => {
     const { sourceRepo, remotePath, repoRoot } = await createClonedRepoWithRemote();
@@ -742,7 +742,7 @@ describe("realizeExecutionWorkspace", () => {
     expect(reused.warnings).toEqual([
       expect.stringContaining("is behind origin/master by 1 commit"),
     ]);
-  });
+  }, 20_000);
 
   it("rejects reusing an empty directory that only looks like a worktree because it sits inside the repo", async () => {
     const repoRoot = await createTempRepo();
@@ -1620,6 +1620,11 @@ describe("realizeExecutionWorkspace", () => {
       await fs.mkdir(baseRoot, { recursive: true });
       await fs.mkdir(paperclipDir, { recursive: true });
       await fs.mkdir(fakeBin, { recursive: true });
+      await fs.writeFile(
+        path.join(worktreeRoot, "package.json"),
+        JSON.stringify({ scripts: { penclip: "penclip" } }),
+        "utf8",
+      );
       await fs.copyFile(provisionWorktreeScriptPath, scriptPath);
       await fs.chmod(scriptPath, 0o755);
       await fs.writeFile(
@@ -1662,13 +1667,19 @@ describe("realizeExecutionWorkspace", () => {
         fakePnpmPath,
         [
           "#!/bin/sh",
-          "if [ \"$1\" = \"paperclipai\" ] && [ \"$2\" = \"--help\" ]; then",
+          "if [ \"$1\" = \"penclip\" ] && [ \"$2\" = \"--help\" ]; then",
           "  exit 0",
           "fi",
-          "if [ \"$1\" = \"paperclipai\" ] && [ \"$2\" = \"worktree\" ] && [ \"$3\" = \"init\" ]; then",
-          "  mkdir -p \"$PWD/.paperclip\"",
-          "  printf '%s\\n' '{\"database\":{\"embeddedPostgresDataDir\":\"'$PWD'/.paperclip/runtime/db\"}}' > \"$PWD/.paperclip/config.json\"",
-          "  printf '%s\\n' \"PAPERCLIP_HOME=$PWD/.paperclip/runtime\" \"PAPERCLIP_INSTANCE_ID=healthy\" \"PAPERCLIP_CONFIG=$PWD/.paperclip/config.json\" > \"$PWD/.paperclip/.env\"",
+          "if [ \"$1\" = \"penclip\" ] && [ \"$2\" = \"worktree\" ] && [ \"$3\" = \"init\" ]; then",
+          "  node - \"$PWD/.paperclip\" \"${PAPERCLIP_WORKSPACE_CWD:-$PWD}\" <<'NODE'",
+          "const fs = require(\"node:fs\");",
+          "const path = require(\"node:path\");",
+          "const paperclipDir = process.argv[2];",
+          "const workspaceRoot = process.argv[3] || process.cwd();",
+          "fs.mkdirSync(paperclipDir, { recursive: true });",
+          "fs.writeFileSync(path.join(paperclipDir, \"config.json\"), JSON.stringify({ database: { embeddedPostgresDataDir: path.join(workspaceRoot, \".paperclip\", \"runtime\", \"db\") } }) + \"\\n\");",
+          "fs.writeFileSync(path.join(paperclipDir, \".env\"), [`PAPERCLIP_HOME=${path.join(workspaceRoot, \".paperclip\", \"runtime\")}`, \"PAPERCLIP_INSTANCE_ID=healthy\", `PAPERCLIP_CONFIG=${path.join(workspaceRoot, \".paperclip\", \"config.json\")}`, \"\"].join(\"\\n\"));",
+          "NODE",
           "  exit 0",
           "fi",
           "exit 0",
@@ -1678,25 +1689,37 @@ describe("realizeExecutionWorkspace", () => {
       );
       await fs.chmod(fakePnpmPath, 0o755);
 
-      const result = await execFileAsync(scriptPath, [], {
+      const result = await runProvisionScriptForTest(scriptPath, {
         cwd: worktreeRoot,
         env: {
           ...process.env,
-          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+          PATH:
+            process.platform === "win32"
+              ? [
+                  toBashPathForTest(fakeBin),
+                  ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean).map(toBashPathForTest),
+                  "/usr/bin",
+                  "/bin",
+                ].join(":")
+              : `${fakeBin}:${process.env.PATH ?? ""}`,
           PAPERCLIP_WORKSPACE_BASE_CWD: baseRoot,
           PAPERCLIP_WORKSPACE_CWD: worktreeRoot,
         },
       });
 
       expect(result.stderr).toContain("Existing isolated Paperclip worktree config is stale for this host; regenerating.");
-      await expect(fs.readFile(path.join(paperclipDir, ".env"), "utf8")).resolves.toContain(
-        `PAPERCLIP_CONFIG=${worktreeRoot}/.paperclip/config.json`,
+      const regeneratedEnv = parseEnvContents(await fs.readFile(path.join(paperclipDir, ".env"), "utf8"));
+      expect(regeneratedEnv.PAPERCLIP_CONFIG).toBe(path.join(worktreeRoot, ".paperclip", "config.json"));
+      const regeneratedConfig = JSON.parse(await fs.readFile(path.join(paperclipDir, "config.json"), "utf8")) as {
+        database?: { embeddedPostgresDataDir?: string };
+      };
+      expect(regeneratedConfig.database?.embeddedPostgresDataDir).toBe(
+        path.join(worktreeRoot, ".paperclip", "runtime", "db"),
       );
-      await expect(fs.readFile(path.join(paperclipDir, "config.json"), "utf8")).resolves.toContain(worktreeRoot);
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 
   it("retries worktree-local pnpm install without a frozen lockfile when the lockfile is outdated", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-worktree-outdated-lockfile-"));

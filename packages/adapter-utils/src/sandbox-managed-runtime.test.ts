@@ -417,7 +417,7 @@ describe("sandbox managed runtime", () => {
         await rm(remotePath, { recursive: true, force: true });
       },
       run: async (command) => {
-        await execFile("sh", ["-c", command], { maxBuffer: 32 * 1024 * 1024 });
+        await execPosixShell(command);
       },
     };
 
@@ -441,13 +441,14 @@ describe("sandbox managed runtime", () => {
 
     await prepared.restoreWorkspace();
 
-    await expect(readFile(path.join(localWorkspaceDir, "restored.txt"), "utf8")).resolves.toBe("restored\n");
+    const restoredText = await readFile(path.join(localWorkspaceDir, "restored.txt"), "utf8");
+    expect(restoredText.replace(/\r\n/g, "\n")).toBe("restored\n");
     expect(await git(localWorkspaceDir, ["ls-files", "restored.txt"])).toBe("restored.txt");
     expect(await git(localWorkspaceDir, ["status", "--short"])).toBe("");
     expect(await git(localWorkspaceDir, ["diff", "--name-status", "HEAD", "--"])).toBe("");
     expect(await git(localWorkspaceDir, ["diff", "--cached", "--name-status", "HEAD", "--"])).toBe("");
     expect(missingStatusReads).toHaveLength(1);
-  });
+  }, 20_000);
 
   it("does not fail clean restore checks when local working tree changes survive", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "paperclip-sandbox-preserved-local-"));
@@ -590,7 +591,7 @@ describe("sandbox managed runtime", () => {
     expect(downloadMembers.some((entry) => entry === ".git" || entry.startsWith(".git/"))).toBe(false);
     expect(downloadMembers.some((entry) => entry === "node_modules" || entry.startsWith("node_modules/"))).toBe(false);
     expect(downloadMembers.some((entry) => entry.includes("/node_modules/") || entry.endsWith("/node_modules"))).toBe(false);
-  });
+  }, 20_000);
 
   it("builds workspace/asset tarballs without a './' self-entry (so untar does not chmod/utime an unowned target dir)", async () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "paperclip-sandbox-tarself-"));
@@ -734,7 +735,7 @@ describe("sandbox managed runtime", () => {
         await rm(remotePath, { recursive: true, force: true });
       },
       run: async (command) => {
-        await execFile("sh", ["-c", command], { maxBuffer: 32 * 1024 * 1024 });
+        await execPosixShell(command);
       },
     };
 

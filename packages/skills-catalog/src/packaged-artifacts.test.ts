@@ -8,11 +8,24 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+function commandInvocation(command: string, args: string[]) {
+  if (process.platform !== "win32") return { command, args };
+  const quoteArg = (value: string) =>
+    /^[A-Za-z0-9_/:=.,@+\\-]+$/.test(value) ? value : `"${value.replace(/"/g, "\"\"")}"`;
+  const escaped = [command, ...args].map(quoteArg).join(" ");
+  return { command: process.env.ComSpec ?? "cmd.exe", args: ["/d", "/c", escaped] };
+}
+
+function execTool(command: string, args: string[], options: Parameters<typeof execFileSync>[2]) {
+  const invocation = commandInvocation(command, args);
+  return execFileSync(invocation.command, invocation.args, options);
+}
+
 function readPackMetadata(packDestination: string) {
-  const output = execFileSync("npm", ["pack", "--json", "--pack-destination", packDestination], {
+  const output = execTool("npm", ["pack", "--json", "--pack-destination", packDestination], {
     cwd: packageRoot,
     encoding: "utf8",
-  });
+  }) as string;
   const metadata = JSON.parse(output);
   if (!Array.isArray(metadata) || metadata.length === 0 || typeof metadata[0]?.filename !== "string") {
     throw new Error(`Unexpected npm pack output from ${packageRoot}: ${output}`);
@@ -38,7 +51,7 @@ describe("skills catalog package artifacts", () => {
     let metadata = readPackMetadata(createPackDestination());
 
     if (!metadata.files.some((entry) => entry.path === "dist/generated/catalog.json")) {
-      execFileSync("pnpm", ["--filter", "@paperclipai/skills-catalog", "build"], {
+      execTool("pnpm", ["--filter", "@penclipai/skills-catalog", "build"], {
         cwd: packageRoot,
         stdio: "ignore",
       });

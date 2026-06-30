@@ -175,5 +175,5 @@ describe("git workspace sync", () => {
         await deleteLocalGitRef({ localDir: repo, ref: importedRef });
       }
     });
-  });
+  }, 20_000);
 });

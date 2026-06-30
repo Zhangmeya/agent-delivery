@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { IssueWorkProduct } from "@penclipai/shared";
 import { issuesApi } from "../api/issues";
 import { queryKeys } from "../lib/queryKeys";
@@ -36,11 +38,11 @@ interface ArtifactsPanelProps {
 
 type FilterValue = "all" | "in_progress" | "for_review" | "completed";
 
-const FILTERS: Array<{ label: string; value: FilterValue }> = [
-  { label: "All", value: "all" },
-  { label: "In Progress", value: "in_progress" },
-  { label: "For Review", value: "for_review" },
-  { label: "Completed", value: "completed" },
+const FILTERS: Array<{ labelKey: string; defaultValue: string; value: FilterValue }> = [
+  { labelKey: "artifactsPanel.filter.all", defaultValue: "All", value: "all" },
+  { labelKey: "artifactsPanel.filter.inProgress", defaultValue: "In Progress", value: "in_progress" },
+  { labelKey: "artifactsPanel.filter.forReview", defaultValue: "For Review", value: "for_review" },
+  { labelKey: "artifactsPanel.filter.completed", defaultValue: "Completed", value: "completed" },
 ];
 
 function matchesFilter(wp: IssueWorkProduct, filter: FilterValue): boolean {
@@ -68,22 +70,29 @@ function statusBadge(status: string) {
   switch (status) {
     case "active":
     case "draft":
-      return { label: "In Progress", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" };
+      return { labelKey: "artifactsPanel.status.inProgress", defaultValue: "In Progress", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" };
     case "ready_for_review":
-      return { label: "For Review", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400" };
+      return { labelKey: "artifactsPanel.status.forReview", defaultValue: "For Review", className: "bg-amber-500/10 text-amber-600 dark:text-amber-400" };
     case "approved":
     case "merged":
-      return { label: "Completed", className: "bg-green-500/10 text-green-600 dark:text-green-400" };
+      return { labelKey: "artifactsPanel.status.completed", defaultValue: "Completed", className: "bg-green-500/10 text-green-600 dark:text-green-400" };
     case "changes_requested":
-      return { label: "Changes Requested", className: "bg-orange-500/10 text-orange-600 dark:text-orange-400" };
+      return { labelKey: "artifactsPanel.status.changesRequested", defaultValue: "Changes Requested", className: "bg-orange-500/10 text-orange-600 dark:text-orange-400" };
     case "failed":
-      return { label: "Failed", className: "bg-red-500/10 text-red-600 dark:text-red-400" };
+      return { labelKey: "artifactsPanel.status.failed", defaultValue: "Failed", className: "bg-red-500/10 text-red-600 dark:text-red-400" };
     default:
-      return { label: status, className: "bg-muted text-muted-foreground" };
+      return { labelKey: null, defaultValue: status, className: "bg-muted text-muted-foreground" };
   }
 }
 
+function workProductTypeLabel(type: string, t: TFunction<"common">) {
+  const key = `artifactsPanel.type.${type}`;
+  const fallback = type.replace(/_/g, " ");
+  return t(key, { defaultValue: fallback });
+}
+
 export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitle, onClearOpenDoc, onApprove, onReject }: ArtifactsPanelProps) {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState<FilterValue>("all");
   const [viewingDoc, setViewingDoc] = useState<{ key: string; title: string } | null>(null);
 
@@ -95,7 +104,7 @@ export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitl
 
   // Open doc from parent (e.g. clicking plan link in chat)
   const effectiveViewingDoc = openDocKey
-    ? { key: openDocKey, title: openDocTitle ?? "Document" }
+    ? { key: openDocKey, title: openDocTitle ?? t("artifactsPanel.documentFallback", { defaultValue: "Document" }) }
     : viewingDoc;
 
   const handleBack = () => {
@@ -130,7 +139,7 @@ export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitl
     <div className="flex flex-col h-full" data-artifacts-panel>
       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
         <Package className="h-4 w-4 text-muted-foreground shrink-0" />
-        <h3 className="text-sm font-semibold">Artifacts</h3>
+        <h3 className="text-sm font-semibold">{t("artifacts.title", { defaultValue: "Artifacts" })}</h3>
       </div>
 
       {/* Filter chips */}
@@ -146,7 +155,7 @@ export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitl
             )}
             onClick={() => setFilter(f.value)}
           >
-            {f.label}
+            {t(f.labelKey, { defaultValue: f.defaultValue })}
           </button>
         ))}
       </div>
@@ -156,15 +165,15 @@ export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitl
         {isLoading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Loading...
+            {t("common.loading", { defaultValue: "Loading..." })}
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <Package className="h-8 w-8 mx-auto text-muted-foreground/40 mb-3" />
             <p className="text-sm text-muted-foreground">
               {workProducts?.length === 0
-                ? "Your team's deliverables and plans will appear here as they're produced."
-                : "No artifacts match this filter."}
+                ? t("artifactsPanel.emptyAll", { defaultValue: "Your team's deliverables and plans will appear here as they're produced." })
+                : t("artifactsPanel.emptyFilter", { defaultValue: "No artifacts match this filter." })}
             </p>
           </div>
         ) : (
@@ -209,16 +218,16 @@ export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitl
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] text-muted-foreground capitalize">
-                          {wp.type.replace(/_/g, " ")}
+                          {workProductTypeLabel(wp.type, t)}
                         </span>
                         {showGenerating ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
                             <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                            Generating...
+                            {t("artifactsPanel.generating", { defaultValue: "Generating..." })}
                           </span>
                         ) : (
                           <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", badge.className)}>
-                            {badge.label}
+                            {badge.labelKey ? t(badge.labelKey, { defaultValue: badge.defaultValue }) : badge.defaultValue}
                           </span>
                         )}
                       </div>
@@ -258,6 +267,7 @@ function DocumentViewer({
   onApprove?: () => void;
   onReject?: () => void;
 }) {
+  const { t } = useTranslation();
   const { data: doc, isLoading, error } = useQuery({
     queryKey: queryKeys.issues.documents(taskId),
     queryFn: () => issuesApi.getDocument(taskId, docKey),
@@ -270,11 +280,11 @@ function DocumentViewer({
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-        <button onClick={onBack} className="text-muted-foreground hover:text-foreground">
+        <button onClick={onBack} className="text-muted-foreground hover:text-foreground" aria-label={t("common.back", { defaultValue: "Back" })}>
           <ArrowLeft className="h-4 w-4" />
         </button>
         <h3 className="text-sm font-semibold flex-1 truncate">{title}</h3>
-        <button onClick={onBack} className="text-muted-foreground hover:text-foreground">
+        <button onClick={onBack} className="text-muted-foreground hover:text-foreground" aria-label={t("common.close", { defaultValue: "Close" })}>
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -282,32 +292,32 @@ function DocumentViewer({
         {isLoading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Loading document...
+            {t("artifactsPanel.loadingDocument", { defaultValue: "Loading document..." })}
           </div>
         ) : error ? (
-          <p className="text-sm text-muted-foreground">Document not available yet.</p>
+          <p className="text-sm text-muted-foreground">{t("artifactsPanel.documentUnavailable", { defaultValue: "Document not available yet." })}</p>
         ) : doc?.body ? (
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <MarkdownBody>{doc.body}</MarkdownBody>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Document is empty.</p>
+          <p className="text-sm text-muted-foreground">{t("artifactsPanel.documentEmpty", { defaultValue: "Document is empty." })}</p>
         )}
       </div>
 
       {/* Sticky action footer */}
       {needsAction && (
         <div className="border-t border-border px-4 py-3 bg-background shrink-0">
-          <p className="text-[11px] text-muted-foreground mb-2">This document needs your review.</p>
+          <p className="text-[11px] text-muted-foreground mb-2">{t("artifactsPanel.needsReview", { defaultValue: "This document needs your review." })}</p>
           <div className="flex items-center gap-3">
             <Button size="lg" className="h-11 px-8 text-base font-semibold flex-1 rounded-lg bg-green-700 hover:bg-green-800 text-white border-0" onClick={onApprove}>
-              Approve
+              {t("Approve", { defaultValue: "Approve" })}
             </Button>
             <Button size="lg" className="h-11 px-8 text-base font-semibold flex-1 rounded-lg bg-red-900 hover:bg-red-950 text-white border-0" onClick={() => {
               onReject?.();
               onBack();
             }}>
-              Reject
+              {t("Reject", { defaultValue: "Reject" })}
             </Button>
           </div>
         </div>
@@ -317,7 +327,7 @@ function DocumentViewer({
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-500" />
             <p className="text-[13px] font-medium text-green-700 dark:text-green-400">
-              Approved — hire tasks created
+              {t("artifactsPanel.approvedHireTasksCreated", { defaultValue: "Approved — hire tasks created" })}
             </p>
           </div>
         </div>
@@ -327,7 +337,7 @@ function DocumentViewer({
           <div className="flex items-center gap-2">
             <XCircle className="h-4 w-4 text-orange-500" />
             <p className="text-[13px] font-medium text-orange-700 dark:text-orange-400">
-              Changes requested — CEO is revising
+              {t("artifactsPanel.changesRequestedCeoRevising", { defaultValue: "Changes requested — CEO is revising" })}
             </p>
           </div>
         </div>

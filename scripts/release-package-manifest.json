@@ -45,16 +45,6 @@
     "publishFromCi": true
   },
   {
-    "dir": "packages/adapters/hermes",
-    "name": "@paperclipai/hermes-paperclip-adapter",
-    "publishFromCi": true
-  },
-  {
-    "dir": "packages/adapters/hermes-gateway",
-    "name": "@paperclipai/adapter-hermes-gateway",
-    "publishFromCi": false
-  },
-  {
     "dir": "packages/adapters/opencode-local",
     "name": "@penclipai/adapter-opencode-local",
     "publishFromCi": true
@@ -82,7 +72,7 @@
   {
     "dir": "packages/skills-catalog",
     "name": "@penclipai/skills-catalog",
-    "publishFromCi": false
+    "publishFromCi": true
   },
   {
     "dir": "packages/teams-catalog",

@@ -24,6 +24,7 @@ import { useCompany } from "../context/CompanyContext";
 import { useToastActions } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
+import { translateStatusLabel } from "../lib/i18n-labels";
 import { resolveSkillSummaryText } from "../lib/company-skill-summary";
 import { AgentConfigForm } from "../components/AgentConfigForm";
 import { PageTabBar } from "../components/PageTabBar";
@@ -128,9 +129,9 @@ const SECRET_ENV_KEY_RE =
 const COMMAND_ENV_KEY_RE = /(^command$|^cmd$|command[-_]?line|resolved[-_]?command|PAPERCLIP_RESOLVED_COMMAND)/i;
 const JWT_VALUE_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/;
 
-function formatOrgChainHealthPath(agent: AgentDetailRecord) {
+function formatOrgChainHealthPath(agent: AgentDetailRecord, t: TFunction) {
   return agent.orgChainHealth?.fullChain
-    .map((entry) => `${entry.name}${entry.status !== "active" && entry.status !== "idle" ? ` (${entry.status})` : ""}`)
+    .map((entry) => `${entry.name}${entry.status !== "active" && entry.status !== "idle" ? ` (${translateStatusLabel(t, entry.status)})` : ""}`)
     .join(" -> ") ?? agent.name;
 }
 
@@ -1006,7 +1007,7 @@ export function AgentDetail() {
               {t("agentDetail.invalidReportingChainDescription", { name: agent.name })}
             </p>
             <p className="break-words font-mono text-xs text-amber-100/80">
-              {formatOrgChainHealthPath(agent)}
+              {formatOrgChainHealthPath(agent, t)}
             </p>
             {agent.orgChainHealth?.repairGuidance ? (
               <p className="text-amber-100/85">{agent.orgChainHealth.repairGuidance}</p>
@@ -1651,7 +1652,7 @@ function ConfigurationTab({
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.configRevisions(agent.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(agent.companyId) });
-      pushToast({ title: "Agent saved", tone: "success" });
+      pushToast({ title: t("agentDetail.agentSaved", { defaultValue: "Agent saved" }), tone: "success" });
     },
     onError: (err) => {
       setAwaitingRefreshAfterSave(false);
@@ -1952,7 +1953,9 @@ function PromptsTab({
 
   const uploadMarkdownImage = useMutation({
     mutationFn: async ({ file, namespace }: { file: File; namespace: string }) => {
-      if (!selectedCompanyId) throw new Error("Select a company to upload images");
+      if (!selectedCompanyId) {
+        throw new Error(t("agentConfig.selectCompanyToUploadImages", { defaultValue: "Select a company before uploading images." }));
+      }
       return assetsApi.uploadImage(selectedCompanyId, file, namespace);
     },
   });

@@ -12,9 +12,13 @@ describe("translateStatusLabel", () => {
     const t = testTranslator({
       "status.planned": "已规划",
       "status.achieved": "已达成",
+      "status.invalidOrgChain": "报告链无效",
+      "status.suspended": "已暂停",
     });
 
     expect(translateStatusLabel(t, "planned")).toBe("已规划");
     expect(translateStatusLabel(t, "achieved")).toBe("已达成");
+    expect(translateStatusLabel(t, "invalid_org_chain")).toBe("报告链无效");
+    expect(translateStatusLabel(t, "suspended")).toBe("已暂停");
   });
 });

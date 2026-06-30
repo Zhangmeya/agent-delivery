@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { PluginRecord } from "@penclipai/shared";
 import { Link } from "@/lib/router";
 import { AlertTriangle, FlaskConical, Plus, Power, Puzzle, Settings, Trash } from "lucide-react";
@@ -29,6 +30,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToastActions } from "@/context/ToastContext";
+import { translateStatusLabel } from "@/lib/i18n-labels";
 import { cn } from "@/lib/utils";
 
 function firstNonEmptyLine(value: string | null | undefined): string | null {
@@ -308,7 +310,7 @@ export function PluginManager() {
                       <p className="mt-1 text-sm text-muted-foreground">{t(bundledPlugin.description, { defaultValue: bundledPlugin.description })}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{bundledPlugin.packageName}</p>
                       {installPending && !bundledPlugin.hasBuiltEntrypoints && (
-                        <p className="mt-2 text-xs text-muted-foreground">Building plugin...</p>
+                        <p className="mt-2 text-xs text-muted-foreground">{t("pluginManager.buildingPlugin")}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -568,6 +570,6 @@ export function PluginManager() {
   );
 }
 
-function translatePluginStatus(t: (key: string, options?: Record<string, unknown>) => string, status: string) {
-  return t(status, { defaultValue: status });
+function translatePluginStatus(t: TFunction, status: string) {
+  return translateStatusLabel(t, status);
 }

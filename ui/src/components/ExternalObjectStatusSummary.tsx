@@ -1,4 +1,4 @@
-import type { ExternalObjectSummary } from "@paperclipai/shared";
+import type { ExternalObjectSummary } from "@penclipai/shared";
 import {
   dominantExternalObjectTone,
   externalObjectCategoryLabel,

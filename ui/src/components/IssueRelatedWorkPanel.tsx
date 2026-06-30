@@ -119,6 +119,7 @@ function ExternalObjectsSection({
   isError: boolean;
   onRetry?: () => void;
 }) {
+  const { t } = useTranslation(undefined, { useSuspense: false });
   // Severity-first sort with most-recently-changed as the secondary sort.
   const sorted = [...groups].sort((a, b) => {
     const aTone = externalObjectToneSeverity(a.pill.statusCategory ? a.group.object?.statusTone ?? null : null);
@@ -132,30 +133,34 @@ function ExternalObjectsSection({
   return (
     <section className="space-y-3 rounded-lg border border-border p-3">
       <div className="space-y-1">
-        <h3 className="text-sm font-semibold">External objects</h3>
+        <h3 className="text-sm font-semibold">{t("issueRelatedWork.externalObjects", { defaultValue: "External objects" })}</h3>
         <p className="text-xs text-muted-foreground">
-          Remote work referenced from this issue — pull requests, deployments, tickets in other systems, and more.
+          {t("issueRelatedWork.externalObjectsDescription", {
+            defaultValue: "Remote work referenced from this issue - pull requests, deployments, tickets in other systems, and more.",
+          })}
         </p>
       </div>
 
       {isError ? (
         <p className="text-xs text-muted-foreground">
-          Couldn't load external objects.{" "}
+          {t("issueRelatedWork.externalObjectsLoadFailed", { defaultValue: "Couldn't load external objects." })}{" "}
           {onRetry ? (
             <button
               type="button"
               onClick={onRetry}
               className="text-primary underline-offset-2 hover:underline"
             >
-              Retry
+              {t("common.retry", { defaultValue: "Retry" })}
             </button>
           ) : null}
         </p>
       ) : isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading external objects…</p>
+        <p className="text-xs text-muted-foreground">
+          {t("issueRelatedWork.loadingExternalObjects", { defaultValue: "Loading external objects..." })}
+        </p>
       ) : sorted.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          This issue does not reference any external objects yet.
+          {t("issueRelatedWork.noExternalObjects", { defaultValue: "This issue does not reference any external objects yet." })}
         </p>
       ) : (
         <ul className="-mx-1 flex flex-col">

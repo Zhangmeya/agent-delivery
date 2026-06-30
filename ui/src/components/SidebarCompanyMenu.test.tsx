@@ -164,8 +164,8 @@ describe("SidebarCompanyMenu", () => {
     });
     await flushReact();
 
-    expect(document.body.textContent).toContain("Create new company...");
-    expect(document.body.textContent).not.toContain("Add company...");
+    expect(document.body.textContent).toContain("Add company...");
+    expect(document.body.textContent).not.toContain("Create new company...");
 
     act(() => {
       root.unmount();
@@ -203,7 +203,7 @@ describe("SidebarCompanyMenu", () => {
     expect(document.body.textContent).toContain("Edit");
     expect(document.body.textContent).toContain("Strata");
     expect(document.body.textContent).toContain("ANA");
-    expect(document.body.textContent).toContain("Create new company...");
+    expect(document.body.textContent).toContain("Add company...");
     expect(document.body.textContent).toContain("Invite people to Acme Labs");
     expect(document.body.textContent).toContain("Company settings");
     expect(document.body.textContent).toContain("Sign out");

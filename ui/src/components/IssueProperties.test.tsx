@@ -554,11 +554,11 @@ describe("IssueProperties", () => {
     });
     await flush();
 
-    expect(container.textContent).toContain("Sub-issues");
-    expect(container.textContent).toContain("Add sub-issue");
+    expect(container.textContent).toContain("Sub-tasks");
+    expect(container.textContent).toContain("Add sub-task");
 
     const addButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("Add sub-issue"));
+      .find((button) => button.textContent?.includes("Add sub-task"));
     expect(addButton).not.toBeUndefined();
 
     await act(async () => {
@@ -665,7 +665,7 @@ describe("IssueProperties", () => {
     const removeButton = container.querySelector('button[aria-label="Remove PAP-2 as blocker"]');
     expect(removeButton?.className).toContain("absolute");
     expect(container.textContent).toContain("Add blocker");
-    expect(container.querySelector('input[placeholder="Search issues..."]')).toBeNull();
+    expect(container.querySelector('input[placeholder="Search tasks..."]')).toBeNull();
 
     const addButton = Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("Add blocker"));
@@ -676,7 +676,7 @@ describe("IssueProperties", () => {
     });
     await flush();
 
-    expect(container.querySelector('input[placeholder="Search issues..."]')).not.toBeNull();
+    expect(container.querySelector('input[placeholder="Search tasks..."]')).not.toBeNull();
 
     const candidateButton = Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("PAP-3 New blocker"));
@@ -717,7 +717,7 @@ describe("IssueProperties", () => {
     });
     await flush();
 
-    const searchInput = container.querySelector('input[aria-label="Search issues to add as blockers"]') as HTMLInputElement | null;
+    const searchInput = container.querySelector('input[aria-label="Search tasks to add as blockers"]') as HTMLInputElement | null;
     expect(searchInput).not.toBeNull();
 
     await act(async () => {

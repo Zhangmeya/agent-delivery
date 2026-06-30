@@ -76,6 +76,29 @@ async function seedSharedCodexAuth(homeRoot: string): Promise<void> {
   await fs.writeFile(path.join(sharedCodexHome, "auth.json"), '{"token":"shared"}\n', "utf8");
 }
 
+function installCodexExecuteTestEnv(homeRoot: string): () => void {
+  const previousHome = process.env.HOME;
+  const previousCodexHome = process.env.CODEX_HOME;
+  const previousPaperclipHome = process.env.PAPERCLIP_HOME;
+  const previousPaperclipInstanceId = process.env.PAPERCLIP_INSTANCE_ID;
+
+  process.env.HOME = homeRoot;
+  process.env.CODEX_HOME = path.join(homeRoot, ".codex");
+  process.env.PAPERCLIP_HOME = path.join(homeRoot, "paperclip-home");
+  process.env.PAPERCLIP_INSTANCE_ID = "default";
+
+  return () => {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previousCodexHome;
+    if (previousPaperclipHome === undefined) delete process.env.PAPERCLIP_HOME;
+    else process.env.PAPERCLIP_HOME = previousPaperclipHome;
+    if (previousPaperclipInstanceId === undefined) delete process.env.PAPERCLIP_INSTANCE_ID;
+    else process.env.PAPERCLIP_INSTANCE_ID = previousPaperclipInstanceId;
+  };
+}
+
 async function expectSeededFromSharedAuth(targetAuth: string, sharedAuth: string): Promise<void> {
   if (process.platform === "win32") {
     await expect(fs.readFile(targetAuth, "utf8")).resolves.toBe(await fs.readFile(sharedAuth, "utf8"));
@@ -288,8 +311,7 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     await seedSharedCodexAuth(root);
 
     let commandNotes: string[] = [];
@@ -331,8 +353,7 @@ describe("codex execute", () => {
         "Codex exec automatically applies repo-scoped AGENTS.md instructions from the current workspace; Paperclip does not currently suppress that discovery.",
       );
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -347,9 +368,8 @@ describe("codex execute", () => {
     await fs.mkdir(binDir, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     const previousPath = process.env.PATH;
-    process.env.HOME = root;
     process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH ?? ""}`;
     await seedSharedCodexAuth(root);
 
@@ -395,8 +415,7 @@ describe("codex execute", () => {
       expect(loggedEnv.HOME).toBe(root);
       expect(loggedEnv.PAPERCLIP_RESOLVED_COMMAND?.toLowerCase()).toBe(expectedResolvedCommand.toLowerCase());
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
       await fs.rm(root, { recursive: true, force: true });
@@ -410,7 +429,7 @@ describe("codex execute", () => {
     const binDir = path.join(root, "bin");
     const commandPath = path.join(binDir, "codex");
     const capturePath = path.join(remoteWorkspace, "capture.json");
-    const previousHome = process.env.HOME;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     const previousPath = process.env.PATH;
 
     await fs.mkdir(localWorkspace, { recursive: true });
@@ -418,7 +437,6 @@ describe("codex execute", () => {
     await fs.mkdir(binDir, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    process.env.HOME = root;
     process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH ?? ""}`;
     await seedSharedCodexAuth(root);
 
@@ -472,8 +490,7 @@ describe("codex execute", () => {
       expect(capture.paperclipApiKey).not.toBe("run-jwt-token");
       expect(capture.paperclipApiBridgeMode).toBe("queue_v1");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
       await fs.rm(root, { recursive: true, force: true });
@@ -488,8 +505,7 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     await seedSharedCodexAuth(root);
 
     try {
@@ -583,8 +599,7 @@ describe("codex execute", () => {
       expect(capture.prompt).toContain("First comment");
       expect(capture.prompt).toContain("Second comment");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -599,8 +614,7 @@ describe("codex execute", () => {
       "Error running remote compact task: We're currently experiencing high demand, which may cause temporary errors.",
     );
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     await seedSharedCodexAuth(root);
 
     try {
@@ -634,8 +648,7 @@ describe("codex execute", () => {
       expect(result.errorFamily).toBe("transient_upstream");
       expect(result.errorMessage).toContain("high demand");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -650,8 +663,7 @@ describe("codex execute", () => {
       "You've hit your usage limit for GPT-5.3-Codex-Spark. Switch to another model now, or try again at 11:31 PM.",
     );
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     await seedSharedCodexAuth(root);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 22, 22, 29, 0));
@@ -697,8 +709,7 @@ describe("codex execute", () => {
       );
     } finally {
       vi.useRealTimers();
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -711,8 +722,7 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     await seedSharedCodexAuth(root);
 
     let commandNotes: string[] = [];
@@ -774,8 +784,7 @@ describe("codex execute", () => {
       expect(commandNotes).toContain("Codex transient fallback requested safer invocation settings for this retry.");
       expect(commandNotes).toContain("Codex transient fallback forced a fresh session with a continuation handoff.");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -788,8 +797,7 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     await seedSharedCodexAuth(root);
 
     try {
@@ -929,8 +937,7 @@ describe("codex execute", () => {
       expect(executorCapture.prompt).toContain("You are waking because changes were requested in the execution workflow.");
       expect(executorCapture.prompt).toContain("allowed actions: address_changes, resubmit");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -943,8 +950,7 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     await seedSharedCodexAuth(root);
 
     try {
@@ -1026,8 +1032,7 @@ describe("codex execute", () => {
       expect(capture.prompt).toContain("- checkout: already claimed by the harness for this run");
       expect(capture.prompt).toContain("The harness already checked out this issue for the current run.");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -1042,8 +1047,7 @@ describe("codex execute", () => {
     await fs.writeFile(instructionsPath, "You are managed instructions.\n", "utf8");
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     await seedSharedCodexAuth(root);
 
     let invocationPrompt = "";
@@ -1138,8 +1142,7 @@ describe("codex execute", () => {
       expect(promptMetrics.instructionsChars).toBe(0);
       expect(promptMetrics.heartbeatPromptChars).toBe(0);
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });

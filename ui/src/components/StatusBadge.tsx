@@ -1,5 +1,7 @@
 import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "../lib/utils";
+import { translateStatusLabel } from "../lib/i18n-labels";
 import {
   statusBadge,
   statusBadgeDefault,
@@ -16,24 +18,19 @@ function scStyle(cssVar: string): CSSProperties {
   return { "--sc": `var(${cssVar})` } as CSSProperties;
 }
 
-/** "in_review" → "In review" (sentence case). */
-function sentenceCaseStatus(status: string): string {
-  const s = status.replace(/_/g, " ");
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
 /**
  * Generic status badge for runs / goals / approvals (not task status).
  */
 export function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap shrink-0",
-        statusBadge[status] ?? statusBadgeDefault
+        statusBadge[status] ?? statusBadgeDefault,
       )}
     >
-      {status.replace(/_/g, " ")}
+      {translateStatusLabel(t, status)}
     </span>
   );
 }
@@ -44,14 +41,15 @@ export function StatusBadge({ status }: { status: string }) {
  * renders as "idle" (alias for dead code).
  */
 export function AgentStatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const cssVar = agentStatusVar[status] ?? agentStatusVarDefault;
-  const label = status === "active" ? "idle" : status;
+  const labelStatus = status === "active" ? "idle" : status;
   return (
     <span
       className="status-chip inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium leading-none whitespace-nowrap shrink-0"
       style={scStyle(cssVar)}
     >
-      {label.replace(/_/g, " ")}
+      {translateStatusLabel(t, labelStatus)}
     </span>
   );
 }
@@ -76,23 +74,22 @@ export function AgentStatusCapsule({ status }: { status: string }) {
 /**
  * Issue/task status chip — bordered chip recoloured from the editable
  * `--status-task-*` base hue via `.status-chip`, carrying the unified
- * {@link StatusGlyph} (one distinct, color-blind-safe shape per status), a
- * sentence-cased label and regular weight. `cancelled` is struck through.
- * Distinct from the generic {@link StatusBadge} so run/goal/approval badges are
- * unaffected.
+ * {@link StatusGlyph} (one distinct, color-blind-safe shape per status).
+ * `cancelled` is struck through.
  */
 export function IssueStatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const cssVar = taskStatusVar[status] ?? taskStatusVarDefault;
   return (
     <span
       className={cn(
         "status-chip inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-normal leading-none whitespace-nowrap shrink-0",
-        status === "cancelled" && "line-through"
+        status === "cancelled" && "line-through",
       )}
       style={scStyle(cssVar)}
     >
       <StatusGlyph status={status} size="sm" />
-      {sentenceCaseStatus(status)}
+      {translateStatusLabel(t, status)}
     </span>
   );
 }

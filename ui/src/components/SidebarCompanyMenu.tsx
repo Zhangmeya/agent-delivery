@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -129,6 +130,7 @@ function SortableCompanyItem({
 }
 
 export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompanyMenuProps = {}) {
+  const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const [isEditingOrder, setIsEditingOrder] = useState(false);
   const queryClient = useQueryClient();
@@ -256,7 +258,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
             }}
             className="rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            {isEditingOrder ? "Done" : "Edit"}
+            {isEditingOrder ? t("Done", { defaultValue: "Done" }) : t("Edit", { defaultValue: "Edit" })}
           </button>
         </div>
         <div className="max-h-96 overflow-y-auto">
@@ -281,7 +283,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
             </SortableContext>
           </DndContext>
           {orderedCompanies.length === 0 ? (
-            <DropdownMenuItem disabled>No companies</DropdownMenuItem>
+            <DropdownMenuItem disabled>{t("sidebar.noWorkspaces", { defaultValue: "No workspaces" })}</DropdownMenuItem>
           ) : null}
         </div>
         <DropdownMenuSeparator />
@@ -291,7 +293,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
           disabled={isEditingOrder}
         >
           <Plus className="size-4" />
-          <span>Create new company...</span>
+          <span>{t("sidebar.addCompany", { defaultValue: "Add company..." })}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild disabled={isEditingOrder}>
@@ -307,7 +309,12 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
           >
             <UserPlus className="size-4" />
             <span className="truncate">
-              {selectedCompany ? `Invite people to ${selectedCompany.name}` : "Invite people"}
+              {selectedCompany
+                ? t("sidebar.invitePeopleToCompany", {
+                    defaultValue: "Invite people to {{companyName}}",
+                    companyName: selectedCompany.name,
+                  })
+                : t("sidebar.invitePeople", { defaultValue: "Invite people" })}
             </span>
           </Link>
         </DropdownMenuItem>
@@ -323,7 +330,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
             }}
           >
             <Settings className="size-4" />
-            <span>Company settings</span>
+            <span>{t("sidebar.companySettings", { defaultValue: "Company settings" })}</span>
           </Link>
         </DropdownMenuItem>
         {session?.session ? (
@@ -335,7 +342,9 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
               disabled={isEditingOrder || signOutMutation.isPending}
             >
               <LogOut className="size-4" />
-              <span>{signOutMutation.isPending ? "Signing out..." : "Sign out"}</span>
+              <span>{signOutMutation.isPending
+                ? t("sidebar.signingOut", { defaultValue: "Signing out..." })
+                : t("sidebar.signOut", { defaultValue: "Sign out" })}</span>
             </DropdownMenuItem>
           </>
         ) : null}

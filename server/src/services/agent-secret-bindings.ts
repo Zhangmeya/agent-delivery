@@ -1,4 +1,4 @@
-import { envBindingSchema, type SecretVersionSelector } from "@paperclipai/shared";
+import { envBindingSchema, type SecretVersionSelector } from "@penclipai/shared";
 
 interface AgentSecretBindingSyncService {
   syncSecretRefsForTarget?: (

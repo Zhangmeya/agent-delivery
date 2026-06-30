@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import type { ServerGitInfo, ServerInfoSnapshot } from "@paperclipai/shared";
+import type { ServerGitInfo, ServerInfoSnapshot } from "@penclipai/shared";
 
 export type { ServerGitInfo, ServerInfoSnapshot };
 

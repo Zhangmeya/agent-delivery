@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "@/lib/router";
 import {
   DndContext,
@@ -140,6 +141,7 @@ function KanbanColumn({
   revealIncrement: number;
   onShowMore: () => void;
 }) {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
   const isEmpty = issues.length === 0;
@@ -215,12 +217,16 @@ function KanbanColumn({
             className="mt-1 flex w-full items-center justify-center rounded-md border border-dashed border-border bg-background/70 px-2 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
             onClick={onShowMore}
           >
-            Show {nextRevealCount} more
+            {t("kanban.showMore", { defaultValue: "Show {{count}} more", count: nextRevealCount })}
           </button>
         ) : null}
         {issues.length > 0 && (hiddenCount > 0 || issues.length >= visibleCount) ? (
           <p className="px-1 pt-1 text-[11px] text-muted-foreground">
-            Showing {visibleIssues.length} of {issues.length}
+            {t("kanban.showingCount", {
+              defaultValue: "Showing {{shown}} of {{total}}",
+              shown: visibleIssues.length,
+              total: issues.length,
+            })}
           </p>
         ) : null}
       </div>
@@ -247,6 +253,7 @@ function KanbanCard({
   compact?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const {
     attributes,
     listeners,
@@ -296,11 +303,11 @@ function KanbanCard({
           {isSuccessfulRunHandoffRequired(issue) ? (
             <span
               className="inline-flex items-center gap-1 rounded-full border border-amber-400/45 bg-amber-50/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-300/35 dark:bg-amber-400/10 dark:text-amber-300"
-              title="This task needs a next step"
-              aria-label="Needs next step"
+              title={t("kanban.nextStepTitle", { defaultValue: "This task needs a next step" })}
+              aria-label={t("kanban.nextStepAriaLabel", { defaultValue: "Needs next step" })}
             >
               <AlertTriangle className="h-3 w-3" />
-              Next step
+              {t("kanban.nextStepBadge", { defaultValue: "Next step" })}
             </span>
           ) : null}
           {isLive && (

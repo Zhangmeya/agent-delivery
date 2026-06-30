@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@paperclipai/plugin-sdk": "workspace:@penclipai/plugin-sdk@*",
-    "@paperclipai/shared": "workspace:@penclipai/shared@*"
+    "@penclipai/shared": "workspace:@penclipai/shared@*"
   },
   "devDependencies": {
     "esbuild": "^0.28.1",

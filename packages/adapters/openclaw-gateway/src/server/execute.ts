@@ -565,6 +565,61 @@ export function buildAgentParams(input: {
   return agentParams;
 }
 
+function buildStandardPaperclipPayload(
+  ctx: AdapterExecutionContext,
+  wakePayload: WakePayload,
+  paperclipEnv: Record<string, string>,
+  payloadTemplate: Record<string, unknown>,
+): Record<string, unknown> {
+  const templatePaperclip = parseObject(payloadTemplate.paperclip);
+  const workspace = asRecord(ctx.context.paperclipWorkspace);
+  const workspaces = Array.isArray(ctx.context.paperclipWorkspaces)
+    ? ctx.context.paperclipWorkspaces.filter((entry): entry is Record<string, unknown> => Boolean(asRecord(entry)))
+    : [];
+  const configuredWorkspaceRuntime = parseObject(ctx.config.workspaceRuntime);
+  const runtimeServiceIntents = Array.isArray(ctx.context.paperclipRuntimeServiceIntents)
+    ? ctx.context.paperclipRuntimeServiceIntents.filter(
+        (entry): entry is Record<string, unknown> => Boolean(asRecord(entry)),
+      )
+    : [];
+
+  const standardPaperclip: Record<string, unknown> = {
+    runId: ctx.runId,
+    companyId: ctx.agent.companyId,
+    agentId: ctx.agent.id,
+    taskId: wakePayload.taskId,
+    issueId: wakePayload.issueId,
+    issueIds: wakePayload.issueIds,
+    wakeReason: wakePayload.wakeReason,
+    wakeCommentId: wakePayload.wakeCommentId,
+    approvalId: wakePayload.approvalId,
+    approvalStatus: wakePayload.approvalStatus,
+    apiUrl: paperclipEnv.PAPERCLIP_API_URL ?? null,
+  };
+  const structuredWake = parseObject(ctx.context.paperclipWake);
+  if (Object.keys(structuredWake).length > 0) {
+    standardPaperclip.wake = structuredWake;
+  }
+
+  if (workspace) {
+    standardPaperclip.workspace = workspace;
+  }
+  if (workspaces.length > 0) {
+    standardPaperclip.workspaces = workspaces;
+  }
+  if (runtimeServiceIntents.length > 0 || Object.keys(configuredWorkspaceRuntime).length > 0) {
+    standardPaperclip.workspaceRuntime = {
+      ...configuredWorkspaceRuntime,
+      ...(runtimeServiceIntents.length > 0 ? { services: runtimeServiceIntents } : {}),
+    };
+  }
+
+  return {
+    ...templatePaperclip,
+    ...standardPaperclip,
+  };
+}
+
 function normalizeUrl(input: string): URL | null {
   try {
     return new URL(input);
@@ -785,12 +840,12 @@ function buildAgentRequestParamsForProtocol(input: {
   paperclipPayload: Record<string, unknown>;
   protocol: number;
 }): Record<string, unknown> {
-  const params = { ...input.baseParams };
-  if (input.protocol < 4) {
-    params.paperclip = input.paperclipPayload;
-  }
-  return params;
+  return { ...input.baseParams };
 }
+
+export const __test__ = {
+  buildAgentRequestParamsForProtocol,
+};
 
 function isResponseFrame(value: unknown): value is GatewayResponseFrame {
   const record = asRecord(value);
@@ -1328,6 +1383,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     configuredAgentId,
     waitTimeoutMs,
   });
+  const paperclipPayload = buildStandardPaperclipPayload(ctx, wakePayload, paperclipEnv, payloadTemplate);
 
   if (ctx.onMeta) {
     await ctx.onMeta({

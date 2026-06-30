@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAgentParams, resolveSessionKey } from "./execute.js";
+import { __test__, buildAgentParams, resolveSessionKey } from "./execute.js";
 
 describe("resolveSessionKey", () => {
   it("prefixes run-scoped session keys with the configured agent", () => {
@@ -95,6 +95,40 @@ describe("buildAgentParams", () => {
       message: "wake text",
       sessionKey: "paperclip",
       idempotencyKey: "run-123",
+    });
+  });
+});
+
+describe("buildAgentRequestParamsForProtocol", () => {
+  it("keeps v4 agent params free of root-level paperclip fields", () => {
+    expect(
+      __test__.buildAgentRequestParamsForProtocol({
+        baseParams: {
+          message: "wake text",
+          sessionKey: "paperclip",
+        },
+        paperclipPayload: { runId: "run-123" },
+        protocol: 4,
+      }),
+    ).toEqual({
+      message: "wake text",
+      sessionKey: "paperclip",
+    });
+  });
+
+  it("keeps v3 agent params free of root-level paperclip fields", () => {
+    expect(
+      __test__.buildAgentRequestParamsForProtocol({
+        baseParams: {
+          message: "wake text",
+          sessionKey: "paperclip",
+        },
+        paperclipPayload: { runId: "run-123" },
+        protocol: 3,
+      }),
+    ).toEqual({
+      message: "wake text",
+      sessionKey: "paperclip",
     });
   });
 });

@@ -26,7 +26,7 @@ import { normalizeExternalObjectHref } from "../lib/external-object-href";
 import type {
   ExternalObjectLivenessState,
   ExternalObjectStatusCategory,
-} from "@paperclipai/shared";
+} from "@penclipai/shared";
 
 /**
  * Host-resolved external-object metadata for inline markdown decoration.

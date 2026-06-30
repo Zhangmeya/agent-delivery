@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import * as RouterDom from "react-router-dom";
 import type { Issue } from "@penclipai/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -160,6 +161,7 @@ export const IssueLinkQuicklook = React.forwardRef<
   },
   ref,
 ) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const instanceId = React.useMemo(() => Symbol("issue-quicklook"), []);
   const open = useIsQuicklookOpen(instanceId);
@@ -281,7 +283,7 @@ export const IssueLinkQuicklook = React.forwardRef<
             <div className="h-4 w-full rounded bg-accent/40" />
             <div className="h-4 w-3/4 rounded bg-accent/30" />
             {!isLoading ? (
-              <p className="text-xs text-muted-foreground">Unable to load task preview.</p>
+              <p className="text-xs text-muted-foreground">{t("issueQuicklook.unableToLoadTaskPreview", { defaultValue: "Unable to load task preview." })}</p>
             ) : null}
           </div>
         )}

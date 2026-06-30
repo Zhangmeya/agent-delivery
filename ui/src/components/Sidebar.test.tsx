@@ -180,7 +180,7 @@ describe("Sidebar", () => {
     expect(workSection?.textContent).toContain("Plugin launcher outlet");
     const workSectionContainer = workSection?.parentElement?.parentElement;
     expect(workSectionContainer?.textContent).toContain("Work");
-    expect(workSectionContainer?.textContent).toContain("Issues");
+    expect(workSectionContainer?.textContent).toContain("Tasks");
     expect(workSectionContainer?.textContent).toContain("Goals");
 
     flushSync(() => {
@@ -199,8 +199,8 @@ describe("Sidebar", () => {
     expect(container.textContent).not.toContain("New Task");
 
     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
-    expect(navLabels).toContain("Issues");
-    expect(navLabels).not.toContain("Tasks");
+    expect(navLabels).toContain("Tasks");
+    expect(navLabels).not.toContain("Issues");
 
     const projectsLink = [...container.querySelectorAll("nav a")].find((a) => a.textContent?.trim() === "Projects");
     expect(projectsLink?.getAttribute("href")).toBe("/projects");
@@ -242,8 +242,8 @@ describe("Sidebar", () => {
     expect(container.textContent).not.toContain("New Task");
 
     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
-    expect(navLabels).toContain("Issues");
-    expect(navLabels).not.toContain("Tasks");
+    expect(navLabels).toContain("Tasks");
+    expect(navLabels).not.toContain("Issues");
     // No top-level Projects nav link in classic mode (D5 option A).
     expect(navLabels).not.toContain("Projects");
 

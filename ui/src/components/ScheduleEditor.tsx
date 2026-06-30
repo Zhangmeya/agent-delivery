@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -181,7 +182,7 @@ function ordinalSuffix(n: number): string {
 
 export { describeSchedule };
 
-export function getScheduleCronValidation(cron: string): {
+export function getScheduleCronValidation(cron: string, t?: TFunction): {
   valid: boolean;
   message: string;
   nextFires: Date[];
@@ -190,7 +191,9 @@ export function getScheduleCronValidation(cron: string): {
   if (!trimmed) {
     return {
       valid: false,
-      message: "Enter a 5-field cron expression.",
+      message: t
+        ? t("scheduleEditor.validation.enterFiveFieldCron", { defaultValue: "Enter a 5-field cron expression." })
+        : "Enter a 5-field cron expression.",
       nextFires: [],
     };
   }
@@ -199,7 +202,12 @@ export function getScheduleCronValidation(cron: string): {
   if (fields.length !== 5) {
     return {
       valid: false,
-      message: `Use exactly 5 fields; this has ${fields.length}.`,
+      message: t
+        ? t("scheduleEditor.validation.exactlyFiveFields", {
+            count: fields.length,
+            defaultValue: "Use exactly 5 fields; this has {{count}}.",
+          })
+        : `Use exactly 5 fields; this has ${fields.length}.`,
       nextFires: [],
     };
   }
@@ -207,7 +215,11 @@ export function getScheduleCronValidation(cron: string): {
   if (!parseCronExpression(trimmed)) {
     return {
       valid: false,
-      message: "Cron fields must use valid numbers, ranges, lists, wildcards, or steps.",
+      message: t
+        ? t("scheduleEditor.validation.validCronFields", {
+            defaultValue: "Cron fields must use valid numbers, ranges, lists, wildcards, or steps.",
+          })
+        : "Cron fields must use valid numbers, ranges, lists, wildcards, or steps.",
       nextFires: [],
     };
   }
@@ -215,7 +227,15 @@ export function getScheduleCronValidation(cron: string): {
   const nextFires = nextCronFires(trimmed, 3, { timeZone: "UTC" });
   return {
     valid: true,
-    message: nextFires.length > 0 ? "Valid cron." : "Valid cron, but no upcoming fires were found.",
+    message: nextFires.length > 0
+      ? t
+        ? t("scheduleEditor.validation.validCron", { defaultValue: "Valid cron." })
+        : "Valid cron."
+      : t
+        ? t("scheduleEditor.validation.validCronNoUpcomingFires", {
+            defaultValue: "Valid cron, but no upcoming fires were found.",
+          })
+        : "Valid cron, but no upcoming fires were found.",
     nextFires,
   };
 }
@@ -237,7 +257,7 @@ export function ScheduleEditor({
   const [dayOfWeek, setDayOfWeek] = useState(parsed.dayOfWeek);
   const [dayOfMonth, setDayOfMonth] = useState(parsed.dayOfMonth);
   const [customCron, setCustomCron] = useState(preset === "custom" ? value : "");
-  const customValidation = useMemo(() => getScheduleCronValidation(customCron), [customCron]);
+  const customValidation = useMemo(() => getScheduleCronValidation(customCron, t), [customCron, t]);
 
   useEffect(() => {
     onValidityChange?.(preset !== "custom" || customValidation.valid);
@@ -301,7 +321,7 @@ export function ScheduleEditor({
               }
             }}
             placeholder="0 10 * * *"
-            aria-label="Cron expression"
+            aria-label={t("scheduleEditor.cronExpression", { defaultValue: "Cron expression" })}
             aria-invalid={!customValidation.valid}
             className="font-mono text-sm"
           />
@@ -316,7 +336,10 @@ export function ScheduleEditor({
           >
             {customValidation.message}
             {customValidation.valid && customValidation.nextFires.length > 0
-              ? ` Next: ${customValidation.nextFires.map((fire) => fire.toLocaleString()).join(", ")}.`
+              ? ` ${t("scheduleEditor.nextFires", {
+                  times: customValidation.nextFires.map((fire) => fire.toLocaleString()).join(", "),
+                  defaultValue: "Next: {{times}}.",
+                })}`
               : null}
           </p>
         </div>
