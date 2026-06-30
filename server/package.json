@@ -60,7 +60,6 @@
     "@penclipai/db": "workspace:*",
     "@penclipai/plugin-sdk": "workspace:*",
     "@penclipai/shared": "workspace:*",
-    "@penclipai/skills-catalog": "workspace:*",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "better-auth": "1.6.20",

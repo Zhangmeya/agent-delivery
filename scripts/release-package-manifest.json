@@ -72,7 +72,7 @@
   {
     "dir": "packages/skills-catalog",
     "name": "@penclipai/skills-catalog",
-    "publishFromCi": true
+    "publishFromCi": false
   },
   {
     "dir": "packages/teams-catalog",
