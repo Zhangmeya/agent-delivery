@@ -505,7 +505,7 @@ export function Layout() {
         // whole viewport scroll horizontally. clip (not hidden) leaves overflow-y
         // computed as visible, so native body scroll + the sticky breadcrumb keep
         // working.
-        isMobile ? "min-h-dvh overflow-x-clip" : "flex h-dvh flex-col overflow-clip",
+        isMobile ? "min-h-dvh overflow-x-clip" : "flex h-[var(--paperclip-available-height)] flex-col overflow-clip",
       )}
       >
       <a

@@ -1,5 +1,6 @@
 import { memo, useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent, type CSSProperties, type DragEvent, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { IssueWorkMode } from "@penclipai/shared";
 import { pickTextColorForSolidBg } from "@/lib/color-contrast";
@@ -125,27 +126,27 @@ const STAGED_FILE_ACCEPT = "image/*,application/pdf,text/plain,text/markdown,app
 
 const ISSUE_THINKING_EFFORT_OPTIONS = {
   claude_local: [
-    { value: "", label: "Default" },
-    { value: "low", label: "Low" },
-    { value: "medium", label: "Medium" },
-    { value: "high", label: "High" },
+    { value: "", labelKey: "newIssue.thinkingEffort.default", defaultLabel: "Default" },
+    { value: "low", labelKey: "newIssue.thinkingEffort.low", defaultLabel: "Low" },
+    { value: "medium", labelKey: "newIssue.thinkingEffort.medium", defaultLabel: "Medium" },
+    { value: "high", labelKey: "newIssue.thinkingEffort.high", defaultLabel: "High" },
   ],
   codex_local: [
-    { value: "", label: "Default" },
-    { value: "minimal", label: "Minimal" },
-    { value: "low", label: "Low" },
-    { value: "medium", label: "Medium" },
-    { value: "high", label: "High" },
-    { value: "xhigh", label: "X-High" },
+    { value: "", labelKey: "newIssue.thinkingEffort.default", defaultLabel: "Default" },
+    { value: "minimal", labelKey: "newIssue.thinkingEffort.minimal", defaultLabel: "Minimal" },
+    { value: "low", labelKey: "newIssue.thinkingEffort.low", defaultLabel: "Low" },
+    { value: "medium", labelKey: "newIssue.thinkingEffort.medium", defaultLabel: "Medium" },
+    { value: "high", labelKey: "newIssue.thinkingEffort.high", defaultLabel: "High" },
+    { value: "xhigh", labelKey: "newIssue.thinkingEffort.xhigh", defaultLabel: "X-High" },
   ],
   opencode_local: [
-    { value: "", label: "Default" },
-    { value: "minimal", label: "Minimal" },
-    { value: "low", label: "Low" },
-    { value: "medium", label: "Medium" },
-    { value: "high", label: "High" },
-    { value: "xhigh", label: "X-High" },
-    { value: "max", label: "Max" },
+    { value: "", labelKey: "newIssue.thinkingEffort.default", defaultLabel: "Default" },
+    { value: "minimal", labelKey: "newIssue.thinkingEffort.minimal", defaultLabel: "Minimal" },
+    { value: "low", labelKey: "newIssue.thinkingEffort.low", defaultLabel: "Low" },
+    { value: "medium", labelKey: "newIssue.thinkingEffort.medium", defaultLabel: "Medium" },
+    { value: "high", labelKey: "newIssue.thinkingEffort.high", defaultLabel: "High" },
+    { value: "xhigh", labelKey: "newIssue.thinkingEffort.xhigh", defaultLabel: "X-High" },
+    { value: "max", labelKey: "newIssue.thinkingEffort.max", defaultLabel: "Max" },
   ],
 } as const;
 
@@ -220,39 +221,59 @@ function formatFileSize(file: File) {
   return `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function buildStatusOptions(): ReadonlyArray<{ value: string; label: string; color: string; description?: string }> {
+function buildStatusOptions(t: TFunction): ReadonlyArray<{ value: string; label: string; color: string; description?: string }> {
   const palette = issueStatusText;
   return [
     {
       value: "backlog",
-      label: "Backlog",
+      label: t("status.backlog", { defaultValue: "Backlog" }),
       color: palette.backlog ?? issueStatusTextDefault,
-      description: "Parked — assignee will not be woken",
+      description: t("newIssue.statusDescriptions.backlog", { defaultValue: "Parked - assignee will not be woken" }),
     },
     {
       value: "todo",
-      label: "Todo",
+      label: t("status.todo", { defaultValue: "Todo" }),
       color: palette.todo ?? issueStatusTextDefault,
-      description: "Executable — assignee will be woken",
+      description: t("newIssue.statusDescriptions.todo", { defaultValue: "Executable - assignee will be woken" }),
     },
-    { value: "in_progress", label: "In Progress", color: palette.in_progress ?? issueStatusTextDefault },
-    { value: "in_review", label: "In Review", color: palette.in_review ?? issueStatusTextDefault },
-    { value: "done", label: "Done", color: palette.done ?? issueStatusTextDefault },
+    { value: "in_progress", label: t("status.inProgress", { defaultValue: "In Progress" }), color: palette.in_progress ?? issueStatusTextDefault },
+    { value: "in_review", label: t("status.inReview", { defaultValue: "In Review" }), color: palette.in_review ?? issueStatusTextDefault },
+    { value: "done", label: t("status.done", { defaultValue: "Done" }), color: palette.done ?? issueStatusTextDefault },
   ];
 }
 
 const priorities = [
-  { value: "critical", label: "Critical", icon: AlertTriangle, color: priorityColor.critical ?? priorityColorDefault },
-  { value: "high", label: "High", icon: ArrowUp, color: priorityColor.high ?? priorityColorDefault },
-  { value: "medium", label: "Medium", icon: Minus, color: priorityColor.medium ?? priorityColorDefault },
-  { value: "low", label: "Low", icon: ArrowDown, color: priorityColor.low ?? priorityColorDefault },
+  { value: "critical", labelKey: "priority.critical", defaultLabel: "Critical", icon: AlertTriangle, color: priorityColor.critical ?? priorityColorDefault },
+  { value: "high", labelKey: "priority.high", defaultLabel: "High", icon: ArrowUp, color: priorityColor.high ?? priorityColorDefault },
+  { value: "medium", labelKey: "priority.medium", defaultLabel: "Medium", icon: Minus, color: priorityColor.medium ?? priorityColorDefault },
+  { value: "low", labelKey: "priority.low", defaultLabel: "Low", icon: ArrowDown, color: priorityColor.low ?? priorityColorDefault },
 ];
 
 const EXECUTION_WORKSPACE_MODES = [
-  { value: "shared_workspace", label: "Project default" },
-  { value: "isolated_workspace", label: "New isolated workspace" },
-  { value: "reuse_existing", label: "Reuse existing workspace" },
+  { value: "shared_workspace", labelKey: "newIssue.executionWorkspaceMode.shared_workspace", defaultLabel: "Project default" },
+  { value: "isolated_workspace", labelKey: "newIssue.executionWorkspaceMode.isolated_workspace", defaultLabel: "New isolated workspace" },
+  { value: "reuse_existing", labelKey: "newIssue.executionWorkspaceMode.reuse_existing", defaultLabel: "Reuse existing workspace" },
 ] as const;
+
+function translateWorkModeLabel(t: TFunction, value: string) {
+  if (value === "planning") {
+    return t("newIssue.workMode.conferenceRoom.planning", { defaultValue: "Plan mode" });
+  }
+  if (value === "ask") {
+    return t("newIssue.workMode.conferenceRoom.ask", { defaultValue: "Ask mode" });
+  }
+  return t("newIssue.workMode.conferenceRoom.standard", { defaultValue: "Agent mode" });
+}
+
+function translateWorkModeShortLabel(t: TFunction, value: string) {
+  if (value === "planning") {
+    return t("newIssue.workMode.short.planning", { defaultValue: "Plan" });
+  }
+  if (value === "ask") {
+    return t("newIssue.workMode.short.ask", { defaultValue: "Ask" });
+  }
+  return t("newIssue.workMode.short.standard", { defaultValue: "Agent" });
+}
 
 function defaultExecutionWorkspaceModeForIssueDefaults(
   defaults: {
@@ -381,7 +402,14 @@ export function NewIssueDialog() {
   const { newIssueOpen, newIssueDefaults, closeNewIssue } = useDialog();
   const { companies, selectedCompanyId, selectedCompany } = useCompany();
   const workModeOptions = useMemo(() => workModeMetaList(), []);
-  const statuses = useMemo(() => buildStatusOptions(), []);
+  const statuses = useMemo(() => buildStatusOptions(t), [t]);
+  const priorityOptions = useMemo(
+    () => priorities.map((priority) => ({
+      ...priority,
+      label: t(priority.labelKey, { defaultValue: priority.defaultLabel }),
+    })),
+    [t],
+  );
   const queryClient = useQueryClient();
   const { pushToast } = useToastActions();
   const [title, setTitle] = useState("");
@@ -1088,7 +1116,7 @@ export function NewIssueDialog() {
 
   const hasDraft = draftHasText || stagedFiles.length > 0;
   const currentStatus = statuses.find((s) => s.value === status) ?? statuses[1]!;
-  const currentPriority = priorities.find((p) => p.value === priority);
+  const currentPriority = priorityOptions.find((p) => p.value === priority);
   const currentAssignee = selectedAssigneeAgentId
     ? (agents ?? []).find((a) => a.id === selectedAssigneeAgentId)
     : null;
@@ -1113,12 +1141,12 @@ export function NewIssueDialog() {
     && !isUsingParentExecutionWorkspace;
   const assigneeOptionsTitle =
     assigneeAdapterType === "claude_local"
-      ? "Claude options"
+      ? t("newIssue.assigneeOptions.claude_local", { defaultValue: "Claude options" })
       : assigneeAdapterType === "codex_local"
-        ? "Codex options"
+        ? t("newIssue.assigneeOptions.codex_local", { defaultValue: "Codex options" })
         : assigneeAdapterType === "opencode_local"
-          ? "OpenCode options"
-        : "Agent options";
+          ? t("newIssue.assigneeOptions.opencode_local", { defaultValue: "OpenCode options" })
+        : t("newIssue.assigneeOptions.agent", { defaultValue: "Agent options" });
   const thinkingEffortOptions =
     assigneeAdapterType === "codex_local"
       ? ISSUE_THINKING_EFFORT_OPTIONS.codex_local
@@ -1172,7 +1200,7 @@ export function NewIssueDialog() {
   const hasSavedDraft = Boolean(savedDraft?.title.trim() || savedDraft?.description.trim());
   const canDiscardDraft = hasDraft || hasSavedDraft;
   const createIssueErrorMessage =
-    createIssue.error instanceof Error ? createIssue.error.message : "Failed to create task. Try again.";
+    createIssue.error instanceof Error ? createIssue.error.message : t("newIssue.createFailed", { defaultValue: "Failed to create issue. Try again." });
   const stagedDocuments = stagedFiles.filter((file) => file.kind === "document");
   const stagedAttachments = stagedFiles.filter((file) => file.kind === "attachment");
 
@@ -1221,6 +1249,7 @@ export function NewIssueDialog() {
     [assigneeAdapterModels],
   );
   const currentWorkMode = workModeMetaFor(workMode);
+  const currentWorkModeShortLabel = translateWorkModeShortLabel(t, currentWorkMode.value);
   const CurrentWorkModeIcon = currentWorkMode.icon;
 
   return (
@@ -1756,7 +1785,7 @@ export function NewIssueDialog() {
               >
                 {EXECUTION_WORKSPACE_MODES.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {t(option.labelKey, { defaultValue: option.defaultLabel })}
                   </option>
                 ))}
               </select>
@@ -1831,7 +1860,7 @@ export function NewIssueDialog() {
                   </div>
                   {assigneeModelLane === "cheap" && (
                     <p className="text-[11px] text-muted-foreground">
-                      Sends <code>modelProfile: "cheap"</code>{" "}
+                      {t("newIssue.modelLane.cheapSendsPrefix", { defaultValue: "Sends" })} <code>modelProfile: "cheap"</code>{" "}
                       {assigneeCheapProfile?.adapterConfig && typeof (assigneeCheapProfile.adapterConfig as Record<string, unknown>).model === "string"
                         ? <>{t("newIssue.modelLane.adapterDefaultPrefix", { defaultValue: "· adapter default" })} <code>{String((assigneeCheapProfile.adapterConfig as Record<string, unknown>).model)}</code></>
                         : assigneeCheapProfile
@@ -1874,7 +1903,7 @@ export function NewIssueDialog() {
                           )}
                           onClick={() => setAssigneeThinkingEffort(option.value)}
                         >
-                          {option.label}
+                      {t(option.labelKey, { defaultValue: option.defaultLabel })}
                         </button>
                       ))}
                     </div>
@@ -2038,13 +2067,13 @@ export function NewIssueDialog() {
                 ) : (
                   <>
                     <Minus className="h-3 w-3 text-muted-foreground" />
-                    Priority
+                    {t("newIssue.priority", { defaultValue: "Priority" })}
                   </>
                 )}
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-36 p-1" align="start">
-              {priorities.map((p) => (
+              {priorityOptions.map((p) => (
                 <button
                   key={p.value}
                   className={cn(
@@ -2080,7 +2109,7 @@ export function NewIssueDialog() {
             disabled={createIssue.isPending}
           >
             <Paperclip className="h-3 w-3" />
-            Upload
+            {t("newIssue.upload", { defaultValue: "Upload" })}
           </button>
 
           {/* Work mode chip */}
@@ -2096,7 +2125,7 @@ export function NewIssueDialog() {
                 )}
               >
                 <CurrentWorkModeIcon className="h-3 w-3" />
-                {currentWorkMode.shortLabel}
+                {currentWorkModeShortLabel}
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-36 p-1" align="start">
@@ -2117,7 +2146,7 @@ export function NewIssueDialog() {
                     }}
                   >
                     <Icon className="h-3 w-3" />
-                    {option.label}
+                    {translateWorkModeLabel(t, option.value)}
                     {option.value === workMode ? <Check className="ml-auto h-3 w-3" aria-hidden /> : null}
                   </button>
                 );
@@ -2139,9 +2168,9 @@ export function NewIssueDialog() {
             <PopoverContent className="w-44 p-1" align="start" data-testid="new-issue-more-menu">
               <div className="sm:hidden">
                 <div className="px-2 py-1 text-[10px] font-medium uppercase text-muted-foreground">
-                  Priority
+                  {t("newIssue.priority", { defaultValue: "Priority" })}
                 </div>
-                {priorities.map((p) => (
+                {priorityOptions.map((p) => (
                   <button
                     type="button"
                     key={p.value}
@@ -2163,11 +2192,11 @@ export function NewIssueDialog() {
               </div>
               <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-muted-foreground">
                 <Calendar className="h-3 w-3" />
-                Start date
+                {t("newIssue.startDate", { defaultValue: "Start date" })}
               </button>
               <button className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50 text-muted-foreground">
                 <Calendar className="h-3 w-3" />
-                Due date
+                {t("newIssue.dueDate", { defaultValue: "Due date" })}
               </button>
             </PopoverContent>
           </Popover>
@@ -2180,7 +2209,7 @@ export function NewIssueDialog() {
           >
             <Flag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
             <span className="leading-snug">
-              {t("newIssue.assignedBacklogNote.beforeBacklog", { defaultValue: "Assigning implies executable intent - leave status as" })} <span className="font-medium">{t("status.backlog", { defaultValue: "Backlog" })}</span> {t("newIssue.assignedBacklogNote.afterBacklog", { defaultValue: "only to deliberately park this. The assignee will not be woken until status moves to" })} <span className="font-medium">{t("status.todo", { defaultValue: "Todo" })}</span> {t("newIssue.assignedBacklogNote.or", { defaultValue: "or" })} <span className="font-medium">{t("status.in_progress", { defaultValue: "In Progress" })}</span>.
+              {t("newIssue.assignedBacklogNote.beforeBacklog", { defaultValue: "Assigning implies executable intent - leave status as" })} <span className="font-medium">{t("status.backlog", { defaultValue: "Backlog" })}</span> {t("newIssue.assignedBacklogNote.afterBacklog", { defaultValue: "only to deliberately park this. The assignee will not be woken until status moves to" })} <span className="font-medium">{t("status.todo", { defaultValue: "Todo" })}</span> {t("newIssue.assignedBacklogNote.or", { defaultValue: "or" })} <span className="font-medium">{t("status.inProgress", { defaultValue: "In Progress" })}</span>.
             </span>
           </div>
         ) : null}
