@@ -3,15 +3,33 @@
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { WORKSPACE_SCOPE } from "./workspace-package-constants.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
 const manifestPath = join(repoRoot, "scripts", "release-package-manifest.json");
 const roots = ["packages", "server", "ui", "cli"];
+const workspacePackageScopes = ["@paperclipai/", "@penclipai/"];
 
-function toManifestDir(dir) {
-  return dir.split(/[\\/]+/).join("/");
+function normalizeManifestDir(dir) {
+  return dir.replaceAll("\\", "/");
+}
+
+function isWorkspaceReleasePackageName(name) {
+  return workspacePackageScopes.some((scope) => name.startsWith(scope));
+}
+
+function parseWorkspaceAliasTargetName(spec) {
+  if (typeof spec !== "string" || !spec.startsWith("workspace:")) return null;
+  const target = spec.slice("workspace:".length);
+  if (!target.startsWith("@")) return null;
+  const scopeEnd = target.indexOf("/");
+  if (scopeEnd === -1) return null;
+  const versionStart = target.indexOf("@", scopeEnd + 1);
+  return versionStart === -1 ? target : target.slice(0, versionStart);
+}
+
+function resolveWorkspaceDependencyTargetName(depName, spec) {
+  return parseWorkspaceAliasTargetName(spec) ?? depName;
 }
 
 function readJson(filePath) {
@@ -30,7 +48,7 @@ function discoverPublicPackages() {
       const pkg = readJson(pkgPath);
       if (!pkg.private) {
         packages.push({
-          dir: toManifestDir(relDir),
+          dir: normalizeManifestDir(relDir),
           pkgPath,
           name: pkg.name,
           version: pkg.version,
@@ -80,8 +98,51 @@ function loadReleaseManifest() {
       );
     }
 
-    return entry;
+    return {
+      ...entry,
+      dir: normalizeManifestDir(entry.dir),
+    };
   });
+}
+
+// Sections whose Paperclip workspace deps are rewritten to the calver release
+// version by replaceWorkspaceDeps() and that consumers resolve at install time.
+const RESOLVED_DEP_SECTIONS = ["dependencies", "optionalDependencies", "peerDependencies"];
+
+// A publishFromCi:true package gets republished at the unified calver version every
+// release, and every Paperclip workspace: dep it declares is rewritten to that
+// same calver version. If the target is NOT publishFromCi:true it never gets a calver
+// publish, so the rewritten spec points at a version that will never exist on npm and
+// the package becomes uninstallable. Detect those edges so the release fails fast
+// instead of shipping a broken canary (e.g. server -> skills-catalog from #8327).
+function findUnpublishableWorkspaceEdges(packages) {
+  const publishFromCiByName = new Map(packages.map((pkg) => [pkg.name, pkg.publishFromCi]));
+  const problems = [];
+
+  for (const pkg of packages) {
+    if (!pkg.publishFromCi) continue;
+
+    for (const section of RESOLVED_DEP_SECTIONS) {
+      const deps = pkg.pkg[section];
+      if (!deps) continue;
+
+      for (const [depName, spec] of Object.entries(deps)) {
+        if (typeof spec !== "string" || !spec.startsWith("workspace:")) continue;
+        const targetName = resolveWorkspaceDependencyTargetName(depName, spec);
+        if (!isWorkspaceReleasePackageName(depName) && !isWorkspaceReleasePackageName(targetName)) continue;
+        if (publishFromCiByName.get(targetName) === true) continue;
+
+        problems.push(
+          `${pkg.name} (${pkg.dir}) is publishFromCi:true but declares a "${section}" workspace dependency on ${depName}, ` +
+            `which resolves to ${targetName} and is not publishFromCi:true. The release version rewrite would point ${depName} at the calver version, ` +
+            `but that version is never published, so installs of ${pkg.name} would fail to resolve. ` +
+            `Enable publishFromCi for ${targetName} (bootstrap its first npm publish if needed) or drop the workspace dependency.`,
+        );
+      }
+    }
+  }
+
+  return problems;
 }
 
 function buildReleasePackagePlan() {
@@ -129,6 +190,11 @@ function buildReleasePackagePlan() {
     publishFromCi: manifestByDir.get(pkg.dir).publishFromCi,
   }));
 
+  const edgeProblems = findUnpublishableWorkspaceEdges(packages);
+  if (edgeProblems.length > 0) {
+    throw new Error(`release package manifest validation failed:\n- ${edgeProblems.join("\n- ")}`);
+  }
+
   return packages;
 }
 
@@ -171,34 +237,6 @@ function sortTopologically(packages) {
   return ordered;
 }
 
-function findPublishedPackageBlockedDependencies(packages) {
-  const byName = new Map(packages.map((pkg) => [pkg.name, pkg]));
-  const problems = [];
-
-  for (const pkg of packages) {
-    if (!pkg.publishFromCi) continue;
-
-    const dependencySections = [
-      ["dependencies", pkg.pkg.dependencies ?? {}],
-      ["optionalDependencies", pkg.pkg.optionalDependencies ?? {}],
-      ["peerDependencies", pkg.pkg.peerDependencies ?? {}],
-    ];
-
-    for (const [section, deps] of dependencySections) {
-      for (const [depName, depRange] of Object.entries(deps)) {
-        if (typeof depRange !== "string" || !depRange.startsWith("workspace:")) continue;
-
-        const dep = byName.get(depName);
-        if (!dep || dep.publishFromCi) continue;
-
-        problems.push(`${pkg.name} ${section} includes ${dep.name}, but ${dep.dir} has publishFromCi=false`);
-      }
-    }
-  }
-
-  return problems;
-}
-
 function getReleasePackages() {
   return sortTopologically(buildReleasePackagePlan().filter((pkg) => pkg.publishFromCi));
 }
@@ -208,9 +246,10 @@ function replaceWorkspaceDeps(deps, version) {
   const next = { ...deps };
 
   for (const [name, value] of Object.entries(next)) {
-    if (!name.startsWith(WORKSPACE_SCOPE)) continue;
     if (typeof value !== "string" || !value.startsWith("workspace:")) continue;
-    next[name] = version;
+    const targetName = resolveWorkspaceDependencyTargetName(name, value);
+    if (!isWorkspaceReleasePackageName(name) && !isWorkspaceReleasePackageName(targetName)) continue;
+    next[name] = targetName === name ? version : `npm:${targetName}@${version}`;
   }
 
   return next;
@@ -244,8 +283,6 @@ function setVersion(version) {
     return;
   }
 
-  // Newer CLI builds source the version from cli/src/version.ts via package.json,
-  // so there is no inline version literal left to rewrite here.
   if (!cliEntry.includes(".version(cliVersion)")) {
     throw new Error("failed to rewrite CLI version string in cli/src/index.ts");
   }
@@ -265,13 +302,6 @@ function checkConfiguration() {
 
   if (enabledCount === 0) {
     throw new Error(`no packages are enabled for CI publishing in ${manifestPath}`);
-  }
-
-  const blockedDependencyProblems = findPublishedPackageBlockedDependencies(packages);
-  if (blockedDependencyProblems.length > 0) {
-    throw new Error(
-      `release package manifest validation failed:\n- ${blockedDependencyProblems.join("\n- ")}`,
-    );
   }
 
   process.stdout.write(
@@ -322,7 +352,7 @@ export {
   buildReleasePackagePlan,
   checkConfiguration,
   discoverPublicPackages,
-  findPublishedPackageBlockedDependencies,
+  findUnpublishableWorkspaceEdges,
   getReleasePackages,
   loadReleaseManifest,
 };

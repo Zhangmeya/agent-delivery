@@ -2,13 +2,17 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { testEnvironment } from "@penclipai/adapter-claude-local/server";
+import { resetClaudeCliCapabilitiesCacheForTests, testEnvironment } from "@penclipai/adapter-claude-local/server";
 
 const ORIGINAL_ANTHROPIC = process.env.ANTHROPIC_API_KEY;
 const ORIGINAL_BEDROCK = process.env.CLAUDE_CODE_USE_BEDROCK;
 const ORIGINAL_BEDROCK_URL = process.env.ANTHROPIC_BEDROCK_BASE_URL;
+const ORIGINAL_CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
+const ORIGINAL_PAPERCLIP_HOME = process.env.PAPERCLIP_HOME;
+const ORIGINAL_PAPERCLIP_INSTANCE_ID = process.env.PAPERCLIP_INSTANCE_ID;
 
 afterEach(() => {
+  resetClaudeCliCapabilitiesCacheForTests();
   if (ORIGINAL_ANTHROPIC === undefined) {
     delete process.env.ANTHROPIC_API_KEY;
   } else {
@@ -24,7 +28,66 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_BEDROCK_BASE_URL = ORIGINAL_BEDROCK_URL;
   }
+  if (ORIGINAL_CLAUDE_CONFIG_DIR === undefined) {
+    delete process.env.CLAUDE_CONFIG_DIR;
+  } else {
+    process.env.CLAUDE_CONFIG_DIR = ORIGINAL_CLAUDE_CONFIG_DIR;
+  }
+  if (ORIGINAL_PAPERCLIP_HOME === undefined) {
+    delete process.env.PAPERCLIP_HOME;
+  } else {
+    process.env.PAPERCLIP_HOME = ORIGINAL_PAPERCLIP_HOME;
+  }
+  if (ORIGINAL_PAPERCLIP_INSTANCE_ID === undefined) {
+    delete process.env.PAPERCLIP_INSTANCE_ID;
+  } else {
+    process.env.PAPERCLIP_INSTANCE_ID = ORIGINAL_PAPERCLIP_INSTANCE_ID;
+  }
 });
+
+function createLocalSandboxRunner() {
+  return {
+    execute: async (input: {
+      command: string;
+      args?: string[];
+      cwd?: string;
+      env?: Record<string, string>;
+      stdin?: string;
+      timeoutMs?: number;
+      onLog?: (stream: "stdout" | "stderr", chunk: string) => Promise<void>;
+      onSpawn?: (meta: { pid: number; startedAt: string }) => Promise<void>;
+    }) => {
+      await input.onSpawn?.({ pid: 1, startedAt: new Date().toISOString() });
+      if (input.args?.includes("--help")) {
+        return {
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+          stdout: "Usage: claude [options]\n  --print\n  --model <id>\n",
+          stderr: "",
+          pid: 1,
+          startedAt: new Date().toISOString(),
+        };
+      }
+      return {
+        exitCode: 0,
+        signal: null,
+        timedOut: false,
+        stdout: [
+          JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "hello" }] } }),
+          JSON.stringify({
+            type: "result",
+            result: "hello",
+            usage: { input_tokens: 1, cache_read_input_tokens: 0, output_tokens: 1 },
+          }),
+        ].join("\n"),
+        stderr: "",
+        pid: 1,
+        startedAt: new Date().toISOString(),
+      };
+    },
+  };
+}
 
 describe("claude_local environment diagnostics", () => {
   it("returns a warning (not an error) when ANTHROPIC_API_KEY is set in host environment", async () => {
@@ -277,5 +340,126 @@ describe("claude_local environment diagnostics", () => {
     // by the probe prompt cannot stall waiting for an interactive permission
     // approval that no human is present to answer.
     expect(probeCall?.args).toContain("--allowedTools");
+  });
+
+  it("uses the managed Claude config seed for sandbox hello probes", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-claude-envtest-managed-config-"));
+    const sourceConfigDir = path.join(root, "host-claude");
+    const remoteHome = path.join(root, "remote-home");
+    const remoteWorkspace = "/home/daytona/paperclip-workspace";
+    let validatedManagedConfig = false;
+
+    await fs.mkdir(sourceConfigDir, { recursive: true });
+    await fs.mkdir(path.join(remoteHome, ".claude"), { recursive: true });
+    await fs.writeFile(path.join(sourceConfigDir, "settings.json"), JSON.stringify({
+      theme: "dark",
+      permissions: { defaultMode: "bypassPermissions" },
+      hooks: { PreToolUse: [{ matcher: "*" }] },
+      mcpServers: { local: { command: "secret-local-server" } },
+      permissionMode: "dontAsk",
+      skipDangerousModePermissionPrompt: true,
+    }), "utf8");
+    await fs.writeFile(path.join(sourceConfigDir, "CLAUDE.md"), "seed instructions", "utf8");
+    await fs.writeFile(path.join(sourceConfigDir, "credentials.json"), JSON.stringify({ token: "local" }), "utf8");
+    await fs.writeFile(path.join(remoteHome, ".claude", ".credentials.json"), JSON.stringify({ token: "remote" }), "utf8");
+
+    process.env.CLAUDE_CONFIG_DIR = sourceConfigDir;
+    process.env.PAPERCLIP_HOME = path.join(root, "paperclip-home");
+    process.env.PAPERCLIP_INSTANCE_ID = "test-instance";
+
+    try {
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "claude_local",
+        config: {
+          command: "claude",
+          env: { HOME: remoteHome },
+        },
+        executionTarget: {
+          kind: "remote",
+          transport: "sandbox",
+          providerKey: "daytona",
+          remoteCwd: remoteWorkspace,
+          runner: {
+            execute: async (input) => {
+              await input.onSpawn?.({ pid: 1, startedAt: new Date().toISOString() });
+              if (input.command === "sh") {
+                return {
+                  exitCode: 0,
+                  signal: null,
+                  timedOut: false,
+                  stdout: "/usr/bin/claude\n",
+                  stderr: "",
+                  pid: 1,
+                  startedAt: new Date().toISOString(),
+                };
+              }
+              if (input.args?.includes("--help")) {
+                return {
+                  exitCode: 0,
+                  signal: null,
+                  timedOut: false,
+                  stdout: "Usage: claude [options]\n  --print\n  --model <id>\n",
+                  stderr: "",
+                  pid: 1,
+                  startedAt: new Date().toISOString(),
+                };
+              }
+              const configDir = input.env?.CLAUDE_CONFIG_DIR || "";
+              expect(configDir.replace(/\\/g, "/")).toContain(".paperclip-runtime/claude/config");
+              validatedManagedConfig = true;
+              return {
+                exitCode: 0,
+                signal: null,
+                timedOut: false,
+                stdout: [
+                  JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "hello" }] } }),
+                  JSON.stringify({ type: "result", result: "hello", usage: { input_tokens: 1, cache_read_input_tokens: 0, output_tokens: 1 } }),
+                ].join("\n"),
+                stderr: "",
+                pid: 1,
+                startedAt: new Date().toISOString(),
+              };
+            },
+          },
+        },
+        environmentName: "QA Daytona",
+      });
+
+      expect(validatedManagedConfig).toBe(true);
+      expect(result.checks.some((check) => check.code === "claude_managed_config_dir")).toBe(true);
+      expect(result.checks.some((check) => check.code === "claude_hello_probe_passed")).toBe(true);
+      expect(result.checks.some((check) => check.code === "claude_hello_probe_failed")).toBe(false);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("warns and omits --effort for sandbox probes when the installed Claude CLI does not advertise it", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-claude-envtest-sandbox-effort-"));
+
+    try {
+      const result = await testEnvironment({
+        companyId: "company-1",
+        adapterType: "claude_local",
+        config: {
+          command: "claude",
+          effort: "low",
+        },
+        executionTarget: {
+          kind: "remote",
+          transport: "sandbox",
+          providerKey: "daytona",
+          remoteCwd: "/workspace/paperclip",
+          runner: createLocalSandboxRunner(),
+        },
+        environmentName: "QA Daytona",
+      });
+
+      expect(result.checks.some((check) => check.code === "claude_effort_flag_unsupported")).toBe(true);
+      expect(result.checks.some((check) => check.code === "claude_hello_probe_passed")).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 });

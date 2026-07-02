@@ -9,10 +9,8 @@ import type {
 } from "@assistant-ui/react";
 import type { Agent, IssueComment } from "@penclipai/shared";
 import type { ActiveRunForIssue, LiveRunForIssue } from "../api/heartbeats";
-import { translateInstant } from "../i18n";
 import { formatAssigneeUserLabel } from "./assignees";
-import { BRAND_NAME } from "./branding";
-import { translateStatusLabel } from "./i18n-labels";
+import { isOperatorInterruptedRun } from "./interrupt-handoff";
 import {
   buildIssueThreadInteractionSummary,
   type IssueThreadInteraction,
@@ -21,6 +19,7 @@ import type { IssueTimelineEvent } from "./issue-timeline-events";
 import {
   summarizeNotice,
 } from "./transcriptPresentation";
+import { BRAND_NAME } from "./branding";
 
 type JsonValue = null | string | number | boolean | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };
@@ -48,6 +47,7 @@ export interface IssueChatLinkedRun {
   finishedAt?: Date | string | null;
   hasStoredOutput?: boolean;
   logBytes?: number | null;
+  errorCode?: string | null;
   resultJson?: Record<string, unknown> | null;
 }
 
@@ -375,30 +375,7 @@ function authorNameForComment(
 }
 
 function formatStatusLabel(status: string) {
-  switch (status) {
-    case "running":
-      return translateInstant("Running", { defaultValue: "Running" });
-    case "queued":
-      return translateInstant("Queued", { defaultValue: "Queued" });
-    case "succeeded":
-      return translateInstant("Succeeded", { defaultValue: "Succeeded" });
-    case "failed":
-    case "error":
-      return translateInstant("Failed", { defaultValue: "Failed" });
-    case "cancelled":
-      return translateInstant("Cancelled", { defaultValue: "Cancelled" });
-    case "timed_out":
-      return translateInstant("Timed out", { defaultValue: "Timed out" });
-    default:
-      return translateInstant(status.replace(/_/g, " "), {
-        defaultValue: status.replace(/_/g, " "),
-      });
-  }
-}
-
-function formatTimelineStatusValue(status: string | null) {
-  if (!status) return translateInstant("None", { defaultValue: "None" });
-  return translateStatusLabel(translateInstant as unknown as Parameters<typeof translateStatusLabel>[0], status);
+  return status.replace(/_/g, " ");
 }
 
 function createCommentMessage(args: {
@@ -487,27 +464,25 @@ function createTimelineEventMessage(args: {
   const actorName = event.actorType === "agent"
     ? (agentMap?.get(event.actorId)?.name ?? event.actorId.slice(0, 8))
     : event.actorType === "system"
-      ? translateInstant("System")
-      : (formatAssigneeUserLabel(event.actorId, currentUserId, userLabelMap) ?? translateInstant("Board"));
+      ? "System"
+      : (formatAssigneeUserLabel(event.actorId, currentUserId, userLabelMap) ?? "Board");
 
   const lines: string[] = [
-    event.followUpRequested
-      ? `${actorName} ${translateInstant("requested follow-up")}`
-      : `${actorName} ${translateInstant("updated this task")}`,
+    event.followUpRequested ? `${actorName} requested follow-up` : `${actorName} updated this issue`,
   ];
   if (event.statusChange) {
     lines.push(
-      `${translateInstant("Status")}: ${formatTimelineStatusValue(event.statusChange.from)} -> ${formatTimelineStatusValue(event.statusChange.to)}`,
+      `Status: ${event.statusChange.from ?? "none"} -> ${event.statusChange.to ?? "none"}`,
     );
   }
   if (event.assigneeChange) {
     const from = event.assigneeChange.from.agentId
       ? (agentMap?.get(event.assigneeChange.from.agentId)?.name ?? event.assigneeChange.from.agentId.slice(0, 8))
-      : (formatAssigneeUserLabel(event.assigneeChange.from.userId, currentUserId, userLabelMap) ?? translateInstant("Unassigned"));
+      : (formatAssigneeUserLabel(event.assigneeChange.from.userId, currentUserId, userLabelMap) ?? "Unassigned");
     const to = event.assigneeChange.to.agentId
       ? (agentMap?.get(event.assigneeChange.to.agentId)?.name ?? event.assigneeChange.to.agentId.slice(0, 8))
-      : (formatAssigneeUserLabel(event.assigneeChange.to.userId, currentUserId, userLabelMap) ?? translateInstant("Unassigned"));
-    lines.push(`${translateInstant("Assignee")}: ${from} -> ${to}`);
+      : (formatAssigneeUserLabel(event.assigneeChange.to.userId, currentUserId, userLabelMap) ?? "Unassigned");
+    lines.push(`Assignee: ${from} -> ${to}`);
   }
   if (event.workspaceChange) {
     lines.push(
@@ -564,6 +539,17 @@ export interface SegmentTiming {
   endMs: number;
 }
 
+export function isCoTSegmentActive(args: {
+  isMessageRunning: boolean;
+  segmentIndex: number;
+  segmentCount: number;
+}) {
+  const { isMessageRunning, segmentIndex, segmentCount } = args;
+  if (!isMessageRunning) return false;
+  if (segmentCount <= 0 || segmentIndex < 0) return true;
+  return segmentIndex === segmentCount - 1;
+}
+
 function computeSegmentTimings(entries: readonly IssueChatTranscriptEntry[]): SegmentTiming[] {
   const timings: SegmentTiming[] = [];
   let inSegment = false;
@@ -604,27 +590,18 @@ export function formatDurationWords(ms: number | null) {
   if (ms === null || !Number.isFinite(ms) || ms <= 0) return null;
   const totalSeconds = Math.max(1, Math.round(ms / 1000));
   if (totalSeconds < 60) {
-    return translateInstant(
-      totalSeconds === 1 ? "{{count}} second" : "{{count}} seconds",
-      { count: totalSeconds },
-    );
+    return `${totalSeconds} second${totalSeconds === 1 ? "" : "s"}`;
   }
   const totalMinutes = Math.round(totalSeconds / 60);
   if (totalMinutes < 60) {
-    return translateInstant(
-      totalMinutes === 1 ? "{{count}} minute" : "{{count}} minutes",
-      { count: totalMinutes },
-    );
+    return `${totalMinutes} minute${totalMinutes === 1 ? "" : "s"}`;
   }
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   if (minutes === 0) {
-    return translateInstant(
-      hours === 1 ? "{{count}} hour" : "{{count}} hours",
-      { count: hours },
-    );
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
   }
-  return `${translateInstant(hours === 1 ? "{{count}} hour" : "{{count}} hours", { count: hours })} ${translateInstant(minutes === 1 ? "{{count}} minute" : "{{count}} minutes", { count: minutes })}`;
+  return `${hours} hour${hours === 1 ? "" : "s"} ${minutes} minute${minutes === 1 ? "" : "s"}`;
 }
 
 function runDurationLabel(run: {
@@ -632,6 +609,7 @@ function runDurationLabel(run: {
   createdAt: Date | string;
   startedAt: Date | string | null;
   finishedAt?: Date | string | null;
+  errorCode?: string | null;
   resultJson?: Record<string, unknown> | null;
 }) {
   const start = run.startedAt ?? run.createdAt;
@@ -641,25 +619,24 @@ function runDurationLabel(run: {
   const stopReason = typeof run.resultJson?.stopReason === "string" ? run.resultJson.stopReason : null;
   switch (run.status) {
     case "succeeded":
-      return durationText ? translateInstant("Worked for {{duration}}", { duration: durationText }) : translateInstant("Finished work");
+      return durationText ? `Worked for ${durationText}` : "Finished work";
     case "failed":
     case "error":
-      return durationText ? translateInstant("Failed after {{duration}}", { duration: durationText }) : translateInstant("Run failed");
+      return durationText ? `Failed after ${durationText}` : "Run failed";
     case "timed_out":
-      return durationText ? translateInstant("Timed out after {{duration}}", { duration: durationText }) : translateInstant("Run timed out");
+      return durationText ? `Timed out after ${durationText}` : "Run timed out";
     case "cancelled":
-      if (stopReason === "paused") {
-        return durationText
-          ? translateInstant("Paused by board after {{duration}}", { duration: durationText })
-          : translateInstant("Paused by board");
+      if (isOperatorInterruptedRun(run.resultJson, run.errorCode)) {
+        return durationText ? `Interrupted by board after ${durationText}` : "Interrupted by board";
       }
-      return durationText
-        ? translateInstant("Cancelled after {{duration}}", { duration: durationText })
-        : translateInstant("Run cancelled");
+      if (stopReason === "paused") {
+        return durationText ? `Paused by board after ${durationText}` : "Paused by board";
+      }
+      return durationText ? `Cancelled after ${durationText}` : "Run cancelled";
     case "queued":
-      return translateInstant("Queued");
+      return "Queued";
     case "running":
-      return translateInstant("Working...");
+      return "Working...";
     default:
       return formatStatusLabel(run.status);
   }
@@ -671,7 +648,7 @@ function createHistoricalRunMessage(run: IssueChatLinkedRun, agentMap?: Map<stri
     id: `run:${run.runId}`,
     role: "system",
     createdAt: toDate(runTimestamp(run)),
-    content: [{ type: "text", text: `${agentName} ${translateInstant("run")} ${run.runId.slice(0, 8)} ${formatStatusLabel(run.status)}` }],
+    content: [{ type: "text", text: `${agentName} run ${run.runId.slice(0, 8)} ${formatStatusLabel(run.status)}` }],
     metadata: {
       custom: {
         kind: "run",
@@ -680,6 +657,7 @@ function createHistoricalRunMessage(run: IssueChatLinkedRun, agentMap?: Map<stri
         runAgentId: run.agentId,
         runAgentName: agentName,
         runStatus: run.status,
+        runOperatorInterrupted: isOperatorInterruptedRun(run.resultJson, run.errorCode),
       },
     },
   };
@@ -696,7 +674,7 @@ function createHistoricalTranscriptMessage(args: {
   const agentName = run.agentName ?? agentMap?.get(run.agentId)?.name ?? run.agentId.slice(0, 8);
   const compactedTranscript = compactIssueChatTranscript(transcript);
   const { parts, notices, segments } = buildAssistantPartsFromTranscript(compactedTranscript);
-  const waitingText = hasOutput ? "" : translateInstant("Run finished");
+  const waitingText = hasOutput ? "" : "Run finished";
   const content = parts.length > 0
     ? parts
     : waitingText
@@ -716,6 +694,7 @@ function createHistoricalTranscriptMessage(args: {
       runAgentId: run.agentId,
       runAgentName: agentName,
       runStatus: run.status,
+      runOperatorInterrupted: isOperatorInterruptedRun(run.resultJson, run.errorCode),
       notices,
       waitingText,
       chainOfThoughtLabel: runDurationLabel(run),
@@ -872,13 +851,27 @@ function normalizeLiveRuns(
       status: activeRun.status,
       invocationSource: activeRun.invocationSource,
       triggerDetail: activeRun.triggerDetail,
+      contextCommentId: activeRun.contextCommentId,
+      contextWakeCommentId: activeRun.contextWakeCommentId,
       startedAt: activeRun.startedAt ? toDate(activeRun.startedAt).toISOString() : null,
       finishedAt: activeRun.finishedAt ? toDate(activeRun.finishedAt).toISOString() : null,
       createdAt: toDate(activeRun.createdAt).toISOString(),
       agentId: activeRun.agentId,
       agentName: activeRun.agentName,
       adapterType: activeRun.adapterType,
-      issueId,
+      logBytes: activeRun.logBytes,
+      lastOutputBytes: activeRun.lastOutputBytes,
+      issueId: activeRun.issueId ?? issueId,
+      livenessState: activeRun.livenessState,
+      livenessReason: activeRun.livenessReason,
+      continuationAttempt: activeRun.continuationAttempt,
+      lastUsefulActionAt: activeRun.lastUsefulActionAt ? toDate(activeRun.lastUsefulActionAt).toISOString() : null,
+      nextAction: activeRun.nextAction,
+      outputSilence: activeRun.outputSilence,
+      currentStatusMessage: activeRun.currentStatusMessage ?? null,
+      currentStatusUpdatedAt: activeRun.currentStatusUpdatedAt
+        ? toDate(activeRun.currentStatusUpdatedAt).toISOString()
+        : null,
     });
   }
   return [...deduped.values()].sort((a, b) => toTimestamp(a.createdAt) - toTimestamp(b.createdAt));
@@ -893,10 +886,10 @@ function createLiveRunMessage(args: {
   const { parts, notices, segments } = buildAssistantPartsFromTranscript(compactedTranscript);
   const waitingText =
     run.status === "queued"
-      ? translateInstant("Queued...")
+      ? "Queued..."
       : parts.length > 0
         ? ""
-        : translateInstant("Working...");
+        : "Working...";
 
   const content = parts;
 
@@ -917,6 +910,8 @@ function createLiveRunMessage(args: {
       waitingText,
       chainOfThoughtLabel: runDurationLabel(run),
       chainOfThoughtSegments: segments,
+      currentStatusMessage: run.currentStatusMessage ?? null,
+      currentStatusUpdatedAt: run.currentStatusUpdatedAt ?? null,
     }),
   };
   return message;

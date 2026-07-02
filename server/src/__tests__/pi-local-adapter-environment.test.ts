@@ -36,6 +36,13 @@ process.exit(1);
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  if (process.platform === "win32") {
+    await fs.writeFile(
+      path.join(binDir, "pi.cmd"),
+      `@echo off\r\n"${process.execPath}" "%~dp0pi" %*\r\n`,
+      "utf8",
+    );
+  }
 }
 
 describe("pi_local environment diagnostics", () => {

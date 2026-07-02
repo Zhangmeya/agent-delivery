@@ -9,6 +9,7 @@ import { companySkillsApi } from "../api/companySkills";
 import { issuesApi } from "../api/issues";
 import { projectsApi } from "../api/projects";
 import { queryKeys } from "../lib/queryKeys";
+import { resolveSkillSummaryText } from "../lib/company-skill-summary";
 import { AGENT_ROLES, type AdapterEnvironmentTestResult, type AgentPermissions } from "@penclipai/shared";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,10 +34,7 @@ import { ReportsToPicker } from "../components/ReportsToPicker";
 import { buildNewAgentHirePayload } from "../lib/new-agent-hire-payload";
 import { TrustPresetSection } from "../components/TrustPresetSection";
 import { buildPermissionsForTrustPreset, getTrustPreset } from "../lib/trust-policy-ui";
-import {
-  DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
-  DEFAULT_CODEX_LOCAL_MODEL,
-} from "@penclipai/adapter-codex-local";
+import { DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX } from "@penclipai/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@penclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@penclipai/adapter-gemini-local";
 import { DEFAULT_OPENCODE_LOCAL_MODEL, isValidOpenCodeModelId } from "@penclipai/adapter-opencode-local";
@@ -47,7 +45,6 @@ function createValuesForAdapterType(
   const { adapterType: _discard, ...defaults } = defaultCreateValues;
   const nextValues: CreateConfigValues = { ...defaults, adapterType };
   if (adapterType === "codex_local") {
-    nextValues.model = DEFAULT_CODEX_LOCAL_MODEL;
     nextValues.dangerouslyBypassSandbox =
       DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX;
   } else if (adapterType === "gemini_local") {
@@ -124,7 +121,7 @@ export function NewAgent() {
   useEffect(() => {
     setBreadcrumbs([
       { label: t("Agents"), href: "/agents" },
-      { label: t("newAgent.title") },
+      { label: t("New Agent") },
     ]);
   }, [setBreadcrumbs, t]);
 
@@ -154,7 +151,7 @@ export function NewAgent() {
       navigate(agentUrl(result.agent));
     },
     onError: (error) => {
-      setFormError(error instanceof Error ? error.message : t("Failed to create agent"));
+      setFormError(error instanceof Error ? error.message : t("newAgent.failedToCreateAgent"));
     },
   });
 
@@ -168,7 +165,7 @@ export function NewAgent() {
     setFormError(null);
     if (configValues.adapterType === "opencode_local") {
       if (!isValidOpenCodeModelId(configValues.model)) {
-        setFormError("OpenCode requires an explicit model in provider/model format.");
+        setFormError(t("newAgent.openCodeModelRequired"));
         return;
       }
     }
@@ -215,9 +212,9 @@ export function NewAgent() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-lg font-semibold">{t("newAgent.title")}</h1>
+        <h1 className="text-lg font-semibold">{t("New Agent")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {t("Advanced agent configuration")}
+          {t("newAgent.advancedAgentConfiguration")}
         </p>
       </div>
 
@@ -237,7 +234,7 @@ export function NewAgent() {
         <div className="px-4 pb-2">
           <input
             className="w-full bg-transparent outline-none text-sm text-muted-foreground placeholder:text-muted-foreground/40"
-            placeholder={t("Title (e.g. VP of Engineering)")}
+            placeholder={t("newAgent.titlePlaceholder")}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -327,6 +324,7 @@ export function NewAgent() {
                 {availableSkills.map((skill) => {
                   const inputId = `skill-${skill.id}`;
                   const checked = selectedSkillKeys.includes(skill.key);
+                  const summaryText = resolveSkillSummaryText(skill, { fallbackKey: true });
                   return (
                     <div key={skill.id} className="flex items-start gap-3">
                       <Checkbox
@@ -336,9 +334,7 @@ export function NewAgent() {
                       />
                       <label htmlFor={inputId} className="grid gap-1 leading-none">
                         <span className="text-sm font-medium">{skill.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {skill.description ?? skill.key}
-                        </span>
+                        {summaryText ? <span className="text-xs text-muted-foreground">{summaryText}</span> : null}
                       </label>
                     </div>
                   );
@@ -367,7 +363,7 @@ export function NewAgent() {
             )}
             <div className="flex items-center justify-between gap-2">
               <Button variant="outline" size="sm" onClick={() => navigate("/agents")}>
-                {t("common.cancel")}
+                {t("Cancel")}
               </Button>
               <div className="flex items-center gap-2">
                 <Button
@@ -377,14 +373,14 @@ export function NewAgent() {
                   disabled={testAgentState.disabled}
                   onClick={() => testAgentAction?.()}
                 >
-                  {testAgentState.pending ? t("Testing...") : t("Test Agent")}
+                  {testAgentState.pending ? t("newAgent.testingAgent") : t("newAgent.testAgent")}
                 </Button>
                 <Button
                   size="sm"
                   disabled={!name.trim() || createAgent.isPending}
                   onClick={handleSubmit}
                 >
-                  {createAgent.isPending ? t("Creating…") : t("Create agent")}
+                  {createAgent.isPending ? t("newAgent.creatingAgent") : t("newAgent.createAgent")}
                 </Button>
               </div>
             </div>

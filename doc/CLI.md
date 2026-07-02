@@ -282,7 +282,7 @@ pnpm penclip agent local-cli <agent-id-or-shortname> --company-id <company-id>
 Agent configuration and runtime endpoints:
 
 ```sh
-pnpm penclip agent permissions:update <agent-id> --payload-json '{"canCreateAgents":true,"canAssignTasks":true}'
+pnpm penclip agent permissions:update <agent-id> --payload-json '{"canCreateAgents":true,"canCreateSkills":true,"canAssignTasks":true}'
 pnpm penclip agent configuration <agent-id>
 pnpm penclip agent config-revisions <agent-id>
 pnpm penclip agent config-revision:get <agent-id> <revision-id>
@@ -299,6 +299,8 @@ pnpm penclip agent instructions-file:get <agent-id> --path AGENTS.md
 pnpm penclip agent instructions-file:put <agent-id> --path AGENTS.md --content-file ./AGENTS.md
 pnpm penclip agent instructions-file:delete <agent-id> --path AGENTS.md
 ```
+
+Agent config, instructions, skills, project env, environment, secret, and workspace edits affect the next run. Active runs finish with the config they started with. When a saved session, reused workspace, or sandbox lease no longer matches the effective next-run config, Paperclip may start fresh execution and records non-sensitive freshness categories in run result JSON and workspace operation logs.
 
 `agent local-cli` is the quickest way to run local Claude/Codex manually as a Paperclip agent:
 
@@ -399,9 +401,14 @@ By default the command creates a `todo` issue assigned to the target agent and w
 Required Paperclip runtime skills (heartbeat, etc.) remain server-enforced and
 are added on top of whatever the desired set names.
 
+Company skill mutations (`skills install`, `skills import`, `skills create`, and
+`skills scan-projects`) require board authentication, an explicit `skills:create`
+grant, or an agent whose permissions keep `canCreateSkills` enabled. They do not
+require `agents:create` unless the command also creates agents.
+
 ### Catalog (app-shipped skills)
 
-The Paperclip app ships a curated catalog under `@paperclipai/skills-catalog`.
+The Paperclip app ships a curated catalog under `@penclipai/skills-catalog`.
 Browse and inspect commands never mutate company state; `install` adds a catalog
 skill to the company library.
 
@@ -651,6 +658,8 @@ pnpm penclip auth revoke-current
 
 `--token <challenge-secret>` is still supported for compatibility, but `--token-env` avoids putting challenge secrets in shell history or process arguments.
 
+## Instance Settings Commands
+
 ```sh
 pnpm penclip instance scheduler-heartbeats
 pnpm penclip instance settings:general
@@ -658,6 +667,11 @@ pnpm penclip instance settings:general:update --payload-json '{...}'
 pnpm penclip instance settings:experimental
 pnpm penclip instance settings:experimental:update --payload-json '{...}'
 pnpm penclip instance database-backup
+```
+
+Experimental features are opt-in and are provided without compatibility guarantees. They may break, change, or be removed at any time. Use them at your own risk.
+
+```sh
 pnpm penclip sidebar preferences
 pnpm penclip sidebar preferences:update --payload-json '{...}'
 pnpm penclip sidebar project-preferences --company-id <company-id>
@@ -675,6 +689,14 @@ pnpm penclip llm agent-configuration
 pnpm penclip llm agent-configuration:adapter <adapter-type>
 pnpm penclip llm agent-icons
 ```
+
+Hermes gateway uses the generic invite/join commands above rather than
+`openclaw invite-prompt`. Create an agent invite, read
+`invite onboarding:text`, submit a join request with
+`adapterType: "hermes_gateway"` and `agentDefaultsPayload.apiBaseUrl` /
+`agentDefaultsPayload.apiKey`, then approve and claim the key with the `join`
+commands. Install a Hermes gateway adapter plugin first so the type key is
+available at runtime.
 
 ## Adapter, Asset, And Skill Commands
 

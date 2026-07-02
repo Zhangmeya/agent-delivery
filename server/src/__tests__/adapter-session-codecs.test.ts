@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { sessionCodec as claudeSessionCodec } from "@penclipai/adapter-claude-local/server";
-import {
-  sessionCodec as codeBuddySessionCodec,
-  isCodeBuddyUnknownSessionError,
-} from "@penclipai/adapter-codebuddy-local/server";
 import { sessionCodec as codexSessionCodec, isCodexUnknownSessionError } from "@penclipai/adapter-codex-local/server";
 import {
   sessionCodec as cursorSessionCodec,
@@ -11,17 +7,13 @@ import {
 } from "@penclipai/adapter-cursor-local/server";
 import {
   sessionCodec as geminiSessionCodec,
-  isGeminiUnknownSessionError,
+  isGeminiSessionUnrecoverableError,
 } from "@penclipai/adapter-gemini-local/server";
 import {
   sessionCodec as opencodeSessionCodec,
   isOpenCodeUnknownSessionError,
 } from "@penclipai/adapter-opencode-local/server";
 import { sessionCodec as acpxSessionCodec } from "@penclipai/adapter-acpx-local/server";
-import {
-  sessionCodec as qwenSessionCodec,
-  isQwenUnknownSessionError,
-} from "@penclipai/adapter-qwen-local/server";
 
 describe("adapter session codecs", () => {
   it("normalizes claude session params with cwd", () => {
@@ -61,24 +53,6 @@ describe("adapter session codecs", () => {
       cwd: "/tmp/codex",
     });
     expect(codexSessionCodec.getDisplayId?.(serialized ?? null)).toBe("codex-session-1");
-  });
-
-  it("normalizes codebuddy session params with cwd", () => {
-    const parsed = codeBuddySessionCodec.deserialize({
-      session_id: "codebuddy-session-1",
-      cwd: "/tmp/codebuddy",
-    });
-    expect(parsed).toEqual({
-      sessionId: "codebuddy-session-1",
-      cwd: "/tmp/codebuddy",
-    });
-
-    const serialized = codeBuddySessionCodec.serialize(parsed);
-    expect(serialized).toEqual({
-      sessionId: "codebuddy-session-1",
-      cwd: "/tmp/codebuddy",
-    });
-    expect(codeBuddySessionCodec.getDisplayId?.(serialized ?? null)).toBe("codebuddy-session-1");
   });
 
   it("normalizes opencode session params with cwd", () => {
@@ -135,24 +109,6 @@ describe("adapter session codecs", () => {
     expect(geminiSessionCodec.getDisplayId?.(serialized ?? null)).toBe("gemini-session-1");
   });
 
-  it("normalizes qwen session params with cwd", () => {
-    const parsed = qwenSessionCodec.deserialize({
-      session_id: "qwen-session-1",
-      cwd: "/tmp/qwen",
-    });
-    expect(parsed).toEqual({
-      sessionId: "qwen-session-1",
-      cwd: "/tmp/qwen",
-    });
-
-    const serialized = qwenSessionCodec.serialize(parsed);
-    expect(serialized).toEqual({
-      sessionId: "qwen-session-1",
-      cwd: "/tmp/qwen",
-    });
-    expect(qwenSessionCodec.getDisplayId?.(serialized ?? null)).toBe("qwen-session-1");
-  });
-
   it("preserves acpx session params required for compatibility checks", () => {
     const parsed = acpxSessionCodec.deserialize({
       sessionKey: "paperclip:company:agent:task:fingerprint",
@@ -195,29 +151,6 @@ describe("adapter session codecs", () => {
     });
     expect(acpxSessionCodec.serialize(parsed)).toEqual(parsed);
     expect(acpxSessionCodec.getDisplayId?.(parsed)).toBe("runtime-session-1");
-  });
-});
-
-describe("codebuddy resume recovery detection", () => {
-  it("detects unknown session errors from codebuddy output", () => {
-    expect(
-      isCodeBuddyUnknownSessionError(
-        "{\"type\":\"error\",\"message\":\"No conversation found with session ID: stale-session\"}",
-        "",
-      ),
-    ).toBe(true);
-    expect(
-      isCodeBuddyUnknownSessionError(
-        "",
-        "resume session not found",
-      ),
-    ).toBe(true);
-    expect(
-      isCodeBuddyUnknownSessionError(
-        "{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"ok\"}",
-        "",
-      ),
-    ).toBe(false);
   });
 });
 
@@ -287,42 +220,19 @@ describe("cursor resume recovery detection", () => {
 describe("gemini resume recovery detection", () => {
   it("detects unknown session errors from gemini output", () => {
     expect(
-      isGeminiUnknownSessionError(
+      isGeminiSessionUnrecoverableError(
         "",
         "unknown session id abc",
       ),
     ).toBe(true);
     expect(
-      isGeminiUnknownSessionError(
+      isGeminiSessionUnrecoverableError(
         "",
         "checkpoint latest not found",
       ),
     ).toBe(true);
     expect(
-      isGeminiUnknownSessionError(
-        "{\"type\":\"result\",\"subtype\":\"success\"}",
-        "",
-      ),
-    ).toBe(false);
-  });
-});
-
-describe("qwen resume recovery detection", () => {
-  it("detects unknown session errors from qwen output", () => {
-    expect(
-      isQwenUnknownSessionError(
-        "",
-        "No saved session found with ID stale-session",
-      ),
-    ).toBe(true);
-    expect(
-      isQwenUnknownSessionError(
-        "",
-        "cannot resume previous run",
-      ),
-    ).toBe(true);
-    expect(
-      isQwenUnknownSessionError(
+      isGeminiSessionUnrecoverableError(
         "{\"type\":\"result\",\"subtype\":\"success\"}",
         "",
       ),

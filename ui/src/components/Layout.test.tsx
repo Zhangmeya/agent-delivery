@@ -6,18 +6,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Layout } from "./Layout";
 
-vi.mock("react-i18next", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react-i18next")>();
-  return {
-    ...actual,
-    initReactI18next: { type: "3rdParty", init: () => {} },
-    useTranslation: () => ({
-      t: (key: string, options?: Record<string, unknown>) =>
-        typeof options?.defaultValue === "string" ? options.defaultValue : key,
-    }),
-  };
-});
-
 const mockHealthApi = vi.hoisted(() => ({
   get: vi.fn(),
 }));
@@ -29,6 +17,7 @@ const mockInstanceSettingsApi = vi.hoisted(() => ({
 const mockNavigate = vi.hoisted(() => vi.fn());
 const mockSetSelectedCompanyId = vi.hoisted(() => vi.fn());
 const mockSetSidebarOpen = vi.hoisted(() => vi.fn());
+const mockSetForceCollapsed = vi.hoisted(() => vi.fn());
 const mockCompanyState = vi.hoisted(() => ({
   companies: [{ id: "company-1", issuePrefix: "PAP", name: "Paperclip" }],
   selectedCompany: { id: "company-1", issuePrefix: "PAP", name: "Paperclip" },
@@ -39,9 +28,12 @@ const mockPluginSlots = vi.hoisted(() => ({
 }));
 const mockUsePluginSlots = vi.hoisted(() => vi.fn());
 const mockPluginSlotContexts = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+const mockSetPeeking = vi.hoisted(() => vi.fn());
 const mockSidebarState = vi.hoisted(() => ({
   sidebarOpen: true,
   isMobile: false,
+  collapsed: false,
+  peeking: false,
 }));
 let currentPathname = "/PAP/dashboard";
 
@@ -179,7 +171,16 @@ vi.mock("../context/SidebarContext", () => ({
     sidebarOpen: mockSidebarState.sidebarOpen,
     setSidebarOpen: mockSetSidebarOpen,
     toggleSidebar: vi.fn(),
+    toggleCollapsed: vi.fn(),
+    collapsed: mockSidebarState.collapsed,
+    collapseLocked: false,
+    peeking: mockSidebarState.peeking,
+    setPeeking: mockSetPeeking,
     isMobile: mockSidebarState.isMobile,
+    forceCollapsed: false,
+    setForceCollapsed: mockSetForceCollapsed,
+    routeRequestsCollapsed: false,
+    setRouteRequestsCollapsed: vi.fn(),
   }),
 }));
 
@@ -248,6 +249,9 @@ describe("Layout", () => {
     mockPluginSlotContexts.length = 0;
     mockSidebarState.sidebarOpen = true;
     mockSidebarState.isMobile = false;
+    mockSidebarState.collapsed = false;
+    mockSidebarState.peeking = false;
+    mockSetPeeking.mockClear();
   });
 
   afterEach(() => {
@@ -273,7 +277,6 @@ describe("Layout", () => {
     await flushReact();
 
     expect(mockHealthApi.get).toHaveBeenCalled();
-    expect(container.firstElementChild?.className).toContain("h-[var(--paperclip-available-height)]");
     expect(container.textContent).toContain("Breadcrumbs");
     expect(container.textContent).toContain("Outlet content");
     expect(container.textContent).not.toContain("Company rail");
@@ -287,14 +290,57 @@ describe("Layout", () => {
     });
   });
 
-  it("uses the desktop-adjusted available height for mobile layout", async () => {
-    mockSidebarState.isMobile = true;
-    mockSidebarState.sidebarOpen = false;
+  it("collapses atomically when the pointer is still over the sidebar (no re-peek) — PAP-10676", async () => {
     const root = createRoot(container);
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
+    const renderLayout = async () => {
+      await act(async () => {
+        root.render(
+          <QueryClientProvider client={queryClient}>
+            <Layout />
+          </QueryClientProvider>,
+        );
+      });
+      await flushReact();
+    };
+
+    // The SidebarShell overlay panel carries the peek mouse handlers.
+    const panel = () =>
+      [...container.querySelectorAll<HTMLElement>("div")].find(
+        (el) => el.className.includes("inset-y-0") && el.className.includes("overflow-hidden"),
+      );
+    const hover = (el: HTMLElement) => {
+      // React derives onMouseEnter from a mouseover crossing in from outside.
+      el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, relatedTarget: document.body }));
+    };
+
+    // Expanded, then hover the panel so the pointer is registered as inside.
+    await renderLayout();
+    const expandedPanel = panel();
+    expect(expandedPanel).toBeTruthy();
+    await act(async () => { hover(expandedPanel!); });
+
+    // Collapse while the pointer is still over the panel.
+    mockSidebarState.collapsed = true;
+    await renderLayout();
+    // The peek is cancelled atomically on collapse.
+    expect(mockSetPeeking).toHaveBeenCalledWith(false);
+
+    // A lingering/spurious hover while collapsed must NOT re-open the peek.
+    mockSetPeeking.mockClear();
+    const railPanel = panel();
+    await act(async () => { hover(railPanel!); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 80)); });
+    expect(mockSetPeeking).not.toHaveBeenCalledWith(true);
+
+    await act(async () => { root.unmount(); });
+  });
+
+  it("opens the peek when hovering a collapsed rail (positive control for the hover sim)", async () => {
+    mockSidebarState.collapsed = true;
+    const root = createRoot(container);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     await act(async () => {
       root.render(
         <QueryClientProvider client={queryClient}>
@@ -303,16 +349,22 @@ describe("Layout", () => {
       );
     });
     await flushReact();
-    await flushReact();
 
-    expect(container.firstElementChild?.className).toContain("min-h-[var(--paperclip-available-height)]");
-
+    const panel = [...container.querySelectorAll<HTMLElement>("div")].find(
+      (el) => el.className.includes("inset-y-0") && el.className.includes("overflow-hidden"),
+    );
+    expect(panel).toBeTruthy();
     await act(async () => {
-      root.unmount();
+      panel!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, relatedTarget: document.body }));
     });
+    await act(async () => { await new Promise((r) => setTimeout(r, 80)); });
+    // A normal collapsed-rail hover (not just-collapsed) opens the peek.
+    expect(mockSetPeeking).toHaveBeenCalledWith(true);
+
+    await act(async () => { root.unmount(); });
   });
 
-  it("renders the company settings sidebar on company settings routes", async () => {
+  it("keeps the app sidebar and shows the settings sidebar in the secondary pane on settings routes", async () => {
     currentPathname = "/PAP/company/settings/access";
     mockPluginSlots.slots = [
       {
@@ -353,11 +405,15 @@ describe("Layout", () => {
     await flushReact();
     await flushReact();
 
+    // Takeover model (PAP-10695): the app sidebar is kept (collapsed to its
+    // rail) AND the settings sidebar renders in the secondary pane.
     expect(container.textContent).toContain("Company settings sidebar");
+    expect(container.textContent).toContain("Main company nav");
     expect(container.textContent).not.toContain("Company rail");
     expect(container.textContent).not.toContain("Instance sidebar");
-    expect(container.textContent).not.toContain("Main company nav");
     expect(container.textContent).not.toContain("Plugin route sidebar");
+    // The route asks the host to collapse the app sidebar to its rail.
+    expect(mockSetForceCollapsed).toHaveBeenCalledWith(true);
 
     await act(async () => {
       root.unmount();
@@ -386,14 +442,15 @@ describe("Layout", () => {
     const selector = container.querySelector("select");
     expect(selector).not.toBeNull();
     expect(selector?.value).toBe("secrets");
-    expect(selector?.textContent).toContain("General");
-    expect(selector?.textContent).toContain("Environments");
-    expect(selector?.textContent).toContain("Cloud upstream");
-    expect(selector?.textContent).toContain("Members");
-    expect(selector?.textContent).toContain("Invites");
-    expect(selector?.textContent).toContain("Secrets");
-    expect(selector?.textContent).toContain("Instance general");
-    expect(selector?.textContent).toContain("Instance plugins");
+    const selectorText = selector?.textContent?.toLowerCase() ?? "";
+    expect(selectorText).toContain("general");
+    expect(selectorText).toContain("cloud upstream");
+    expect(selectorText).toContain("members");
+    expect(selectorText).toContain("invites");
+    expect(selectorText).toContain("secrets");
+    expect(selectorText).toContain("instance general");
+    expect(selectorText).toContain("instance environments");
+    expect(selectorText).toContain("instance plugins");
 
     await act(async () => {
       root.unmount();
@@ -418,9 +475,10 @@ describe("Layout", () => {
     await flushReact();
 
     expect(container.textContent).toContain("Company settings sidebar");
+    expect(container.textContent).toContain("Main company nav");
     expect(container.textContent).not.toContain("Company rail");
-    expect(container.textContent).not.toContain("Main company nav");
     expect(container.textContent).not.toContain("Plugin route sidebar");
+    expect(mockSetForceCollapsed).toHaveBeenCalledWith(true);
 
     await act(async () => {
       root.unmount();
@@ -468,11 +526,14 @@ describe("Layout", () => {
     await flushReact();
     await flushReact();
 
+    // Takeover model (PAP-10695): the app sidebar coexists with the plugin's
+    // route sidebar, which renders in the secondary pane.
     expect(container.textContent).toContain("Plugin route sidebar: Wiki Sidebar");
     expect(container.querySelector("[data-plugin-slot-class='h-full w-full']")).not.toBeNull();
-    expect(container.textContent).not.toContain("Main company nav");
+    expect(container.textContent).toContain("Main company nav");
     expect(container.textContent).not.toContain("Company settings sidebar");
     expect(container.textContent).not.toContain("Instance sidebar");
+    expect(mockSetForceCollapsed).toHaveBeenCalledWith(true);
 
     await act(async () => {
       root.unmount();
@@ -527,7 +588,7 @@ describe("Layout", () => {
       }),
     );
     expect(container.textContent).toContain("Plugin route sidebar: Wiki Sidebar");
-    expect(container.textContent).not.toContain("Main company nav");
+    expect(container.textContent).toContain("Main company nav");
 
     await act(async () => {
       root.unmount();
@@ -655,6 +716,56 @@ describe("Layout", () => {
 
     expect(container.textContent).toContain("Main company nav");
     expect(container.textContent).not.toContain("Plugin route sidebar");
+    // No secondary pane, so the route must not force the sidebar collapsed.
+    expect(mockSetForceCollapsed).not.toHaveBeenCalledWith(true);
+    expect(mockSetForceCollapsed).toHaveBeenCalledWith(false);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  async function renderLayoutRoot(): Promise<{ root: ReturnType<typeof createRoot>; rootEl: HTMLElement }> {
+    const root = createRoot(container);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={queryClient}>
+          <Layout />
+        </QueryClientProvider>,
+      );
+    });
+    await flushReact();
+    const rootEl = container.firstElementChild as HTMLElement;
+    return { root, rootEl };
+  }
+
+  it("clips horizontal overflow on the mobile layout root so the viewport can't scroll sideways", async () => {
+    mockSidebarState.isMobile = true;
+    mockSidebarState.sidebarOpen = false;
+    const { root, rootEl } = await renderLayoutRoot();
+
+    expect(rootEl.tagName).toBe("DIV");
+    expect(rootEl.className).toContain("bg-background");
+    // The mobile root must clip horizontal overflow to prevent a stray wide
+    // descendant from making the whole viewport scroll sideways. clip (not
+    // hidden) keeps overflow-y visible so body scroll keeps working.
+    expect(rootEl.classList.contains("overflow-x-clip")).toBe(true);
+    expect(rootEl.classList.contains("overflow-hidden")).toBe(false);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("clips overflow on the desktop layout root", async () => {
+    mockSidebarState.isMobile = false;
+    const { root, rootEl } = await renderLayoutRoot();
+
+    expect(rootEl.className).toContain("bg-background");
+    expect(rootEl.classList.contains("overflow-clip")).toBe(true);
 
     await act(async () => {
       root.unmount();

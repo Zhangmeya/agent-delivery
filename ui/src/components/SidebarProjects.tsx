@@ -20,12 +20,12 @@ import { authApi } from "../api/auth";
 import { projectsApi } from "../api/projects";
 import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
 import { queryKeys } from "../lib/queryKeys";
-import { cn, projectRouteRef } from "../lib/utils";
-import { buildDndAccessibility } from "../lib/dnd-accessibility";
+import { cn, projectRouteRef, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import { useProjectOrder } from "../hooks/useProjectOrder";
-import { displaySeededName } from "../lib/seeded-display";
 import { resourceMembershipState, useResourceMembershipMutation, useResourceMemberships } from "../hooks/useResourceMemberships";
+import { useProjectExternalObjectSummary } from "../hooks/useIssueExternalObjects";
 import { BudgetSidebarMarker } from "./BudgetSidebarMarker";
+import { ExternalObjectStatusSummary } from "./ExternalObjectStatusSummary";
 import { ProjectTile } from "./ProjectTile";
 import { SidebarSection, type SidebarSectionRadioChoice } from "./SidebarSection";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PluginSlotMount, usePluginSlots } from "@/plugins/slots";
 import {
   getProjectSortModeStorageKey,
@@ -48,6 +49,11 @@ import type { Project } from "@penclipai/shared";
 
 type ProjectSidebarSlot = ReturnType<typeof usePluginSlots>["slots"][number];
 
+const PROJECT_SORT_CHOICES: SidebarSectionRadioChoice[] = [
+  { value: "top", label: "Top" },
+  { value: "alphabetical", label: "Alphabetical" },
+  { value: "recent", label: "Recent" },
+];
 const REORDER_POINTER_MEDIA = "(hover: hover) and (pointer: fine)";
 
 type ProjectItemProps = {
@@ -57,6 +63,7 @@ type ProjectItemProps = {
   isMobile: boolean;
   project: Project;
   projectSidebarSlots: ProjectSidebarSlot[];
+  rail: boolean;
   setSidebarOpen: (open: boolean) => void;
   onLeaveProject: (project: Project) => void;
   leaving?: boolean;
@@ -111,42 +118,63 @@ function ProjectItem({
   isMobile,
   project,
   projectSidebarSlots,
+  rail,
   setSidebarOpen,
   onLeaveProject,
   leaving = false,
   isDragging = false,
 }: ProjectItemProps) {
-  const { t } = useTranslation(undefined, { useSuspense: false });
+  const { t } = useTranslation();
   const routeRef = projectRouteRef(project);
-  const displayName = displaySeededName(project.name);
+  const { summary: externalObjectsSummary } = useProjectExternalObjectSummary(project.id);
+
+  const link = (
+    <NavLink
+      to={`/projects/${routeRef}/issues`}
+      state={SIDEBAR_SCROLL_RESET_STATE}
+      onClick={(e) => {
+        if (isDragging) {
+          e.preventDefault();
+          return;
+        }
+        if (isMobile) setSidebarOpen(false);
+      }}
+      className={cn(
+        "flex min-w-0 flex-1 items-center gap-2.5 px-3 py-1.5 pr-8 pointer-coarse:py-1 text-[13px] font-medium transition-colors",
+        activeProjectRef === routeRef || activeProjectRef === project.id
+          ? "bg-accent text-foreground"
+          : "text-foreground/80 hover:bg-accent/50 hover:text-foreground",
+      )}
+    >
+      <ProjectTile color={project.color ?? null} icon={project.icon ?? null} size="xs" />
+      <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "flex-1 truncate"}>{project.name}</span>
+      {!rail ? <ExternalObjectStatusSummary summary={externalObjectsSummary} compact /> : null}
+      {!rail && project.pauseReason === "budget" ? (
+        <BudgetSidebarMarker title={t("Project paused by budget", { defaultValue: "Project paused by budget" })} />
+      ) : null}
+    </NavLink>
+  );
 
   return (
     <div className="flex flex-col gap-0.5">
       <div className="group/project relative flex items-center">
-        <NavLink
-          to={`/projects/${routeRef}/issues`}
-          state={SIDEBAR_SCROLL_RESET_STATE}
-          onClick={(e) => {
-            if (isDragging) {
-              e.preventDefault();
-              return;
-            }
-            if (isMobile) setSidebarOpen(false);
-          }}
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-2.5 px-3 py-1.5 pr-8 pointer-coarse:py-1 text-[13px] font-medium transition-colors",
-            activeProjectRef === routeRef || activeProjectRef === project.id
-              ? "bg-accent text-foreground"
-              : "text-foreground/80 hover:bg-accent/50 hover:text-foreground",
-          )}
-        >
-          <ProjectTile color={project.color ?? null} icon={project.icon ?? null} size="xs" />
-          <span className="flex-1 truncate">{displayName}</span>
-          {project.pauseReason === "budget" ? (
-            <BudgetSidebarMarker title={t("Project paused by budget", { defaultValue: "Project paused by budget" })} />
-          ) : null}
-        </NavLink>
+        {rail ? (
+          // Anchor the tooltip to a wrapper, not the NavLink: Radix `asChild`
+          // (Slot) drops React Router's function className, which would strip
+          // `flex` off the <a> and let the in-flow label stack under the icon,
+          // growing the row. Keeping the <a> out of Slot preserves a 1:1 row
+          // height with the expanded state so the icon never moves (PAP-10676).
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="min-w-0 flex-1">{link}</div>
+            </TooltipTrigger>
+            <TooltipContent side="right">{project.name}</TooltipContent>
+          </Tooltip>
+        ) : (
+          link
+        )}
 
+        {!rail && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -160,7 +188,7 @@ function ProjectItem({
               )}
               aria-label={t("Open actions for {{name}}", {
                 defaultValue: "Open actions for {{name}}",
-                name: displayName,
+                name: project.name,
               })}
             >
               <MoreHorizontal className="h-3.5 w-3.5" />
@@ -183,8 +211,9 @@ function ProjectItem({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
-      {projectSidebarSlots.length > 0 && (
+      {!rail && projectSidebarSlots.length > 0 && (
         <div className="ml-5 flex flex-col gap-0.5">
           {projectSidebarSlots.map((slot) => (
             <PluginSlotMount
@@ -235,11 +264,12 @@ function SortableProjectItem(props: ProjectItemProps) {
 }
 
 export function SidebarProjects() {
-  const { t } = useTranslation(undefined, { useSuspense: false });
+  const { t } = useTranslation();
   const [open, setOpen] = useState(true);
   const { selectedCompany, selectedCompanyId } = useCompany();
   const { openNewProject } = useDialogActions();
-  const { isMobile, setSidebarOpen } = useSidebar();
+  const { isMobile, setSidebarOpen, collapsed, peeking } = useSidebar();
+  const rail = collapsed && !peeking;
   const fineReorderPointer = useFineReorderPointer();
   const location = useLocation();
 
@@ -288,11 +318,6 @@ export function SidebarProjects() {
     () => sortProjects(orderedProjects, sortMode),
     [orderedProjects, sortMode],
   );
-  const projectSortChoices = useMemo<SidebarSectionRadioChoice[]>(() => [
-    { value: "top", label: t("Top", { defaultValue: "Top" }) },
-    { value: "alphabetical", label: t("Alphabetical", { defaultValue: "Alphabetical" }) },
-    { value: "recent", label: t("Recent", { defaultValue: "Recent" }) },
-  ], [t]);
   const isTopMode = sortMode === "top";
   const canReorderProjects = isTopMode && !isMobile && fineReorderPointer;
 
@@ -304,7 +329,6 @@ export function SidebarProjects() {
       activationConstraint: { distance: 8 },
     }),
   );
-  const dndAccessibility = useMemo(() => buildDndAccessibility(t), [t]);
 
   useEffect(() => {
     if (!sortModeStorageKey) {
@@ -389,6 +413,7 @@ export function SidebarProjects() {
       isMobile={isMobile}
       project={project}
       projectSidebarSlots={projectSidebarSlots}
+      rail={rail}
       setSidebarOpen={setSidebarOpen}
       onLeaveProject={leaveProject}
       leaving={projectLeaving(project)}
@@ -397,7 +422,7 @@ export function SidebarProjects() {
 
   return (
     <SidebarSection
-      label={t("Projects", { defaultValue: "Projects" })}
+      label="Projects"
       collapsible={{ open, onOpenChange: setOpen }}
       headerAction={{
         ariaLabel: t("New project", { defaultValue: "New project" }),
@@ -411,7 +436,7 @@ export function SidebarProjects() {
           { type: "separator" },
         ],
         radioLabel: t("Project sort", { defaultValue: "Project sort" }),
-        radioChoices: projectSortChoices,
+        radioChoices: PROJECT_SORT_CHOICES,
         radioValue: sortMode,
         onRadioValueChange: persistSortMode,
       }}
@@ -420,7 +445,6 @@ export function SidebarProjects() {
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
-          accessibility={dndAccessibility}
           onDragEnd={handleDragEnd}
         >
           <SortableContext
@@ -437,6 +461,7 @@ export function SidebarProjects() {
                   isMobile={isMobile}
                   project={project}
                   projectSidebarSlots={projectSidebarSlots}
+                  rail={rail}
                   setSidebarOpen={setSidebarOpen}
                   onLeaveProject={leaveProject}
                   leaving={projectLeaving(project)}

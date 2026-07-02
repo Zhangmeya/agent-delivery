@@ -1,33 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "@/lib/router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Navigate, useNavigate, useParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import {
-  Activity as ActivityIcon,
-  ChevronDown,
-  ChevronRight,
-  Clock3,
-  Copy,
-  History as HistoryIcon,
-  KeyRound,
-  Play,
-  RefreshCw,
-  Repeat,
-  Save,
-  Trash2,
-  Webhook,
-  Zap,
-} from "lucide-react";
+import { AlertCircle, Repeat, Sparkles } from "lucide-react";
 import { ApiError } from "../api/client";
-import { routinesApi, type RoutineTriggerResponse, type RotateRoutineTriggerResponse, type RestoreRoutineRevisionResponse } from "../api/routines";
-import { secretsApi } from "../api/secrets";
-import { EnvVarEditor } from "../components/EnvVarEditor";
 import {
-  RoutineHistoryTab,
-  type RoutineHistoryDirtyFieldDescriptor,
-} from "../components/RoutineHistoryTab";
+  routinesApi,
+  type RoutineTriggerResponse,
+  type RotateRoutineTriggerResponse,
+  type RestoreRoutineRevisionResponse,
+} from "../api/routines";
+import { secretsApi } from "../api/secrets";
+import { type RoutineHistoryDirtyFieldDescriptor } from "../components/RoutineHistoryTab";
 import { heartbeatsApi } from "../api/heartbeats";
-import { LiveRunWidget } from "../components/LiveRunWidget";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
 import { accessApi } from "../api/access";
@@ -35,130 +20,107 @@ import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useToastActions } from "../context/ToastContext";
 import { queryKeys } from "../lib/queryKeys";
-import { buildRoutineTriggerPatch } from "../lib/routine-trigger-patch";
 import { buildMarkdownMentionOptions } from "../lib/company-members";
-import { timeAgo } from "../lib/timeAgo";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
-import { AgentIcon } from "../components/AgentIconPicker";
-import { InlineEntitySelector, type InlineEntityOption } from "../components/InlineEntitySelector";
-import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "../components/MarkdownEditor";
+import { type InlineEntityOption } from "../components/InlineEntitySelector";
+import { type MarkdownEditorRef, type MentionOption } from "../components/MarkdownEditor";
 import {
   RoutineRunVariablesDialog,
   type RoutineRunDialogSubmitData,
 } from "../components/RoutineRunVariablesDialog";
-import { RoutineVariablesEditor, RoutineVariablesHint } from "../components/RoutineVariablesEditor";
-import { ScheduleEditor, describeSchedule } from "../components/ScheduleEditor";
 import { RunButton } from "../components/AgentActionButtons";
 import { getRecentAssigneeIds, sortAgentsByRecency, trackRecentAssignee } from "../lib/recent-assignees";
 import { getRecentProjectIds, trackRecentProject } from "../lib/recent-projects";
-import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  RoutineSubSidebar,
+  RoutineSectionPicker,
+} from "../components/RoutineSubSidebar";
+import { RoutineSaveBar } from "../components/RoutineSaveBar";
+import {
+  EDITABLE_SECTIONS,
+  ROUTINE_SECTION_KEYS,
+  SECTION_FIELD_KEYS,
+  RoutineDetailContext,
+  createDefaultNewTrigger,
+  type RoutineDetailContextValue,
+  type RoutineEditDraft,
+  type RoutineSectionKey,
+  type SecretMessage,
+} from "../components/routine-sections/context";
+import {
+  OverviewSection,
+  TriggersSection,
+  VariablesSection,
+  SecretsSection,
+  DeliverySection,
+} from "../components/routine-sections/editable-sections";
+import {
+  RunsSection,
+  ActivitySection,
+  HistorySection,
+} from "../components/routine-sections/operate-sections";
 import type {
-  EnvBinding,
   RoutineDetail as RoutineDetailType,
   RoutineEnvConfig,
-  RoutineTrigger,
   RoutineVariable,
 } from "@penclipai/shared";
 
-const concurrencyPolicies = ["coalesce_if_active", "always_enqueue", "skip_if_active"];
-const catchUpPolicies = ["skip_missed", "enqueue_missed_with_cap"];
-const triggerKinds = ["schedule", "webhook"];
-const signingModes = ["bearer", "hmac_sha256", "github_hmac", "none"];
-const routineTabs = ["triggers", "runs", "activity", "secrets", "history"] as const;
-const concurrencyPolicyDescriptions: Record<string, { key: string; defaultValue: string }> = {
-  coalesce_if_active: {
-    key: "routineDetail.concurrency.coalesceIfActive",
-    defaultValue: "Keep one follow-up run queued while an active run is still working.",
-  },
-  always_enqueue: {
-    key: "routineDetail.concurrency.alwaysEnqueue",
-    defaultValue: "Queue every trigger occurrence, even if several runs stack up.",
-  },
-  skip_if_active: {
-    key: "routineDetail.concurrency.skipIfActive",
-    defaultValue: "Drop overlapping trigger occurrences while the routine is already active.",
-  },
-};
-const catchUpPolicyDescriptions: Record<string, { key: string; defaultValue: string }> = {
-  skip_missed: {
-    key: "routineDetail.catchUp.skipMissed",
-    defaultValue: "Ignore schedule windows that were missed while the routine or scheduler was paused.",
-  },
-  enqueue_missed_with_cap: {
-    key: "routineDetail.catchUp.enqueueMissedWithCap",
-    defaultValue: "Catch up missed schedule windows in capped batches after recovery.",
-  },
-};
-const signingModeDescriptions: Record<string, { key: string; defaultValue: string }> = {
-  bearer: {
-    key: "routineDetail.signingMode.bearer",
-    defaultValue: "Expect a shared bearer token in the Authorization header.",
-  },
-  hmac_sha256: {
-    key: "routineDetail.signingMode.hmacSha256",
-    defaultValue: "Expect an HMAC SHA-256 signature over the request using the shared secret.",
-  },
-  github_hmac: {
-    key: "routineDetail.signingMode.githubHmac",
-    defaultValue: "Accept GitHub-style X-Hub-Signature-256 header (HMAC over raw body, no timestamp).",
-  },
-  none: {
-    key: "routineDetail.signingMode.none",
-    defaultValue: "No authentication - the webhook URL itself acts as a shared secret.",
-  },
-};
-const SIGNING_MODES_WITHOUT_REPLAY_WINDOW = new Set(["github_hmac", "none"]);
+const LAST_SECTION_STORAGE_KEY = "paperclip.routineLastSection";
 
-type RoutineTab = (typeof routineTabs)[number];
+const SECTION_TITLES: Record<RoutineSectionKey, string> = {
+  overview: "Overview",
+  triggers: "Triggers",
+  variables: "Variables",
+  secrets: "Secrets",
+  delivery: "Delivery",
+  runs: "Runs",
+  activity: "Activity",
+  history: "History",
+};
 
-type SecretMessage = {
-  title: string;
-  entries: Array<{
-    webhookUrl: string;
-    webhookSecret: string;
-  }>;
+function isRoutineSection(value: string | undefined | null): value is RoutineSectionKey {
+  return value != null && ROUTINE_SECTION_KEYS.includes(value as RoutineSectionKey);
+}
+
+function readLastSection(routineId: string): RoutineSectionKey | null {
+  try {
+    const raw = localStorage.getItem(LAST_SECTION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    const stored = parsed[routineId];
+    return isRoutineSection(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastSection(routineId: string, section: RoutineSectionKey) {
+  try {
+    const raw = localStorage.getItem(LAST_SECTION_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    parsed[routineId] = section;
+    localStorage.setItem(LAST_SECTION_STORAGE_KEY, JSON.stringify(parsed));
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+/** Back-compat: `?tab=x` query param maps to the new section sub-routes. */
+const LEGACY_TAB_TO_SECTION: Record<string, RoutineSectionKey> = {
+  triggers: "triggers",
+  runs: "runs",
+  activity: "activity",
+  secrets: "secrets",
+  history: "history",
 };
 
 function autoResizeTextarea(element: HTMLTextAreaElement | null) {
   if (!element) return;
   element.style.height = "auto";
   element.style.height = `${element.scrollHeight}px`;
-}
-
-function isRoutineTab(value: string | null): value is RoutineTab {
-  return value !== null && routineTabs.includes(value as RoutineTab);
-}
-
-function getRoutineTabFromSearch(search: string): RoutineTab {
-  const tab = new URLSearchParams(search).get("tab");
-  return isRoutineTab(tab) ? tab : "triggers";
-}
-
-function formatActivityDetailValue(value: unknown): string {
-  if (value === null) return "null";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) return value.length === 0 ? "[]" : value.map((item) => formatActivityDetailValue(item)).join(", ");
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return "[unserializable]";
-  }
 }
 
 function getLocalTimezone(): string {
@@ -169,17 +131,7 @@ function getLocalTimezone(): string {
   }
 }
 
-function buildRoutineMutationPayload(input: {
-  title: string;
-  description: string;
-  projectId: string;
-  assigneeAgentId: string;
-  priority: string;
-  concurrencyPolicy: string;
-  catchUpPolicy: string;
-  variables: RoutineVariable[];
-  env: RoutineEnvConfig | null;
-}) {
+function buildRoutineMutationPayload(input: RoutineEditDraft) {
   return {
     ...input,
     description: input.description.trim() || null,
@@ -189,137 +141,13 @@ function buildRoutineMutationPayload(input: {
   };
 }
 
-function TriggerEditor({
-  trigger,
-  onSave,
-  onRotate,
-  onDelete,
-}: {
-  trigger: RoutineTrigger;
-  onSave: (id: string, patch: Record<string, unknown>) => void;
-  onRotate: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState({
-    label: trigger.label ?? "",
-    cronExpression: trigger.cronExpression ?? "",
-    signingMode: trigger.signingMode ?? "bearer",
-    replayWindowSec: String(trigger.replayWindowSec ?? 300),
-  });
-
-  useEffect(() => {
-    setDraft({
-      label: trigger.label ?? "",
-      cronExpression: trigger.cronExpression ?? "",
-      signingMode: trigger.signingMode ?? "bearer",
-      replayWindowSec: String(trigger.replayWindowSec ?? 300),
-    });
-  }, [trigger]);
-
-  return (
-    <div className="rounded-lg border border-border p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          {trigger.kind === "schedule" ? <Clock3 className="h-3.5 w-3.5" /> : trigger.kind === "webhook" ? <Webhook className="h-3.5 w-3.5" /> : <Zap className="h-3.5 w-3.5" />}
-          {trigger.label ?? trigger.kind}
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {trigger.kind === "schedule" && trigger.nextRunAt
-            ? t("Next: {{value}}", { value: new Date(trigger.nextRunAt).toLocaleString() })
-            : trigger.kind === "webhook"
-              ? t("triggerDialog.kind.webhook", { defaultValue: "Webhook" })
-              : "API"}
-        </span>
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label className="text-xs">{t("Label", { defaultValue: "Label" })}</Label>
-          <Input
-            value={draft.label}
-            onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))}
-          />
-        </div>
-        {trigger.kind === "schedule" && (
-          <div className="md:col-span-2 space-y-1.5">
-            <Label className="text-xs">{t("Schedule", { defaultValue: "Schedule" })}</Label>
-            <ScheduleEditor
-              value={draft.cronExpression}
-              onChange={(cronExpression) => setDraft((current) => ({ ...current, cronExpression }))}
-            />
-          </div>
-        )}
-        {trigger.kind === "webhook" && (
-          <>
-            <div className="space-y-1.5">
-              <Label className="text-xs">{t("Signing mode", { defaultValue: "Signing mode" })}</Label>
-              <Select
-                value={draft.signingMode}
-                onValueChange={(signingMode) => setDraft((current) => ({ ...current, signingMode }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {signingModes.map((mode) => (
-                    <SelectItem key={mode} value={mode}>{mode}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {!SIGNING_MODES_WITHOUT_REPLAY_WINDOW.has(draft.signingMode) && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">{t("Replay window (seconds)", { defaultValue: "Replay window (seconds)" })}</Label>
-                <Input
-                  value={draft.replayWindowSec}
-                  onChange={(event) => setDraft((current) => ({ ...current, replayWindowSec: event.target.value }))}
-                />
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {trigger.lastResult && <span className="text-xs text-muted-foreground">{t("Last: {{value}}", { value: trigger.lastResult })}</span>}
-        <div className="ml-auto flex items-center gap-2">
-          {trigger.kind === "webhook" && (
-            <Button variant="outline" size="sm" onClick={() => onRotate(trigger.id)}>
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              {t("Rotate secret", { defaultValue: "Rotate secret" })}
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onSave(trigger.id, buildRoutineTriggerPatch(trigger, draft, getLocalTimezone()))}
-          >
-            <Save className="mr-1.5 h-3.5 w-3.5" />
-            {t("Save trigger", { defaultValue: "Save trigger" })}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => onDelete(trigger.id)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function RoutineDetail() {
   const { t } = useTranslation();
-  const { routineId } = useParams<{ routineId: string }>();
+  const { routineId, section: sectionParam } = useParams<{ routineId: string; section?: string }>();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const location = useLocation();
   const { pushToast } = useToastActions();
   const hydratedRoutineIdRef = useRef<string | null>(null);
   const titleInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -327,26 +155,10 @@ export function RoutineDetail() {
   const assigneeSelectorRef = useRef<HTMLButtonElement | null>(null);
   const projectSelectorRef = useRef<HTMLButtonElement | null>(null);
   const [secretMessage, setSecretMessage] = useState<SecretMessage | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [saveConflict, setSaveConflict] = useState(false);
   const [runVariablesOpen, setRunVariablesOpen] = useState(false);
-  const [newTrigger, setNewTrigger] = useState({
-    kind: "schedule",
-    cronExpression: "0 10 * * *",
-    signingMode: "bearer",
-    replayWindowSec: "300",
-  });
-  const [editDraft, setEditDraft] = useState<{
-    title: string;
-    description: string;
-    projectId: string;
-    assigneeAgentId: string;
-    priority: string;
-    concurrencyPolicy: string;
-    catchUpPolicy: string;
-    variables: RoutineVariable[];
-    env: RoutineEnvConfig | null;
-  }>({
+  const [newTrigger, setNewTrigger] = useState(createDefaultNewTrigger);
+  const [editDraft, setEditDraft] = useState<RoutineEditDraft>({
     title: "",
     description: "",
     projectId: "",
@@ -357,7 +169,17 @@ export function RoutineDetail() {
     variables: [],
     env: null,
   });
-  const activeTab = useMemo(() => getRoutineTabFromSearch(location.search), [location.search]);
+
+  const section: RoutineSectionKey = isRoutineSection(sectionParam) ? sectionParam : "overview";
+
+  const navigateToSection = useCallback(
+    (next: RoutineSectionKey, options?: { replace?: boolean }) => {
+      if (!routineId) return;
+      writeLastSection(routineId, next);
+      navigate(`/routines/${routineId}/${next}`, { replace: options?.replace ?? true });
+    },
+    [navigate, routineId],
+  );
 
   const { data: routine, isLoading, error } = useQuery({
     queryKey: queryKeys.routines.detail(routineId!),
@@ -416,7 +238,9 @@ export function RoutineDetail() {
   });
   const createSecret = useMutation({
     mutationFn: (input: { name: string; value: string }) => {
-      if (!selectedCompanyId) throw new Error("Select a company to create secrets");
+      if (!selectedCompanyId) {
+        throw new Error(t("agentConfig.selectCompanyToCreateSecrets", { defaultValue: "Select a company before creating secrets." }));
+      }
       return secretsApi.create(selectedCompanyId, input);
     },
     onSuccess: () => {
@@ -425,7 +249,7 @@ export function RoutineDetail() {
     },
   });
 
-  const routineDefaults = useMemo(
+  const routineDefaults = useMemo<RoutineEditDraft | null>(
     () =>
       routine
         ? {
@@ -445,9 +269,7 @@ export function RoutineDetail() {
   const dirtyFields = useMemo<RoutineHistoryDirtyFieldDescriptor[]>(() => {
     if (!routineDefaults) return [];
     const result: RoutineHistoryDirtyFieldDescriptor[] = [];
-    if (editDraft.title !== routineDefaults.title) {
-      result.push({ key: "title", label: t("routineDetail.dirty.title", { defaultValue: "the title" }) });
-    }
+    if (editDraft.title !== routineDefaults.title) result.push({ key: "title", label: t("routineDetail.dirty.title", { defaultValue: "the title" }) });
     if (editDraft.description !== routineDefaults.description) {
       result.push({ key: "description", label: t("routineDetail.dirty.description", { defaultValue: "the description" }) });
     }
@@ -470,17 +292,44 @@ export function RoutineDetail() {
       result.push({ key: "variables", label: t("routineDetail.dirty.variables", { defaultValue: "the variables" }) });
     }
     if (JSON.stringify(editDraft.env ?? null) !== JSON.stringify(routineDefaults.env ?? null)) {
-      result.push({ key: "env", label: "the secrets" });
+      result.push({ key: "env", label: t("routineDetail.dirty.secrets", { defaultValue: "the secrets" }) });
     }
     return result;
   }, [editDraft, routineDefaults, t]);
   const isEditDirty = dirtyFields.length > 0;
 
+  const sectionDirtyFields = useCallback(
+    (target: RoutineSectionKey) => {
+      const keys = SECTION_FIELD_KEYS[target];
+      if (!keys) return [];
+      return dirtyFields.filter((field) => keys.includes(field.key));
+    },
+    [dirtyFields],
+  );
+  const isSectionDirty = useCallback(
+    (target: RoutineSectionKey) => sectionDirtyFields(target).length > 0,
+    [sectionDirtyFields],
+  );
+  const discardSection = useCallback(
+    (target: RoutineSectionKey) => {
+      if (!routineDefaults) return;
+      const keys = SECTION_FIELD_KEYS[target];
+      if (!keys) return;
+      setEditDraft((current) => {
+        const next = { ...current } as Record<string, unknown>;
+        for (const key of keys) {
+          next[key] = (routineDefaults as Record<string, unknown>)[key];
+        }
+        return next as RoutineEditDraft;
+      });
+    },
+    [routineDefaults],
+  );
+
   useEffect(() => {
     if (!routine) return;
     setBreadcrumbs([{ label: t("Routines", { defaultValue: "Routines" }), href: "/routines" }, { label: routine.title }]);
     if (!routineDefaults) return;
-
     const changedRoutine = hydratedRoutineIdRef.current !== routine.id;
     if (changedRoutine || !isEditDirty) {
       setEditDraft(routineDefaults);
@@ -492,36 +341,28 @@ export function RoutineDetail() {
     autoResizeTextarea(titleInputRef.current);
   }, [editDraft.title, routine?.id]);
 
-  const copySecretValue = async (label: string, value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      pushToast({ title: t("routineDetail.copiedSecretValue", { label, defaultValue: "{{label}} copied" }), tone: "success" });
-    } catch (error) {
-      pushToast({
-        title: t("routineDetail.copySecretFailed", { label: label.toLowerCase(), defaultValue: "Failed to copy {{label}}" }),
-        body: error instanceof Error ? error.message : t("Clipboard access was denied.", { defaultValue: "Clipboard access was denied." }),
-        tone: "error",
-      });
+  // Persist the section the user lands on so a bare /routines/:id remembers it.
+  useEffect(() => {
+    if (routineId && isRoutineSection(sectionParam)) {
+      writeLastSection(routineId, sectionParam);
     }
-  };
+  }, [routineId, sectionParam]);
 
-  const setActiveTab = (value: string) => {
-    if (!routineId || !isRoutineTab(value)) return;
-    const params = new URLSearchParams(location.search);
-    if (value === "triggers") {
-      params.delete("tab");
-    } else {
-      params.set("tab", value);
-    }
-    const search = params.toString();
-    navigate(
-      {
-        pathname: location.pathname,
-        search: search ? `?${search}` : "",
-      },
-      { replace: true },
-    );
-  };
+  const copySecretValue = useCallback(
+    async (label: string, value: string) => {
+      try {
+        await navigator.clipboard.writeText(value);
+        pushToast({ title: t("routineDetail.copiedSecretValue", { label }), tone: "success" });
+      } catch (copyError) {
+        pushToast({
+          title: t("routineDetail.copySecretFailed", { label: label.toLowerCase() }),
+          body: copyError instanceof Error ? copyError.message : t("Clipboard access was denied."),
+          tone: "error",
+        });
+      }
+    },
+    [pushToast, t],
+  );
 
   const saveRoutine = useMutation({
     mutationFn: () => {
@@ -541,21 +382,19 @@ export function RoutineDetail() {
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.revisions(routineId!) }),
       ]);
     },
-    onError: (error) => {
-      if (error instanceof ApiError && error.status === 409) {
+    onError: (mutationError) => {
+      if (mutationError instanceof ApiError && mutationError.status === 409) {
         setSaveConflict(true);
         pushToast({
-          title: t("routineDetail.routineChanged", { defaultValue: "Routine changed" }),
-          body: t("routineDetail.routineChangedBody", { defaultValue: "Someone else updated this routine. Reload to see the latest revision." }),
+          title: t("routineDetail.routineChanged"),
+          body: t("routineDetail.routineChangedBody"),
           tone: "warn",
         });
         return;
       }
       pushToast({
-        title: t("routineDetail.saveFailed", { defaultValue: "Failed to save routine" }),
-        body: error instanceof Error ? error.message : t("routineDetail.saveFailedBody", {
-          defaultValue: "Paperclip could not save the routine.",
-        }),
+        title: t("routineDetail.saveFailed"),
+        body: mutationError instanceof Error ? mutationError.message : t("routineDetail.saveFailedBody"),
         tone: "error",
       });
     },
@@ -576,9 +415,9 @@ export function RoutineDetail() {
           : {}),
       }),
     onSuccess: async () => {
-      pushToast({ title: t("Routine run started", { defaultValue: "Routine run started" }), tone: "success" });
+      pushToast({ title: t("Routine run started"), tone: "success" });
       setRunVariablesOpen(false);
-      setActiveTab("runs");
+      navigateToSection("runs");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.runs(routineId!) }),
@@ -586,12 +425,10 @@ export function RoutineDetail() {
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.activity(selectedCompanyId!, routineId!) }),
       ]);
     },
-    onError: (error) => {
+    onError: (runError) => {
       pushToast({
-        title: t("Routine run failed", { defaultValue: "Routine run failed" }),
-        body: error instanceof Error ? error.message : t("routineDetail.runFailedBody", {
-          defaultValue: "Paperclip could not start the routine run.",
-        }),
+        title: t("Routine run failed"),
+        body: runError instanceof Error ? runError.message : t("routineDetail.runFailedBody"),
         tone: "error",
       });
     },
@@ -601,10 +438,8 @@ export function RoutineDetail() {
     mutationFn: (status: string) => routinesApi.update(routineId!, { status }),
     onSuccess: async (_data, status) => {
       pushToast({
-        title: t("Routine saved", { defaultValue: "Routine saved" }),
-        body: status === "paused"
-          ? t("Automation paused.", { defaultValue: "Automation paused." })
-          : t("Automation enabled.", { defaultValue: "Automation enabled." }),
+        title: t("Routine saved"),
+        body: status === "paused" ? t("routineDetail.automationPaused") : t("routineDetail.automationEnabled"),
         tone: "success",
       });
       await Promise.all([
@@ -612,12 +447,10 @@ export function RoutineDetail() {
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
       ]);
     },
-    onError: (error) => {
+    onError: (statusError) => {
       pushToast({
-        title: t("Failed to update routine", { defaultValue: "Failed to update routine" }),
-        body: error instanceof Error ? error.message : t("routineDetail.updateFailedBody", {
-          defaultValue: "Paperclip could not update the routine.",
-        }),
+        title: t("Failed to update routine"),
+        body: statusError instanceof Error ? statusError.message : t("routineDetail.updateFailedBody"),
         tone: "error",
       });
     },
@@ -634,28 +467,18 @@ export function RoutineDetail() {
           ? { cronExpression: newTrigger.cronExpression.trim(), timezone: getLocalTimezone() }
           : {}),
         ...(newTrigger.kind === "webhook"
-          ? {
-            signingMode: newTrigger.signingMode,
-            replayWindowSec: Number(newTrigger.replayWindowSec || "300"),
-          }
+          ? { signingMode: newTrigger.signingMode, replayWindowSec: Number(newTrigger.replayWindowSec || "300") }
           : {}),
       });
     },
     onSuccess: async (result) => {
       if (result.secretMaterial) {
         setSecretMessage({
-          title: t("Webhook trigger created", { defaultValue: "Webhook trigger created" }),
-          entries: [{
-            webhookUrl: result.secretMaterial.webhookUrl,
-            webhookSecret: result.secretMaterial.webhookSecret,
-          }],
+          title: t("routineDetail.webhookTriggerCreated"),
+          entries: [{ webhookUrl: result.secretMaterial.webhookUrl, webhookSecret: result.secretMaterial.webhookSecret }],
         });
       } else {
-      pushToast({
-        title: t("routineDetail.triggerAdded", { defaultValue: "Trigger added" }),
-        body: t("routineDetail.triggerAddedBody", { defaultValue: "The routine schedule was saved." }),
-        tone: "success",
-      });
+        pushToast({ title: t("routineDetail.triggerAdded"), body: t("routineDetail.triggerAddedBody"), tone: "success" });
       }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
@@ -663,12 +486,10 @@ export function RoutineDetail() {
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.activity(selectedCompanyId!, routineId!) }),
       ]);
     },
-    onError: (error) => {
+    onError: (triggerError) => {
       pushToast({
-        title: t("Failed to add trigger", { defaultValue: "Failed to add trigger" }),
-        body: error instanceof Error ? error.message : t("routineDetail.addTriggerFailedBody", {
-          defaultValue: "Paperclip could not create the trigger.",
-        }),
+        title: t("Failed to add trigger"),
+        body: triggerError instanceof Error ? triggerError.message : t("routineDetail.addTriggerFailedBody"),
         tone: "error",
       });
     },
@@ -677,23 +498,17 @@ export function RoutineDetail() {
   const updateTrigger = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) => routinesApi.updateTrigger(id, patch),
     onSuccess: async () => {
-      pushToast({
-        title: t("routineDetail.triggerSaved", { defaultValue: "Trigger saved" }),
-        body: t("routineDetail.triggerAddedBody", { defaultValue: "The routine schedule was saved." }),
-        tone: "success",
-      });
+      pushToast({ title: t("routineDetail.triggerSaved"), body: t("routineDetail.triggerSavedBody"), tone: "success" });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.activity(selectedCompanyId!, routineId!) }),
       ]);
     },
-    onError: (error) => {
+    onError: (triggerError) => {
       pushToast({
-        title: t("routineDetail.updateTriggerFailed", { defaultValue: "Failed to update trigger" }),
-        body: error instanceof Error ? error.message : t("routineDetail.updateTriggerFailedBody", {
-          defaultValue: "Paperclip could not update the trigger.",
-        }),
+        title: t("routineDetail.updateTriggerFailed"),
+        body: triggerError instanceof Error ? triggerError.message : t("routineDetail.updateTriggerFailedBody"),
         tone: "error",
       });
     },
@@ -702,22 +517,17 @@ export function RoutineDetail() {
   const deleteTrigger = useMutation({
     mutationFn: (id: string) => routinesApi.deleteTrigger(id),
     onSuccess: async () => {
-      pushToast({
-        title: t("routineDetail.triggerDeleted", { defaultValue: "Trigger deleted" }),
-        tone: "success",
-      });
+      pushToast({ title: t("routineDetail.triggerDeleted"), tone: "success" });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.activity(selectedCompanyId!, routineId!) }),
       ]);
     },
-    onError: (error) => {
+    onError: (triggerError) => {
       pushToast({
-        title: t("routineDetail.deleteTriggerFailed", { defaultValue: "Failed to delete trigger" }),
-        body: error instanceof Error ? error.message : t("routineDetail.deleteTriggerFailedBody", {
-          defaultValue: "Paperclip could not delete the trigger.",
-        }),
+        title: t("routineDetail.deleteTriggerFailed"),
+        body: triggerError instanceof Error ? triggerError.message : t("routineDetail.deleteTriggerFailedBody"),
         tone: "error",
       });
     },
@@ -727,36 +537,25 @@ export function RoutineDetail() {
     mutationFn: (id: string): Promise<RotateRoutineTriggerResponse> => routinesApi.rotateTriggerSecret(id),
     onSuccess: async (result) => {
       setSecretMessage({
-        title: "Webhook secret rotated",
-        entries: [{
-          webhookUrl: result.secretMaterial.webhookUrl,
-          webhookSecret: result.secretMaterial.webhookSecret,
-        }],
+        title: t("routineDetail.webhookSecretRotated"),
+        entries: [{ webhookUrl: result.secretMaterial.webhookUrl, webhookSecret: result.secretMaterial.webhookSecret }],
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.routines.activity(selectedCompanyId!, routineId!) }),
       ]);
     },
-    onError: (error) => {
+    onError: (triggerError) => {
       pushToast({
-        title: t("Failed to rotate webhook secret", { defaultValue: "Failed to rotate webhook secret" }),
-        body: error instanceof Error ? error.message : t("Paperclip CN could not rotate the webhook secret.", {
-          defaultValue: "Paperclip could not rotate the webhook secret.",
-        }),
+        title: t("routineDetail.rotateWebhookSecretFailed"),
+        body: triggerError instanceof Error ? triggerError.message : t("routineDetail.rotateWebhookSecretFailedBody"),
         tone: "error",
       });
     },
   });
 
-  const agentById = useMemo(
-    () => new Map((agents ?? []).map((agent) => [agent.id, agent])),
-    [agents],
-  );
-  const projectById = useMemo(
-    () => new Map((projects ?? []).map((project) => [project.id, project])),
-    [projects],
-  );
+  const agentById = useMemo(() => new Map((agents ?? []).map((agent) => [agent.id, agent])), [agents]);
+  const projectById = useMemo(() => new Map((projects ?? []).map((project) => [project.id, project])), [projects]);
   const recentAssigneeIds = useMemo(() => getRecentAssigneeIds(), [routine?.id]);
   const recentProjectIds = useMemo(() => getRecentProjectIds(), [routine?.id]);
   const assigneeOptions = useMemo<InlineEntityOption[]>(
@@ -780,655 +579,314 @@ export function RoutineDetail() {
       })),
     [projects],
   );
-  const mentionOptions = useMemo<MentionOption[]>(() => {
-    return buildMarkdownMentionOptions({
-      agents,
-      projects,
-      members: companyMembers?.users,
+  const mentionOptions = useMemo<MentionOption[]>(
+    () => buildMarkdownMentionOptions({ agents, projects, members: companyMembers?.users }),
+    [agents, companyMembers?.users, projects],
+  );
+
+  // Wrap track-recent side-effects so the section components stay declarative.
+  const setEditDraftTracked: typeof setEditDraft = useCallback((updater) => {
+    setEditDraft((current) => {
+      const next = typeof updater === "function" ? (updater as (c: RoutineEditDraft) => RoutineEditDraft)(current) : updater;
+      if (next.assigneeAgentId && next.assigneeAgentId !== current.assigneeAgentId) {
+        trackRecentAssignee(next.assigneeAgentId);
+      }
+      if (next.projectId && next.projectId !== current.projectId) {
+        trackRecentProject(next.projectId);
+      }
+      return next;
     });
-  }, [agents, companyMembers?.users, projects]);
+  }, []);
+
   const currentAssignee = editDraft.assigneeAgentId ? agentById.get(editDraft.assigneeAgentId) ?? null : null;
   const currentProject = editDraft.projectId ? projectById.get(editDraft.projectId) ?? null : null;
 
+  const reloadLatest = useCallback(() => {
+    setSaveConflict(false);
+    if (routineDefaults) setEditDraft(routineDefaults);
+    queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) });
+  }, [queryClient, routineDefaults, routineId]);
+
+  const onHistoryRestoreSecretMaterials = useCallback((response: RestoreRoutineRevisionResponse) => {
+    if (response.secretMaterials.length > 0) {
+      setSecretMessage({
+        title:
+          response.secretMaterials.length === 1
+            ? t("routineDetail.webhookTriggerRestored", { defaultValue: "Webhook trigger restored" })
+            : t("routineDetail.webhookTriggersRestored", {
+                count: response.secretMaterials.length,
+                defaultValue: "{{count}} webhook triggers restored",
+              }),
+        entries: response.secretMaterials.map((recreated) => ({
+          webhookUrl: recreated.webhookUrl,
+          webhookSecret: recreated.webhookSecret,
+        })),
+      });
+    }
+  }, [t]);
+
+  const onHistoryRestored = useCallback(
+    (response: RestoreRoutineRevisionResponse) => {
+      setSaveConflict(false);
+      queryClient.setQueryData<RoutineDetailType | undefined>(
+        queryKeys.routines.detail(routineId!),
+        (prev) =>
+          prev
+            ? {
+                ...prev,
+                ...response.routine,
+                latestRevisionId: response.revision.id,
+                latestRevisionNumber: response.revision.revisionNumber,
+              }
+            : prev,
+      );
+      setEditDraft({
+        title: response.routine.title,
+        description: response.routine.description ?? "",
+        projectId: response.routine.projectId ?? "",
+        assigneeAgentId: response.routine.assigneeAgentId ?? "",
+        priority: response.routine.priority,
+        concurrencyPolicy: response.routine.concurrencyPolicy,
+        catchUpPolicy: response.routine.catchUpPolicy,
+        variables: response.routine.variables as RoutineVariable[],
+        env: (response.routine.env ?? null) as RoutineEnvConfig | null,
+      });
+      hydratedRoutineIdRef.current = response.routine.id;
+    },
+    [queryClient, routineId],
+  );
+
   if (!selectedCompanyId) {
     return <EmptyState icon={Repeat} message={t("routineDetail.selectCompany", { defaultValue: "Select a company to view routines." })} />;
+  }
+
+  // Back-compat redirect: `?tab=x` → `/routines/:id/x`.
+  const legacyTab = new URLSearchParams(window.location.search).get("tab");
+  if (routineId && legacyTab && LEGACY_TAB_TO_SECTION[legacyTab]) {
+    return <Navigate to={`/routines/${routineId}/${LEGACY_TAB_TO_SECTION[legacyTab]}`} replace />;
+  }
+
+  // Bare /routines/:id → remembered section or overview.
+  if (routineId && !sectionParam) {
+    const landing = readLastSection(routineId) ?? "overview";
+    return <Navigate to={`/routines/${routineId}/${landing}`} replace />;
+  }
+  // Unknown section → overview.
+  if (routineId && sectionParam && !isRoutineSection(sectionParam)) {
+    return <Navigate to={`/routines/${routineId}/overview`} replace />;
   }
 
   if (isLoading) {
     return <PageSkeleton variant="issues-list" />;
   }
 
-  if (error || !routine) {
+  if (error || !routine || !routineDefaults) {
     return (
-      <p className="pt-6 text-sm text-destructive">
-        {error instanceof Error ? error.message : t("Routine not found", { defaultValue: "Routine not found" })}
-      </p>
+      <EmptyState
+        icon={AlertCircle}
+        message={error instanceof Error ? error.message : t("routineDetail.loadFailedBody", { defaultValue: "We couldn't load this routine." })}
+      />
     );
   }
 
   const automationEnabled = routine.status === "active";
-  const selectedProject = routine.projectId ? (projects?.find((project) => project.id === routine.projectId) ?? null) : null;
   const automationToggleDisabled = updateRoutineStatus.isPending || routine.status === "archived";
-  const automationLabel = routine.status === "archived"
-    ? t("Archived", { defaultValue: "Archived" })
-    : !routine.assigneeAgentId
-      ? t("Draft", { defaultValue: "Draft" })
+  const automationLabel =
+    routine.status === "archived"
+      ? "Archived"
+      : !routine.assigneeAgentId
+        ? "Draft"
+        : automationEnabled
+          ? "Active"
+          : "Paused";
+  const automationLabelClassName =
+    routine.status === "archived"
+      ? "text-muted-foreground"
       : automationEnabled
-        ? t("Active", { defaultValue: "Active" })
-        : t("Paused", { defaultValue: "Paused" });
-  const automationLabelClassName = routine.status === "archived"
-    ? "text-muted-foreground"
-    : automationEnabled
-      ? "text-emerald-400"
-      : "text-muted-foreground";
+        ? "text-emerald-400"
+        : "text-muted-foreground";
+
+  const contextValue: RoutineDetailContextValue = {
+    routine,
+    routineId: routineId!,
+    companyId: routine.companyId,
+    editDraft,
+    setEditDraft: setEditDraftTracked,
+    routineDefaults,
+    dirtyFields,
+    isEditDirty,
+    sectionDirtyFields,
+    isSectionDirty,
+    discardSection,
+    saveRoutine,
+    saveConflict,
+    reloadLatest,
+    automationEnabled,
+    automationLabel,
+    automationLabelClassName,
+    automationToggleDisabled,
+    onToggleAutomation: () => {
+      if (!automationEnabled && !routine.assigneeAgentId) {
+        pushToast({
+          title: "Default agent required",
+          body: "Set a default agent before enabling routine automation.",
+          tone: "warn",
+        });
+        return;
+      }
+      updateRoutineStatus.mutate(automationEnabled ? "paused" : "active");
+    },
+    onOpenRunDialog: () => setRunVariablesOpen(true),
+    runRoutinePending: runRoutine.isPending,
+    newTrigger,
+    setNewTrigger,
+    createTrigger,
+    updateTrigger,
+    deleteTrigger,
+    rotateTrigger,
+    secretMessage,
+    setSecretMessage,
+    copySecretValue,
+    availableSecrets,
+    createSecret,
+    agents: agents ?? [],
+    projects: projects ?? [],
+    agentById,
+    projectById,
+    assigneeOptions,
+    projectOptions,
+    recentAssigneeIds,
+    recentProjectIds,
+    mentionOptions,
+    currentAssignee,
+    currentProject,
+    routineRuns,
+    activity,
+    hasLiveRun,
+    activeIssueId,
+    titleInputRef,
+    descriptionEditorRef,
+    assigneeSelectorRef,
+    projectSelectorRef,
+    onHistoryRestoreSecretMaterials,
+    onHistoryRestored,
+    navigateToSection,
+  };
+
+  const isEditableSection = EDITABLE_SECTIONS.includes(section);
 
   return (
-    <div className="max-w-2xl space-y-6">
-      {/* Header: editable title + actions */}
-      <div className="flex items-start gap-4">
-        <div className="min-w-0 flex-1 space-y-2">
-          <textarea
-            ref={titleInputRef}
-            className="w-full resize-none overflow-hidden bg-transparent text-xl font-bold outline-none placeholder:text-muted-foreground/50"
-            placeholder={t("Routine title", { defaultValue: "Routine title" })}
-            rows={1}
-            value={editDraft.title}
-            onChange={(event) => {
-              setEditDraft((current) => ({ ...current, title: event.target.value }));
-              autoResizeTextarea(event.target);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                descriptionEditorRef.current?.focus();
-                return;
-              }
-              if (event.key === "Tab" && !event.shiftKey) {
-                event.preventDefault();
-                if (editDraft.assigneeAgentId) {
-                  if (editDraft.projectId) {
+    <RoutineDetailContext.Provider value={contextValue}>
+      <a
+        href="#routine-section"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-20 focus:rounded focus:bg-background focus:px-3 focus:py-1.5 focus:text-sm"
+      >
+        Skip to section
+      </a>
+
+      <div className="-m-4 flex min-h-full flex-col md:-m-6">
+        {/* Slim page header — scrolls with the page (not sticky) */}
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <textarea
+              ref={titleInputRef}
+              data-autosize-title
+              className="min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-base font-semibold leading-7 outline-none placeholder:text-muted-foreground/50"
+              placeholder={t("routines.titlePlaceholder")}
+              rows={1}
+              value={editDraft.title}
+              onChange={(event) => {
+                setEditDraft((current) => ({ ...current, title: event.target.value }));
+                autoResizeTextarea(event.target);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  if (section === "overview") {
                     descriptionEditorRef.current?.focus();
                   } else {
-                    projectSelectorRef.current?.focus();
+                    navigateToSection("overview");
                   }
-                } else {
-                  assigneeSelectorRef.current?.focus();
                 }
-              }
-            }}
-          />
-          {routine.managedByPlugin ? (
-            <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
-              {t("routineDetail.managedBy", {
-                name: routine.managedByPlugin.pluginDisplayName,
-                defaultValue: "Managed by {{name}}",
-              })}
-              <span className="font-mono text-[10px]">{routine.managedByPlugin.resourceKey}</span>
-            </Badge>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-3 pt-1">
-          <RunButton
-            onClick={() => {
-              setRunVariablesOpen(true);
-            }}
-            disabled={runRoutine.isPending}
-          />
-          <ToggleSwitch
-            size="lg"
-            checked={automationEnabled}
-            onCheckedChange={() => {
-              if (!automationEnabled && !routine.assigneeAgentId) {
-                pushToast({
-                  title: t("Default agent required", { defaultValue: "Default agent required" }),
-                  body: t("routineDetail.defaultAgentRequiredBody", {
-                    defaultValue: "Set a default agent before enabling routine automation.",
-                  }),
-                  tone: "warn",
-                });
-                return;
-              }
-              updateRoutineStatus.mutate(automationEnabled ? "paused" : "active");
-            }}
-            disabled={automationToggleDisabled}
-            aria-label={automationEnabled
-              ? t("routineDetail.pauseAutomaticTriggers", { defaultValue: "Pause automatic triggers" })
-              : t("routineDetail.enableAutomaticTriggers", { defaultValue: "Enable automatic triggers" })}
-          />
-          <span className={`min-w-[3.75rem] text-sm font-medium ${automationLabelClassName}`}>
-            {automationLabel}
-          </span>
-        </div>
-      </div>
-
-      {/* Secret message banner */}
-      {secretMessage && (
-        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 space-y-3 text-sm">
-          <div>
-            <p className="font-medium">{secretMessage.title}</p>
-            <p className="text-xs text-muted-foreground">
-              {t("Save this now. Paperclip CN will not show the secret value again.", {
-                defaultValue: "Save this now. Paperclip will not show the secret value again.",
-              })}
-            </p>
+              }}
+            />
+            {routine.managedByPlugin ? (
+              <Badge variant="outline" className="hidden shrink-0 gap-1.5 text-xs text-muted-foreground sm:inline-flex">
+                <Sparkles className="h-3 w-3" />
+                {routine.managedByPlugin.pluginDisplayName}
+                <span className="font-mono text-[10px]">{routine.managedByPlugin.resourceKey}</span>
+              </Badge>
+            ) : null}
           </div>
-          <div className="space-y-3">
-            {secretMessage.entries.map((entry, index) => (
-              <div key={`${entry.webhookUrl}-${index}`} className="space-y-2">
-                {secretMessage.entries.length > 1 && (
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {t("routineDetail.webhookTriggerIndex", {
-                      current: index + 1,
-                      total: secretMessage.entries.length,
-                      defaultValue: "Webhook trigger {{current}} of {{total}}",
-                    })}
-                  </p>
-                )}
-                <div className="flex items-center gap-2">
-                  <Input value={entry.webhookUrl} readOnly className="flex-1" />
-                  <Button variant="outline" size="sm" onClick={() => copySecretValue(t("Webhook URL", { defaultValue: "Webhook URL" }), entry.webhookUrl)}>
-                    <Copy className="h-3.5 w-3.5 mr-1" />
-                    URL
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Input value={entry.webhookSecret} readOnly className="flex-1" />
-                  <Button variant="outline" size="sm" onClick={() => copySecretValue(t("routineDetail.webhookSecret", { defaultValue: "Webhook secret" }), entry.webhookSecret)}>
-                    <Copy className="h-3.5 w-3.5 mr-1" />
-                    {t("agentConfig.secret", { defaultValue: "Secret" })}
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Save conflict banner */}
-      {saveConflict && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-1">
-              <p className="font-medium text-amber-200">{t("routineDetail.outOfDate", { defaultValue: "Out of date" })}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("routineDetail.outOfDateBody", {
-                  defaultValue: "This routine changed while you were editing. Reload to merge the latest revision before saving again.",
-                })}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSaveConflict(false);
-                  if (routineDefaults) {
-                    setEditDraft(routineDefaults);
-                  }
-                  queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) });
-                }}
-              >
-                {t("routineDetail.reloadLatest", { defaultValue: "Reload latest" })}
-              </Button>
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            <RunButton onClick={() => setRunVariablesOpen(true)} disabled={runRoutine.isPending} />
+            <div className="flex items-center gap-2">
+              <ToggleSwitch
+                size="default"
+                checked={automationEnabled}
+                onCheckedChange={contextValue.onToggleAutomation}
+                disabled={automationToggleDisabled}
+                aria-label={automationEnabled ? "Pause automatic triggers" : "Enable automatic triggers"}
+              />
+              <span className={`text-sm font-medium ${automationLabelClassName}`}>{automationLabel}</span>
             </div>
           </div>
-        </div>
-      )}
+        </header>
 
-      {!routine.assigneeAgentId ? (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-900 dark:text-amber-200">
-          {t("routineDetail.defaultAgentRequiredNotice", {
-            defaultValue: "Default agent required. This routine can stay as a draft and still run manually, but automation stays paused until you assign a default agent.",
-          })}
-        </div>
-      ) : null}
+        {/* Mobile section picker */}
+        <RoutineSectionPicker
+          activeSection={section}
+          onNavigate={navigateToSection}
+          isSectionDirty={isSectionDirty}
+        />
 
-      {/* Assignment row */}
-      <div className="overflow-x-auto overscroll-x-contain">
-        <div className="inline-flex min-w-full flex-wrap items-center gap-2 text-sm text-muted-foreground sm:min-w-max sm:flex-nowrap">
-          <span>{t("routineComposer.forAssignee", { defaultValue: "For" })}</span>
-          <InlineEntitySelector
-            ref={assigneeSelectorRef}
-            value={editDraft.assigneeAgentId}
-            options={assigneeOptions}
-            recentOptionIds={recentAssigneeIds}
-            placeholder={t("Assignee", { defaultValue: "Assignee" })}
-            noneLabel={t("No assignee", { defaultValue: "No assignee" })}
-            searchPlaceholder={t("Search assignees...", { defaultValue: "Search assignees..." })}
-            emptyMessage={t("No assignees found.", { defaultValue: "No assignees found." })}
-            onChange={(assigneeAgentId) => {
-              if (assigneeAgentId) trackRecentAssignee(assigneeAgentId);
-              setEditDraft((current) => ({ ...current, assigneeAgentId }));
-            }}
-            onConfirm={() => {
-              if (editDraft.projectId) {
-                descriptionEditorRef.current?.focus();
-              } else {
-                projectSelectorRef.current?.focus();
-              }
-            }}
-            renderTriggerValue={(option) =>
-              option ? (
-                currentAssignee ? (
-                  <>
-                    <AgentIcon icon={currentAssignee.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{option.label}</span>
-                  </>
-                ) : (
-                  <span className="truncate">{option.label}</span>
-                )
-              ) : (
-                <span className="text-muted-foreground">{t("Assignee", { defaultValue: "Assignee" })}</span>
-              )
-            }
-            renderOption={(option) => {
-              if (!option.id) return <span className="truncate">{option.label}</span>;
-              const assignee = agentById.get(option.id);
-              return (
-                <>
-                  {assignee ? <AgentIcon icon={assignee.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : null}
-                  <span className="truncate">{option.label}</span>
-                </>
-              );
-            }}
+        <div className="flex min-h-0 flex-1">
+          <RoutineSubSidebar
+            activeSection={section}
+            hrefFor={(target) => `/routines/${routineId}/${target}`}
+            isSectionDirty={isSectionDirty}
+            hasLiveRun={hasLiveRun}
+            onNavigate={(target) => writeLastSection(routineId!, target)}
           />
-          <span>{t("routineComposer.inProject", { defaultValue: "in" })}</span>
-          <InlineEntitySelector
-            ref={projectSelectorRef}
-            value={editDraft.projectId}
-            options={projectOptions}
-            recentOptionIds={recentProjectIds}
-            placeholder={t("Project", { defaultValue: "Project" })}
-            noneLabel={t("No project", { defaultValue: "No project" })}
-            searchPlaceholder={t("Search projects...", { defaultValue: "Search projects..." })}
-            emptyMessage={t("No projects found.", { defaultValue: "No projects found." })}
-            onChange={(projectId) => {
-              if (projectId) trackRecentProject(projectId);
-              setEditDraft((current) => ({ ...current, projectId }));
-            }}
-            onConfirm={() => descriptionEditorRef.current?.focus()}
-            renderTriggerValue={(option) =>
-              option && currentProject ? (
-                <>
-                  <span
-                    className="h-3.5 w-3.5 shrink-0 rounded-sm"
-                    style={{ backgroundColor: currentProject.color ?? "#64748b" }}
-                  />
-                  <span className="truncate">{option.label}</span>
-                </>
-              ) : (
-                <span className="text-muted-foreground">{t("Project", { defaultValue: "Project" })}</span>
-              )
-            }
-            renderOption={(option) => {
-              if (!option.id) return <span className="truncate">{option.label}</span>;
-              const project = projectById.get(option.id);
-              return (
-                <>
-                  <span
-                    className="h-3.5 w-3.5 shrink-0 rounded-sm"
-                    style={{ backgroundColor: project?.color ?? "#64748b" }}
-                  />
-                  <span className="truncate">{option.label}</span>
-                </>
-              );
-            }}
-          />
-        </div>
-      </div>
 
-      {/* Instructions */}
-      <MarkdownEditor
-        ref={descriptionEditorRef}
-        value={editDraft.description}
-        onChange={(description) => setEditDraft((current) => ({ ...current, description }))}
-        placeholder={t("Add instructions...", { defaultValue: "Add instructions..." })}
-        bordered={false}
-        contentClassName="min-h-[120px] text-[15px] leading-7"
-        mentions={mentionOptions}
-        onSubmit={() => {
-          if (!saveRoutine.isPending && editDraft.title.trim()) {
-            saveRoutine.mutate();
-          }
-        }}
-      />
-      <RoutineVariablesHint />
-      <RoutineVariablesEditor
-        title={editDraft.title}
-        description={editDraft.description}
-        value={editDraft.variables}
-        onChange={(variables) => setEditDraft((current) => ({ ...current, variables }))}
-      />
+          <main
+            id="routine-section"
+            role="main"
+            className="min-w-0 flex-1 px-4 pb-6 pt-10 md:px-8"
+          >
+            <section
+              aria-labelledby="routine-section-title"
+              className={isEditableSection ? "mx-auto w-full max-w-3xl" : "w-full"}
+            >
+              <h2 id="routine-section-title" className="mb-4 text-lg font-semibold">
+                {SECTION_TITLES[section]}
+              </h2>
 
-      {/* Advanced delivery settings */}
-      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <CollapsibleTrigger className="flex w-full items-center justify-between text-left">
-          <span className="text-sm font-medium">{t("Advanced delivery settings", { defaultValue: "Advanced delivery settings" })}</span>
-          {advancedOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pt-3">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("Concurrency", { defaultValue: "Concurrency" })}</p>
-              <Select
-                value={editDraft.concurrencyPolicy}
-                onValueChange={(concurrencyPolicy) => setEditDraft((current) => ({ ...current, concurrencyPolicy }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {concurrencyPolicies.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {t(`routineDetail.policy.${value}`, { defaultValue: value.replaceAll("_", " ") })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  concurrencyPolicyDescriptions[editDraft.concurrencyPolicy]?.key ?? editDraft.concurrencyPolicy,
-                  { defaultValue: concurrencyPolicyDescriptions[editDraft.concurrencyPolicy]?.defaultValue ?? editDraft.concurrencyPolicy },
-                )}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{t("Catch-up", { defaultValue: "Catch-up" })}</p>
-              <Select
-                value={editDraft.catchUpPolicy}
-                onValueChange={(catchUpPolicy) => setEditDraft((current) => ({ ...current, catchUpPolicy }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {catchUpPolicies.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {t(`routineDetail.policy.${value}`, { defaultValue: value.replaceAll("_", " ") })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  catchUpPolicyDescriptions[editDraft.catchUpPolicy]?.key ?? editDraft.catchUpPolicy,
-                  { defaultValue: catchUpPolicyDescriptions[editDraft.catchUpPolicy]?.defaultValue ?? editDraft.catchUpPolicy },
-                )}
-              </p>
-            </div>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+              {section === "overview" && <OverviewSection />}
+              {section === "triggers" && <TriggersSection />}
+              {section === "variables" && <VariablesSection />}
+              {section === "secrets" && <SecretsSection />}
+              {section === "delivery" && <DeliverySection />}
+              {section === "runs" && <RunsSection />}
+              {section === "activity" && <ActivitySection />}
+              {section === "history" && <HistorySection />}
 
-      {/* Save bar */}
-      <div className="flex items-center justify-between">
-        {isEditDirty ? (
-          <span className="text-xs text-amber-600">{t("Unsaved changes", { defaultValue: "Unsaved changes" })}</span>
-        ) : (
-          <span />
-        )}
-        <Button
-          onClick={() => saveRoutine.mutate()}
-          disabled={saveRoutine.isPending || !editDraft.title.trim()}
-        >
-          <Save className="mr-2 h-4 w-4" />
-          {t("Save routine", { defaultValue: "Save routine" })}
-        </Button>
-      </div>
-
-      <Separator />
-
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
-        <TabsList variant="line" className="w-full justify-start gap-1">
-          <TabsTrigger value="triggers" className="gap-1.5">
-            <Clock3 className="h-3.5 w-3.5" />
-            {t("Triggers", { defaultValue: "Triggers" })}
-          </TabsTrigger>
-          <TabsTrigger value="runs" className="gap-1.5">
-            <Play className="h-3.5 w-3.5" />
-            {t("Runs", { defaultValue: "Runs" })}
-            {hasLiveRun && <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />}
-          </TabsTrigger>
-          <TabsTrigger value="activity" className="gap-1.5">
-            <ActivityIcon className="h-3.5 w-3.5" />
-            {t("Activity", { defaultValue: "Activity" })}
-          </TabsTrigger>
-          <TabsTrigger value="secrets" className="gap-1.5">
-            <KeyRound className="h-3.5 w-3.5" />
-            Secrets
-          </TabsTrigger>
-          <TabsTrigger value="history" className="gap-1.5">
-            <HistoryIcon className="h-3.5 w-3.5" />
-            {t("History", { defaultValue: "History" })}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="triggers" className="space-y-4">
-          {/* Add trigger form */}
-          <div className="rounded-lg border border-border p-4 space-y-3">
-            <p className="text-sm font-medium">{t("Add trigger", { defaultValue: "Add trigger" })}</p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs">{t("Kind", { defaultValue: "Kind" })}</Label>
-                <Select value={newTrigger.kind} onValueChange={(kind) => setNewTrigger((current) => ({ ...current, kind }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {triggerKinds.map((kind) => (
-                      <SelectItem key={kind} value={kind} disabled={kind === "webhook"}>
-                        {kind}{kind === "webhook" ? t("triggerDialog.comingSoonSuffix", { defaultValue: " - COMING SOON" }) : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {newTrigger.kind === "schedule" && (
-                <div className="md:col-span-2 space-y-1.5">
-                  <Label className="text-xs">{t("Schedule", { defaultValue: "Schedule" })}</Label>
-                  <ScheduleEditor
-                    value={newTrigger.cronExpression}
-                    onChange={(cronExpression) => setNewTrigger((current) => ({ ...current, cronExpression }))}
-                  />
-                </div>
-              )}
-              {newTrigger.kind === "webhook" && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">{t("Signing mode", { defaultValue: "Signing mode" })}</Label>
-                    <Select value={newTrigger.signingMode} onValueChange={(signingMode) => setNewTrigger((current) => ({ ...current, signingMode }))}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {signingModes.map((mode) => (
-                          <SelectItem key={mode} value={mode}>{mode}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {t(
-                        signingModeDescriptions[newTrigger.signingMode]?.key ?? newTrigger.signingMode,
-                        { defaultValue: signingModeDescriptions[newTrigger.signingMode]?.defaultValue ?? newTrigger.signingMode },
-                      )}
-                    </p>
-                  </div>
-                  {!SIGNING_MODES_WITHOUT_REPLAY_WINDOW.has(newTrigger.signingMode) && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">{t("Replay window (seconds)", { defaultValue: "Replay window (seconds)" })}</Label>
-                      <Input value={newTrigger.replayWindowSec} onChange={(event) => setNewTrigger((current) => ({ ...current, replayWindowSec: event.target.value }))} />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <div className="flex items-center justify-end">
-              <Button size="sm" onClick={() => createTrigger.mutate()} disabled={createTrigger.isPending}>
-                {createTrigger.isPending
-                  ? t("Adding...", { defaultValue: "Adding..." })
-                  : t("Add trigger", { defaultValue: "Add trigger" })}
-              </Button>
-            </div>
-          </div>
-
-          {/* Existing triggers */}
-          {routine.triggers.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("No triggers configured yet.", { defaultValue: "No triggers configured yet." })}</p>
-          ) : (
-            <div className="space-y-3">
-              {routine.triggers.map((trigger) => (
-                <TriggerEditor
-                  key={trigger.id}
-                  trigger={trigger}
-                  onSave={(id, patch) => updateTrigger.mutate({ id, patch })}
-                  onRotate={(id) => rotateTrigger.mutate(id)}
-                  onDelete={(id) => deleteTrigger.mutate(id)}
+              {isEditableSection ? (
+                <RoutineSaveBar
+                  dirtyFields={sectionDirtyFields(section)}
+                  isSaving={saveRoutine.isPending}
+                  saveConflict={saveConflict}
+                  onSave={() => {
+                    if (!saveRoutine.isPending && editDraft.title.trim()) saveRoutine.mutate();
+                  }}
+                  onDiscard={() => discardSection(section)}
+                  onReload={reloadLatest}
                 />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="runs" className="space-y-4">
-          {hasLiveRun && activeIssueId && routine && (
-            <LiveRunWidget issueId={activeIssueId} companyId={routine.companyId} />
-          )}
-          {(routineRuns ?? []).length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("No runs yet.", { defaultValue: "No runs yet." })}</p>
-          ) : (
-            <div className="border border-border rounded-lg divide-y divide-border">
-              {(routineRuns ?? []).map((run) => (
-                <div key={run.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Badge variant="outline" className="shrink-0">{run.source}</Badge>
-                    <Badge variant={run.status === "failed" ? "destructive" : "secondary"} className="shrink-0">
-                      {run.status.replaceAll("_", " ")}
-                    </Badge>
-                    {run.trigger && (
-                      <span className="text-muted-foreground truncate">{run.trigger.label ?? run.trigger.kind}</span>
-                    )}
-                    {run.linkedIssue && (
-                      <Link to={`/issues/${run.linkedIssue.identifier ?? run.linkedIssue.id}`} className="text-muted-foreground hover:underline truncate">
-                        {run.linkedIssue.identifier ?? run.linkedIssue.id.slice(0, 8)}
-                      </Link>
-                    )}
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0 ml-2">{timeAgo(run.triggeredAt)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="activity">
-          {(activity ?? []).length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("No activity yet.", { defaultValue: "No activity yet." })}</p>
-          ) : (
-            <div className="border border-border rounded-lg divide-y divide-border">
-              {(activity ?? []).map((event) => (
-                <div key={event.id} className="flex items-center justify-between px-3 py-2 text-xs gap-4">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-medium text-foreground/90 shrink-0">{event.action.replaceAll(".", " ")}</span>
-                    {event.details && Object.keys(event.details).length > 0 && (
-                      <span className="text-muted-foreground truncate">
-                        {Object.entries(event.details).slice(0, 3).map(([key, value], i) => (
-                          <span key={key}>
-                            {i > 0 && <span className="mx-1 text-border">·</span>}
-                            <span className="text-muted-foreground/70">{key.replaceAll("_", " ")}:</span>{" "}
-                            {formatActivityDetailValue(value)}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-muted-foreground/60 shrink-0">{timeAgo(event.createdAt)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="secrets" className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Routine secrets apply to every task this routine creates. They override matching keys in
-            project and agent env. <span className="font-mono">PAPERCLIP_*</span> variables are reserved.
-          </p>
-          <EnvVarEditor
-            value={(editDraft.env ?? {}) as Record<string, EnvBinding>}
-            secrets={availableSecrets}
-            onCreateSecret={async (name, value) => {
-              const created = await createSecret.mutateAsync({ name, value });
-              return created;
-            }}
-            onChange={(env) =>
-              setEditDraft((current) => ({ ...current, env: env ?? null }))
-            }
-          />
-        </TabsContent>
-
-        <TabsContent value="history">
-          <RoutineHistoryTab
-            routine={routine}
-            isEditDirty={isEditDirty}
-            dirtyFields={dirtyFields}
-            onDiscardEdits={() => {
-              if (routineDefaults) setEditDraft(routineDefaults);
-            }}
-            onSaveEdits={() => {
-              if (!saveRoutine.isPending && editDraft.title.trim()) {
-                saveRoutine.mutate();
-              }
-            }}
-            agents={agentById}
-            projects={projectById}
-            secrets={availableSecrets}
-            onRestoreSecretMaterials={(response: RestoreRoutineRevisionResponse) => {
-              if (response.secretMaterials.length > 0) {
-                setSecretMessage({
-                  title: response.secretMaterials.length === 1
-                    ? t("routineDetail.webhookTriggerRestored", { defaultValue: "Webhook trigger restored" })
-                    : t("routineDetail.webhookTriggersRestored", {
-                      count: response.secretMaterials.length,
-                      defaultValue: "{{count}} webhook triggers restored",
-                    }),
-                  entries: response.secretMaterials.map((recreated) => ({
-                    webhookUrl: recreated.webhookUrl,
-                    webhookSecret: recreated.webhookSecret,
-                  })),
-                });
-              }
-            }}
-            onRestored={(response: RestoreRoutineRevisionResponse) => {
-              setSaveConflict(false);
-              queryClient.setQueryData<RoutineDetailType | undefined>(
-                queryKeys.routines.detail(routineId!),
-                (prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        ...response.routine,
-                        latestRevisionId: response.revision.id,
-                        latestRevisionNumber: response.revision.revisionNumber,
-                      }
-                    : prev,
-              );
-              setEditDraft({
-                title: response.routine.title,
-                description: response.routine.description ?? "",
-                projectId: response.routine.projectId ?? "",
-                assigneeAgentId: response.routine.assigneeAgentId ?? "",
-                priority: response.routine.priority,
-                concurrencyPolicy: response.routine.concurrencyPolicy,
-                catchUpPolicy: response.routine.catchUpPolicy,
-                variables: response.routine.variables,
-                env: response.routine.env ?? null,
-              });
-              hydratedRoutineIdRef.current = response.routine.id;
-            }}
-          />
-        </TabsContent>
-      </Tabs>
+              ) : null}
+            </section>
+          </main>
+        </div>
+      </div>
 
       <RoutineRunVariablesDialog
         open={runVariablesOpen}
@@ -1443,6 +901,6 @@ export function RoutineDetail() {
         isPending={runRoutine.isPending}
         onSubmit={(data) => runRoutine.mutate(data)}
       />
-    </div>
+    </RoutineDetailContext.Provider>
   );
 }

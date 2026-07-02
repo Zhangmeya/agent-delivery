@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type {
   Agent,
   AdapterEnvironmentTestResult,
@@ -15,10 +15,7 @@ import { environmentsApi } from "../api/environments";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { secretsApi } from "../api/secrets";
 import { assetsApi } from "../api/assets";
-import {
-  DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
-  DEFAULT_CODEX_LOCAL_MODEL,
-} from "@penclipai/adapter-codex-local";
+import { DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX } from "@penclipai/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@penclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@penclipai/adapter-gemini-local";
 import { DEFAULT_OPENCODE_LOCAL_MODEL } from "@penclipai/adapter-opencode-local";
@@ -59,6 +56,7 @@ import { useDisabledAdaptersSync } from "../adapters/use-disabled-adapters";
 import { buildAgentUpdatePatch, type AgentConfigOverlay } from "../lib/agent-config-patch";
 import { useAdapterCapabilities } from "../adapters/use-adapter-capabilities";
 import { filterAcpxModelsByAgent } from "../lib/acpx-model-filter";
+import { resolveForcedKubernetesEnvironment } from "../lib/forced-kubernetes-environment";
 
 /* ---- Create mode values ---- */
 
@@ -98,7 +96,7 @@ type AgentConfigFormProps = {
   | {
       mode: "edit";
       agent: Agent;
-      onSave: (patch: Record<string, unknown>) => void;
+      onSave: (patch: Record<string, unknown>) => void | Promise<unknown>;
       isSaving?: boolean;
     }
 );
@@ -195,12 +193,21 @@ function clampDelayMsFromSeconds(value: number) {
   return clampInteger(value, 0, MAX_TURN_CONTINUATION_MAX_DELAY_SEC) * 1000;
 }
 
+function translateAgentConfigHelp(
+  t: ReturnType<typeof useTranslation>["t"],
+  key: keyof typeof help,
+) {
+  return t(`agentConfig.help.${key}`, { defaultValue: help[key] });
+}
 
 /* ---- Form ---- */
 
 export function AgentConfigForm(props: AgentConfigFormProps) {
   const { t } = useTranslation();
-  const tr = (key: string, defaultValue: string) => t(key, { defaultValue });
+  const helpHint = useCallback(
+    (key: keyof typeof help) => translateAgentConfigHelp(t, key),
+    [t],
+  );
   const { mode, adapterModels: externalModels } = props;
   const isCreate = mode === "create";
   const cards = props.sectionLayout === "cards";
@@ -229,14 +236,43 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   });
   const environmentsEnabled = experimentalSettings?.enableEnvironments === true;
 
+  // Instance execution policy (general settings). When `executionMode` is
+  // "kubernetes" the instance FORCES all execution onto the managed Kubernetes
+  // sandbox; "any"/absent leaves the full environment/adapter choice intact.
+  // Reuses the same general-settings query the rest of the UI uses.
+  const { data: generalSettings } = useQuery({
+    queryKey: queryKeys.instance.generalSettings,
+    queryFn: () => instanceSettingsApi.getGeneral(),
+    retry: false,
+  });
+  const { data: instanceSettings } = useQuery({
+    queryKey: queryKeys.instance.settings,
+    queryFn: () => instanceSettingsApi.get(),
+    retry: false,
+  });
+
   const { data: environments = [] } = useQuery<Environment[]>({
     queryKey: selectedCompanyId ? queryKeys.environments.list(selectedCompanyId) : ["environments", "none"],
     queryFn: () => environmentsApi.list(selectedCompanyId!),
-    enabled: Boolean(selectedCompanyId) && environmentsEnabled,
+    // Load environments when the picker is enabled OR when execution is forced
+    // onto Kubernetes (so we can resolve and default to the managed K8s env even
+    // when the experimental environments picker is otherwise hidden).
+    enabled:
+      Boolean(selectedCompanyId) &&
+      (environmentsEnabled || generalSettings?.executionMode === "kubernetes"),
   });
+
+  // Setting-driven: resolve whether the instance forces Kubernetes execution and
+  // which loaded environment is the managed Kubernetes sandbox.
+  const { forced: forcedKubernetes, kubernetesEnvironment } = useMemo(
+    () => resolveForcedKubernetesEnvironment(generalSettings?.executionMode, environments),
+    [generalSettings?.executionMode, environments],
+  );
   const createSecret = useMutation({
     mutationFn: (input: { name: string; value: string }) => {
-      if (!selectedCompanyId) throw new Error(tr("agentConfig.selectCompanyToCreateSecrets", "Select a company before creating secrets."));
+      if (!selectedCompanyId) {
+        throw new Error(t("agentConfig.selectCompanyToCreateSecrets", { defaultValue: "Select a company before creating secrets." }));
+      }
       return secretsApi.create(selectedCompanyId, input);
     },
     onSuccess: () => {
@@ -247,7 +283,9 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
 
   const uploadMarkdownImage = useMutation({
     mutationFn: async ({ file, namespace }: { file: File; namespace: string }) => {
-      if (!selectedCompanyId) throw new Error(tr("agentConfig.selectCompanyToUploadImages", "Select a company before uploading images."));
+      if (!selectedCompanyId) {
+        throw new Error(t("agentConfig.selectCompanyToUploadImages", { defaultValue: "Select a company before uploading images." }));
+      }
       return assetsApi.uploadImage(selectedCompanyId, file, namespace);
     },
   });
@@ -290,9 +328,9 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     setOverlay({ ...emptyOverlay });
   }, []);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (isCreate || !isDirty) return;
-    props.onSave(buildAgentUpdatePatch(props.agent, overlay));
+    await props.onSave(buildAgentUpdatePatch(props.agent, overlay));
   }, [isCreate, isDirty, overlay, props]);
 
   useEffect(() => {
@@ -335,22 +373,67 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const set = isCreate
     ? (patch: Partial<CreateConfigValues>) => props.onChange(patch)
     : null;
-  const currentDefaultEnvironmentId = isCreate
+  const rawCurrentDefaultEnvironmentId = isCreate
     ? val!.defaultEnvironmentId ?? ""
     : eff("identity", "defaultEnvironmentId", props.agent.defaultEnvironmentId ?? "");
+  const currentDefaultEnvironmentId = useMemo(() => {
+    if (!rawCurrentDefaultEnvironmentId) return "";
+    const selected = environments.find((environment) => environment.id === rawCurrentDefaultEnvironmentId) ?? null;
+    return selected?.driver === "local" ? "" : rawCurrentDefaultEnvironmentId;
+  }, [environments, rawCurrentDefaultEnvironmentId]);
   const currentDefaultEnvironment = useMemo(
     () => environments.find((environment) => environment.id === currentDefaultEnvironmentId) ?? null,
     [currentDefaultEnvironmentId, environments],
   );
+  const instanceDefaultEnvironmentId = useMemo(() => {
+    const environmentId = instanceSettings?.defaultEnvironmentId ?? null;
+    if (!environmentId) return "";
+    const selected = environments.find((environment) => environment.id === environmentId) ?? null;
+    return selected?.driver === "local" ? "" : environmentId;
+  }, [environments, instanceSettings?.defaultEnvironmentId]);
+  const instanceDefaultEnvironment = useMemo(
+    () => environments.find((environment) => environment.id === instanceDefaultEnvironmentId) ?? null,
+    [environments, instanceDefaultEnvironmentId],
+  );
+
+  // When the instance forces Kubernetes execution, new agents must default to the
+  // managed Kubernetes sandbox environment (never the implicit local default).
+  // Only applies in create mode and only once the K8s environment is loaded; if
+  // none is available the UI surfaces a notice instead of silently selecting it.
+  useEffect(() => {
+    if (!isCreate || !set || !forcedKubernetes || !kubernetesEnvironment) return;
+    if (currentDefaultEnvironmentId === kubernetesEnvironment.id) return;
+    set({ defaultEnvironmentId: kubernetesEnvironment.id });
+  }, [isCreate, set, forcedKubernetes, kubernetesEnvironment, currentDefaultEnvironmentId]);
+
   const runnableEnvironments = useMemo(
     () => environments.filter((environment) => {
       if (!supportedEnvironmentDrivers.has(environment.driver)) return false;
+      if (environment.driver === "local") return false;
       if (environment.driver !== "sandbox") return true;
       const provider = typeof environment.config?.provider === "string" ? environment.config.provider : null;
       return provider !== null && provider !== "fake";
     }),
     [environments, supportedEnvironmentDrivers],
   );
+  const environmentOptions = useMemo(() => {
+    if (!currentDefaultEnvironment) return runnableEnvironments;
+    if (runnableEnvironments.some((environment) => environment.id === currentDefaultEnvironment.id)) {
+      return runnableEnvironments;
+    }
+    return [...runnableEnvironments, currentDefaultEnvironment];
+  }, [currentDefaultEnvironment, runnableEnvironments]);
+  // `runnableEnvironments` excludes the always-available Local environment, so a
+  // single entry already means the user has more than one environment configured
+  // (Local + that environment) and the override selector is meaningful.
+  const showEnvironmentOverrideControl = environmentsEnabled && (
+    forcedKubernetes ||
+    currentDefaultEnvironmentId.length > 0 ||
+    runnableEnvironments.length >= 1
+  );
+  const inheritedEnvironmentLabel = instanceDefaultEnvironment
+    ? `${instanceDefaultEnvironment.name} (${instanceDefaultEnvironment.driver})`
+    : "Local";
 
   // Fetch adapter models for the effective adapter type
   const modelQueryKey = selectedCompanyId
@@ -369,8 +452,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const [refreshModelsError, setRefreshModelsError] = useState<string | null>(null);
   const [refreshingModels, setRefreshingModels] = useState(false);
   const rawModels = fetchedModels ?? externalModels ?? [];
-  const adapterCommandField =
-    adapterType === "hermes_local" ? "hermesCommand" : "command";
+  const adapterCommandField = "command";
   const acpxAgent =
     adapterType === "acpx_local"
       ? isCreate
@@ -392,7 +474,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       : ["agents", "none", "detect-model", adapterType],
     queryFn: () => {
       if (!selectedCompanyId) {
-        throw new Error(tr("agentConfig.selectCompanyToDetectModel", "Select a company before detecting the model."));
+        throw new Error(t("agentConfig.selectCompanyToDetectModel", { defaultValue: "Select a company before detecting the model." }));
       }
       return agentsApi.detectModel(selectedCompanyId, adapterType);
     },
@@ -449,42 +531,177 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     return typeof value === "string" ? value : "";
   }, [adapterCheapDefault]);
 
-  function buildAdapterConfigForTest(): Record<string, unknown> {
+  function buildAdapterConfigForTest(adapterConfigPatch?: Record<string, unknown>): Record<string, unknown> {
     if (isCreate) {
-      return uiAdapter.buildAdapterConfig(val!);
+      const next = uiAdapter.buildAdapterConfig(val!);
+      if (adapterConfigPatch) {
+        Object.assign(next, adapterConfigPatch);
+      }
+      return next;
     }
     const base = config as Record<string, unknown>;
     const next = { ...base, ...overlay.adapterConfig };
-    if (adapterType === "hermes_local") {
-      const hermesCommand =
-        typeof next.hermesCommand === "string" && next.hermesCommand.length > 0
-          ? next.hermesCommand
-          : typeof next.command === "string" && next.command.length > 0
-            ? next.command
-            : undefined;
-      if (hermesCommand) {
-        next.hermesCommand = hermesCommand;
-      }
+    if (adapterConfigPatch) {
+      Object.assign(next, adapterConfigPatch);
     }
     return next;
+  }
+
+  function buildCheapAdapterConfigForTest(): Record<string, unknown> {
+    const adapterDefaultConfig = asObject(adapterCheapDefault?.adapterConfig);
+    const createCheapModel = isCreate ? (val!.cheapModel ?? "").trim() : "";
+    const cheapAdapterConfig = isCreate
+      ? {
+          ...adapterDefaultConfig,
+          ...(createCheapModel ? { model: createCheapModel } : {}),
+        }
+      : {
+          ...adapterDefaultConfig,
+          ...cheapProfileFromAgent.adapterConfig,
+          ...asObject(cheapOverlay?.adapterConfig),
+        };
+    return buildAdapterConfigForTest(cheapAdapterConfig);
+  }
+
+  function getCheapModelTestCase(): { model: string; adapterConfig: Record<string, unknown> } | null {
+    if (!currentCheapEnabled) return null;
+    const adapterConfig = buildCheapAdapterConfigForTest();
+    const configModel = typeof adapterConfig.model === "string" ? adapterConfig.model.trim() : "";
+    const model = configModel || currentCheapModel.trim();
+    if (!model) return null;
+    adapterConfig.model = model;
+    return { model, adapterConfig };
+  }
+
+  function prefixEnvironmentTestChecks(
+    result: AdapterEnvironmentTestResult,
+    label: string,
+    model: string | null,
+  ): AdapterEnvironmentTestResult {
+    const modelLabel = model ? ` (${model})` : "";
+    return {
+      ...result,
+      checks: [
+        {
+          code: `${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_test_started`,
+          level: "info",
+          message: `${label} test${modelLabel}`,
+        },
+        ...result.checks.map((check) => ({
+          ...check,
+          message: `${label} test${modelLabel}: ${check.message}`,
+        })),
+      ],
+    };
+  }
+
+  async function runEnvironmentTestCase(
+    label: string,
+    model: string | null,
+    adapterConfig: Record<string, unknown>,
+    environmentId: string | null,
+  ): Promise<AdapterEnvironmentTestResult> {
+    const result = await agentsApi.testEnvironment(selectedCompanyId!, adapterType, {
+      adapterConfig,
+      environmentId,
+    });
+    return prefixEnvironmentTestChecks(result, label, model);
+  }
+
+  function mergeEnvironmentTestResults(
+    results: AdapterEnvironmentTestResult[],
+  ): AdapterEnvironmentTestResult {
+    const checks = results.flatMap((result) => result.checks);
+    const status = results.some((result) => result.status === "fail")
+      ? "fail"
+      : results.some((result) => result.status === "warn")
+        ? "warn"
+        : "pass";
+    const testedAt = results[results.length - 1]?.testedAt ?? new Date().toISOString();
+
+    return {
+      adapterType,
+      status,
+      checks,
+      testedAt,
+    };
   }
 
   const testEnvironment = useMutation({
     mutationFn: async () => {
       if (!selectedCompanyId) {
-        throw new Error(tr("agentConfig.selectCompanyToTestEnvironment", "Select a company before testing the adapter environment."));
+        throw new Error(t("agentConfig.selectCompanyToTestEnvironment", { defaultValue: "Select a company before testing the adapter environment." }));
       }
-      return agentsApi.testEnvironment(selectedCompanyId, adapterType, {
-        adapterConfig: buildAdapterConfigForTest(),
-        environmentId: currentDefaultEnvironmentId || null,
-      });
+      const primaryModel = currentModelId.trim() || null;
+      const cheapTestCase = getCheapModelTestCase();
+      const environmentId = currentDefaultEnvironmentId || null;
+      const testResults: Array<{ label: string; model: string | null; result: AdapterEnvironmentTestResult }> = [
+        {
+          label: "Primary model",
+          model: primaryModel,
+          result: await runEnvironmentTestCase(
+            "Primary model",
+            primaryModel,
+            buildAdapterConfigForTest(),
+            environmentId,
+          ),
+        },
+      ];
+
+      if (cheapTestCase) {
+        testResults.push({
+          label: "Cheap model",
+          model: cheapTestCase.model,
+          result: await runEnvironmentTestCase(
+            "Cheap model",
+            cheapTestCase.model,
+            cheapTestCase.adapterConfig,
+            environmentId,
+          ),
+        });
+      }
+
+      return testResults.length > 1
+        ? mergeEnvironmentTestResults(testResults.map(({ result }) => result))
+        : testResults[0]!.result;
     },
   });
-  const testEnvironmentDisabled = testEnvironment.isPending || !selectedCompanyId;
+  const [testActionPending, setTestActionPending] = useState(false);
+  const [testActionError, setTestActionError] = useState<string | null>(null);
+  const testActionLabel = t("agentConfig.testEnvironment", { defaultValue: "Test environment" });
+  const isSavePending = !isCreate && Boolean(props.isSaving);
+  const testEnvironmentDisabled = testActionPending || isSavePending || !selectedCompanyId;
+  const runEnvironmentTest = useCallback(async () => {
+    if (!selectedCompanyId) {
+      throw new Error(t("agentConfig.selectCompanyToTestEnvironment", { defaultValue: "Select a company before testing the adapter environment." }));
+    }
+    setTestActionPending(true);
+    setTestActionError(null);
+    testEnvironment.reset();
+    try {
+      return await testEnvironment.mutateAsync();
+    } catch (error) {
+      setTestActionError(error instanceof Error ? error.message : t("agentConfig.environmentTestFailed", { defaultValue: "Environment test failed" }));
+      throw error;
+    } finally {
+      setTestActionPending(false);
+    }
+  }, [selectedCompanyId, testEnvironment, t]);
+  // `runEnvironmentTest` (and `testEnvironmentDisabled`) change identity on every
+  // render because `useMutation` returns a fresh result object each time. Hold the
+  // latest behavior in a ref so the trigger handed to the parent stays referentially
+  // stable — otherwise the `onTestActionChange` effect below re-runs every render,
+  // pushing a new function into parent state and causing an infinite update loop.
+  const triggerRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    triggerRef.current = () => {
+      if (testEnvironmentDisabled) return;
+      void runEnvironmentTest().catch(() => undefined);
+    };
+  }, [runEnvironmentTest, testEnvironmentDisabled]);
   const triggerTestEnvironment = useCallback(() => {
-    if (testEnvironmentDisabled) return;
-    testEnvironment.mutate();
-  }, [testEnvironment.mutate, testEnvironmentDisabled]);
+    triggerRef.current();
+  }, []);
 
   useEffect(() => {
     if (!showAdapterTestEnvironmentButton || !props.onTestActionChange) return;
@@ -498,7 +715,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     if (!showAdapterTestEnvironmentButton || !props.onTestActionStateChange) return;
     props.onTestActionStateChange({
       disabled: testEnvironmentDisabled,
-      pending: testEnvironment.isPending,
+      pending: testActionPending,
     });
     return () => {
       props.onTestActionStateChange?.({ disabled: true, pending: false });
@@ -507,23 +724,24 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     showAdapterTestEnvironmentButton,
     props.onTestActionStateChange,
     testEnvironmentDisabled,
-    testEnvironment.isPending,
+    testActionPending,
   ]);
 
   useEffect(() => {
     if (!props.onTestFeedbackChange) return;
     props.onTestFeedbackChange({
-      errorMessage: testEnvironment.error instanceof Error
-        ? testEnvironment.error.message
-        : testEnvironment.error
-          ? tr("agentConfig.environmentTestFailed", "Environment test failed")
-          : null,
+      errorMessage: testActionError
+        ?? (testEnvironment.error instanceof Error
+          ? testEnvironment.error.message
+          : testEnvironment.error
+            ? t("agentConfig.environmentTestFailed", { defaultValue: "Environment test failed" })
+            : null),
       result: testEnvironment.data ?? null,
     });
     return () => {
       props.onTestFeedbackChange?.({ errorMessage: null, result: null });
     };
-  }, [props.onTestFeedbackChange, testEnvironment.data, testEnvironment.error]);
+  }, [props.onTestFeedbackChange, t, testActionError, testEnvironment.data, testEnvironment.error]);
 
   // Current model for display
   const currentModelId = isCreate
@@ -538,11 +756,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       const refreshed = await agentsApi.adapterModels(selectedCompanyId, adapterType, { refresh: true });
       queryClient.setQueryData(modelQueryKey, refreshed);
     } catch (error) {
-      setRefreshModelsError(
-        error instanceof Error
-          ? error.message
-          : tr("agentConfig.failedToRefreshAdapterModels", "Failed to refresh adapter models."),
-      );
+      setRefreshModelsError(error instanceof Error ? error.message : "Failed to refresh adapter models.");
     } finally {
       setRefreshingModels(false);
     }
@@ -597,9 +811,10 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const cheapProfileFromAgent = useMemo(() => {
     const profiles = (runtimeConfig.modelProfiles ?? {}) as Record<string, unknown>;
     const cheap = (profiles.cheap ?? {}) as Record<string, unknown>;
-    const cheapAdapterConfig = (cheap.adapterConfig ?? {}) as Record<string, unknown>;
+    const cheapAdapterConfig = asObject(cheap.adapterConfig);
     return {
       enabled: cheap.enabled !== false,
+      adapterConfig: cheapAdapterConfig,
       model: typeof cheapAdapterConfig.model === "string" ? cheapAdapterConfig.model : "",
     };
   }, [runtimeConfig]);
@@ -701,15 +916,17 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       {isDirty && !props.hideInlineSave && (
         <div className="sticky top-0 z-10 flex items-center justify-end px-4 py-2 bg-background/90 backdrop-blur-sm border-b border-primary/20">
           <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">{tr("agentConfig.unsavedChanges", "Unsaved changes")}</span>
+            <span className="text-xs text-muted-foreground">
+              {t("agentConfig.unsavedChanges", { defaultValue: "Unsaved changes" })}
+            </span>
             <Button
               size="sm"
               onClick={handleSave}
               disabled={!isCreate && props.isSaving}
             >
               {!isCreate && props.isSaving
-                ? t("common.saving", { defaultValue: "Saving..." })
-                : t("common.save", { defaultValue: "Save" })}
+                ? t("Saving...", { defaultValue: "Saving..." })
+                : t("Save", { defaultValue: "Save" })}
             </Button>
           </div>
         </div>
@@ -719,42 +936,42 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       {!isCreate && (
         <div className={cn(!cards && "border-b border-border")}>
           {cards
-            ? <h3 className="text-sm font-medium mb-3">{tr("agentConfig.identity", "Identity")}</h3>
-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">{tr("agentConfig.identity", "Identity")}</div>
+            ? <h3 className="text-sm font-medium mb-3">{t("agentConfig.identity", { defaultValue: "Identity" })}</h3>
+            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">{t("agentConfig.identity", { defaultValue: "Identity" })}</div>
           }
           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
-            <Field label={tr("agentConfig.name", "Name")} hint={help.name}>
+            <Field label={t("agentConfig.name", { defaultValue: "Name" })} hint={helpHint("name")}>
               <DraftInput
                 value={eff("identity", "name", props.agent.name)}
                 onCommit={(v) => mark("identity", "name", v)}
                 immediate
                 className={inputClass}
-                placeholder={tr("agentConfig.agentName", "Agent name")}
+                placeholder={t("agentConfig.agentName", { defaultValue: "Agent name" })}
               />
             </Field>
-            <Field label={tr("agentConfig.title", "Title")} hint={help.title}>
+            <Field label={t("agentConfig.title", { defaultValue: "Title" })} hint={helpHint("title")}>
               <DraftInput
                 value={eff("identity", "title", props.agent.title ?? "")}
                 onCommit={(v) => mark("identity", "title", v || null)}
                 immediate
                 className={inputClass}
-                placeholder={tr("agentConfig.titlePlaceholder", "e.g. VP of Engineering")}
+                placeholder={t("agentConfig.titlePlaceholder", { defaultValue: "e.g. VP of Engineering" })}
               />
             </Field>
-            <Field label={tr("agentConfig.reportsTo", "Reports to")} hint={help.reportsTo}>
+            <Field label={t("agentConfig.reportsTo", { defaultValue: "Reports to" })} hint={helpHint("reportsTo")}>
               <ReportsToPicker
                 agents={companyAgents}
                 value={eff("identity", "reportsTo", props.agent.reportsTo ?? null)}
                 onChange={(id) => mark("identity", "reportsTo", id)}
                 excludeAgentIds={[props.agent.id]}
-                chooseLabel={tr("agentConfig.chooseManager", "Choose manager…")}
+                chooseLabel={t("agentConfig.chooseManager", { defaultValue: "Choose manager..." })}
               />
             </Field>
-            <Field label={tr("agentConfig.capabilities", "Capabilities")} hint={help.capabilities}>
+            <Field label={t("agentConfig.capabilities", { defaultValue: "Capabilities" })} hint={helpHint("capabilities")}>
               <MarkdownEditor
                 value={eff("identity", "capabilities", props.agent.capabilities ?? "") ?? ""}
                 onChange={(v) => mark("identity", "capabilities", v || null)}
-                placeholder={tr("agentConfig.capabilitiesPlaceholder", "Describe what this agent can do...")}
+                placeholder={t("agentConfig.capabilitiesPlaceholder", { defaultValue: "Describe what this agent can do..." })}
                 contentClassName="min-h-[44px] text-sm font-mono"
                 imageUploadHandler={async (file) => {
                   const asset = await uploadMarkdownImage.mutateAsync({
@@ -767,7 +984,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
             </Field>
             {isLocal && !props.hidePromptTemplate && (
               <>
-                <Field label={tr("agentConfig.promptTemplate", "Prompt template")} hint={help.promptTemplate}>
+                <Field label={t("agentConfig.promptTemplate", { defaultValue: "Prompt template" })} hint={helpHint("promptTemplate")}>
                   <MarkdownEditor
                     value={eff(
                       "adapterConfig",
@@ -775,7 +992,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       String(config.promptTemplate ?? ""),
                     )}
                     onChange={(v) => mark("adapterConfig", "promptTemplate", v ?? "")}
-                    placeholder={tr("agentConfig.promptTemplatePlaceholder", "You are agent {{ agent.name }}. Your role is {{ agent.role }}...")}
+                    placeholder={t("agentConfig.promptTemplatePlaceholder", { defaultValue: "You are agent {{ agent.name }}. Your role is {{ agent.role }}..." })}
                     contentClassName="min-h-[88px] text-sm font-mono"
                     imageUploadHandler={async (file) => {
                       const namespace = `agents/${props.agent.id}/prompt-template`;
@@ -785,10 +1002,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   />
                 </Field>
                 <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-                  {tr(
-                    "agentConfig.promptTemplateWarning",
-                    "Prompt template is replayed on every heartbeat. Keep it concise and stable so context does not keep ballooning.",
-                  )}
+                  {t("agentConfig.promptTemplateWarning", { defaultValue: "Prompt template is replayed on every heartbeat. Keep it concise and stable so context does not keep ballooning." })}
                 </div>
               </>
             )}
@@ -797,39 +1011,84 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       )}
 
       {/* ---- Execution ---- */}
-      {environmentsEnabled ? (
+      {forcedKubernetes ? (
+        // Instance execution policy forces the managed Kubernetes sandbox
+        // (executionMode=kubernetes): never offer local / non-Kubernetes targets.
+        // Render the environment read-only instead of the selectable picker.
         <div className={cn(!cards && (isCreate ? "border-t border-border" : "border-b border-border"))}>
           {cards
-            ? <h3 className="text-sm font-medium mb-3">{tr("agentConfig.execution", "Execution")}</h3>
-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">{tr("agentConfig.execution", "Execution")}</div>
+            ? <h3 className="text-sm font-medium mb-3">{t("agentConfig.environment", { defaultValue: "Environment" })}</h3>
+            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">{t("agentConfig.environment", { defaultValue: "Environment" })}</div>
           }
           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
             <Field
-              label={tr("agentConfig.defaultEnvironment", "Default environment")}
-              hint={tr(
-                "agentConfig.defaultEnvironmentHint",
-                "Agent-level default execution target. Project and issue settings can still override this.",
-              )}
+              label={t("agentConfig.defaultEnvironment", { defaultValue: "Default environment" })}
+              hint={t("agentConfig.forcedKubernetesEnvironmentHint", { defaultValue: "This instance runs all agents in the Kubernetes sandbox. Local execution is disabled." })}
             >
-              <select
-                className={inputClass}
-                value={currentDefaultEnvironmentId}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  if (isCreate) {
-                    set!({ defaultEnvironmentId: nextValue });
-                    return;
-                  }
-                  mark("identity", "defaultEnvironmentId", nextValue || null);
-                }}
-              >
-                <option value="">{tr("agentConfig.companyDefaultLocal", "Company default (Local)")}</option>
-                {runnableEnvironments.map((environment) => (
-                  <option key={environment.id} value={environment.id}>
-                    {environment.name} · {environment.driver}
+              {kubernetesEnvironment ? (
+                <div className={cn(inputClass, "flex items-center text-muted-foreground")}>
+                  {kubernetesEnvironment.name} · {t("agentConfig.kubernetesSandbox", { defaultValue: "Kubernetes sandbox" })}
+                </div>
+              ) : (
+                <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                  {t("agentConfig.missingForcedKubernetesEnvironment", {
+                    defaultValue: "This instance requires the Kubernetes sandbox, but no managed Kubernetes environment is available for this company yet. Configure one before creating agents; execution will not fall back to local.",
+                  })}
+                </div>
+              )}
+            </Field>
+          </div>
+        </div>
+      ) : showEnvironmentOverrideControl ? (
+        <div className={cn(!cards && (isCreate ? "border-t border-border" : "border-b border-border"))}>
+          {cards
+            ? <h3 className="text-sm font-medium mb-3">{t("agentConfig.environment", { defaultValue: "Environment" })}</h3>
+            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">{t("agentConfig.environment", { defaultValue: "Environment" })}</div>
+          }
+          <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+            <Field
+              label={t("agentConfig.environmentOverride", { defaultValue: "Environment override" })}
+              hint={t("agentConfig.environmentOverrideHint", {
+                defaultValue: "Leave this unset to inherit the instance default. Agent-specific overrides only appear when there is a real alternative.",
+              })}
+            >
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">
+                  {currentDefaultEnvironment
+                    ? t("agentConfig.overridingInstanceDefault", {
+                      defaultValue: "Overriding the instance default with {{name}}.",
+                      name: currentDefaultEnvironment.name,
+                    })
+                    : t("agentConfig.inheritingInstanceDefault", {
+                      defaultValue: "Inheriting the instance default: {{name}}.",
+                      name: inheritedEnvironmentLabel,
+                    })}
+                </div>
+                <select
+                  className={inputClass}
+                  value={currentDefaultEnvironmentId}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (isCreate) {
+                      set!({ defaultEnvironmentId: nextValue });
+                      return;
+                    }
+                    mark("identity", "defaultEnvironmentId", nextValue || null);
+                  }}
+                >
+                  <option value="">
+                    {t("agentConfig.inheritInstanceDefault", {
+                      defaultValue: "Inherit instance default ({{name}})",
+                      name: inheritedEnvironmentLabel,
+                    })}
                   </option>
-                ))}
-              </select>
+                  {environmentOptions.map((environment) => (
+                    <option key={environment.id} value={environment.id}>
+                      {environment.name} · {environment.driver}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </Field>
           </div>
         </div>
@@ -839,8 +1098,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       <div className={cn(!cards && (isCreate ? "border-t border-border" : "border-b border-border"))}>
         <div className={cn(cards ? "flex items-center justify-between mb-3" : "px-4 py-2 flex items-center justify-between gap-2")}>
           {cards
-            ? <h3 className="text-sm font-medium">{tr("agentConfig.adapter", "Adapter")}</h3>
-            : <span className="text-xs font-medium text-muted-foreground">{tr("agentConfig.adapter", "Adapter")}</span>
+            ? <h3 className="text-sm font-medium">{t("agentConfig.adapter", { defaultValue: "Adapter" })}</h3>
+            : <span className="text-xs font-medium text-muted-foreground">{t("agentConfig.adapter", { defaultValue: "Adapter" })}</span>
           }
           {showInlineAdapterTestEnvironmentButton && (
             <Button
@@ -851,15 +1110,15 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               onClick={triggerTestEnvironment}
               disabled={testEnvironmentDisabled}
             >
-              {testEnvironment.isPending
-                ? t("agentConfig.testingEnvironment", { defaultValue: "Testing..." })
-                : tr("agentConfig.testEnvironment", "Test")}
+              {testActionPending
+                ? t("agentConfig.testingAction", { defaultValue: "{{label}}...", label: testActionLabel })
+                : testActionLabel}
             </Button>
           )}
         </div>
         <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
           {showAdapterTypeField && (
-            <Field label={t("agentConfig.adapterType", { defaultValue: "Adapter type" })} hint={help.adapterType}>
+            <Field label={t("agentConfig.adapterType", { defaultValue: "Adapter type" })} hint={helpHint("adapterType")}>
               <AdapterTypeDropdown
                 value={adapterType}
                 disabledTypes={disabledTypes}
@@ -869,7 +1128,6 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                     const { adapterType: _at, ...defaults } = defaultCreateValues;
                     const nextValues: CreateConfigValues = { ...defaults, adapterType: t };
                     if (t === "codex_local") {
-                      nextValues.model = DEFAULT_CODEX_LOCAL_MODEL;
                       nextValues.dangerouslyBypassSandbox =
                         DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX;
                     } else if (t === "gemini_local") {
@@ -889,10 +1147,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       modelProfiles: { cheap: { cleared: true } },
                       adapterConfig: {
                         model:
-                          t === "codex_local"
-                            ? DEFAULT_CODEX_LOCAL_MODEL
-                            : t === "gemini_local"
-                              ? DEFAULT_GEMINI_LOCAL_MODEL
+                          t === "gemini_local"
+                            ? DEFAULT_GEMINI_LOCAL_MODEL
                             : t === "opencode_local"
                               ? DEFAULT_OPENCODE_LOCAL_MODEL
                             : t === "cursor"
@@ -916,11 +1172,12 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
             </Field>
           )}
 
-          {showInlineAdapterTestEnvironmentFeedback && testEnvironment.error && (
+          {showInlineAdapterTestEnvironmentFeedback && (testActionError || testEnvironment.error) && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {testEnvironment.error instanceof Error
-                ? testEnvironment.error.message
-                : tr("agentConfig.environmentTestFailed", "Environment test failed")}
+              {testActionError
+                ?? (testEnvironment.error instanceof Error
+                  ? testEnvironment.error.message
+                  : t("agentConfig.environmentTestFailed", { defaultValue: "Environment test failed" }))}
             </div>
           )}
 
@@ -930,7 +1187,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
 
           {/* Working directory */}
           {showLegacyWorkingDirectoryField && (
-            <Field label={tr("agentConfig.workingDirectoryDeprecated", "Working directory (legacy)")} hint={help.cwd}>
+            <Field label={t("agentConfig.workingDirectoryDeprecated", { defaultValue: "Working directory (legacy)" })} hint={helpHint("cwd")}>
               <div className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5">
                 <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <DraftInput
@@ -946,14 +1203,16 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   }
                   immediate
                   className="w-full bg-transparent outline-none text-sm font-mono placeholder:text-muted-foreground/40"
-                  placeholder={tr("agentConfig.workingDirectoryPlaceholder", "/absolute/path/to/workspace")}
+                  placeholder={t("agentConfig.workingDirectoryPlaceholder", { defaultValue: "/absolute/path/to/workspace" })}
                 />
                 <ChoosePathButton />
               </div>
             </Field>
           )}
 
-          {/* Adapter-specific fields are rendered inside Permissions & Configuration */}
+          {!isLocal && <uiAdapter.ConfigFields {...adapterFieldProps} />}
+
+          {/* Local adapter-specific fields are rendered inside Permissions & Configuration */}
         </div>
 
       </div>
@@ -962,11 +1221,11 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       {isLocal && (
         <div className={cn(!cards && "border-b border-border")}>
           {cards
-            ? <h3 className="text-sm font-medium mb-3">{tr("agentConfig.permissionsAndConfiguration", "Permissions & Configuration")}</h3>
-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">{tr("agentConfig.permissionsAndConfiguration", "Permissions & Configuration")}</div>
+            ? <h3 className="text-sm font-medium mb-3">{t("agentConfig.permissionsAndConfiguration", { defaultValue: "Permissions & Configuration" })}</h3>
+            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">{t("agentConfig.permissionsAndConfiguration", { defaultValue: "Permissions & Configuration" })}</div>
           }
           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
-              <Field label={tr("agentConfig.command", "Command")} hint={help.localCommand}>
+              <Field label={t("agentConfig.command", { defaultValue: "Command" })} hint={helpHint("localCommand")}>
                 <DraftInput
                   value={
                     isCreate
@@ -975,9 +1234,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                           "adapterConfig",
                           adapterCommandField,
                           String(
-                            (adapterType === "hermes_local"
-                              ? config.hermesCommand ?? config.command
-                              : config.command) ?? "",
+                            config.command ?? "",
                           ),
                         )
                   }
@@ -1002,7 +1259,9 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               </Field>
 
               {supportsModelProfiles && (
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{tr("agentConfig.model", "Primary model")}</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {t("issueProperties.primaryModel", { defaultValue: "Primary model" })}
+                </div>
               )}
               <ModelDropdown
                 models={models}
@@ -1032,15 +1291,15 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                     : undefined
                 }
                 refreshingModels={refreshingModels}
-                detectModelLabel={tr("agentConfig.detectModel", "Detect model")}
-                emptyDetectHint={tr("agentConfig.noDetectedModelSelectManually", "No model detected. Select or enter one manually.")}
+                detectModelLabel={t("agentConfig.detectModel", { defaultValue: "Detect model" })}
+                emptyDetectHint={t("agentConfig.noDetectedModelSelectManually", { defaultValue: "No model detected. Select or enter one manually." })}
               />
               {(refreshModelsError || fetchedModelsError) && (
                 <p className="text-xs text-destructive">
                   {refreshModelsError
                     ?? (fetchedModelsError instanceof Error
                       ? fetchedModelsError.message
-                      : tr("agentConfig.failedToLoadAdapterModels", "Failed to load adapter models."))}
+                      : t("agentConfig.failedToLoadAdapterModels", { defaultValue: "Failed to load adapter models." }))}
                 </p>
               )}
               {adapterType === "opencode_local"
@@ -1048,9 +1307,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                 && currentDefaultEnvironment.driver !== "local" && (
                 <p className="text-xs text-muted-foreground">
                   {t("agentConfig.liveOpenCodeDiscoveryLocalOnly", {
+                    defaultValue: "Live OpenCode model discovery only runs for Local environments. Using the curated list and manual entry for {{environmentName}}.",
                     environmentName: currentDefaultEnvironment.name,
-                    defaultValue:
-                      "Live OpenCode model discovery only runs for Local environments. Using the curated list and manual entry for {{environmentName}}.",
                   })}
                 </p>
               )}
@@ -1086,14 +1344,14 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                     codexSearchEnabled &&
                     currentThinkingEffort === "minimal" && (
                       <p className="text-xs text-amber-400">
-                        {tr("agentConfig.codexMinimalSearchWarning", "Codex may reject `minimal` thinking when search is enabled.")}
+                        {t("agentConfig.codexMinimalSearchWarning", { defaultValue: "Codex may reject `minimal` thinking when search is enabled." })}
                       </p>
                     )}
                 </>
               )}
               {!isCreate && typeof config.bootstrapPromptTemplate === "string" && config.bootstrapPromptTemplate && (
                 <>
-                  <Field label={tr("agentConfig.bootstrapPromptLegacy", "Bootstrap prompt (legacy)")} hint={help.bootstrapPrompt}>
+                  <Field label={t("agentConfig.bootstrapPromptLegacy", { defaultValue: "Bootstrap prompt (legacy)" })} hint={helpHint("bootstrapPrompt")}>
                     <MarkdownEditor
                       value={eff(
                         "adapterConfig",
@@ -1103,7 +1361,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       onChange={(v) =>
                         mark("adapterConfig", "bootstrapPromptTemplate", v || undefined)
                       }
-                      placeholder={tr("agentConfig.bootstrapPromptPlaceholder", "Optional initial setup prompt for the first run")}
+                      placeholder={t("agentConfig.bootstrapPromptPlaceholder", { defaultValue: "Optional initial setup prompt for the first run" })}
                       contentClassName="min-h-[44px] text-sm font-mono"
                       imageUploadHandler={async (file) => {
                         const namespace = `agents/${props.agent.id}/bootstrap-prompt`;
@@ -1113,10 +1371,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                     />
                   </Field>
                   <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                    {tr(
-                      "agentConfig.bootstrapPromptLegacyWarning",
-                      "Bootstrap prompt is legacy and will be removed in a future release. Consider moving this content into the agent's prompt template or instructions file instead.",
-                    )}
+                    {t("agentConfig.bootstrapPromptLegacyWarning", { defaultValue: "Bootstrap prompt is legacy and will be removed in a future release. Consider moving this content into the agent's prompt template or instructions file instead." })}
                   </div>
                 </>
               )}
@@ -1125,7 +1380,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               )}
               <uiAdapter.ConfigFields {...adapterFieldProps} />
 
-              <Field label={tr("agentConfig.extraArgs", "Extra args (comma-separated)")} hint={help.extraArgs}>
+              <Field label={t("agentConfig.extraArgs", { defaultValue: "Extra args" })} hint={helpHint("extraArgs")}>
                 <DraftInput
                   value={
                     isCreate
@@ -1137,13 +1392,12 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       ? set!({ extraArgs: v })
                       : mark("adapterConfig", "extraArgs", v?.trim() ? parseCommaArgs(v) : null)
                   }
-                  immediate
                   className={inputClass}
-                  placeholder={tr("agentConfig.extraArgsPlaceholder", "Comma-separated, e.g. --verbose, --search")}
+                  placeholder={t("agentConfig.extraArgsPlaceholder", { defaultValue: "Comma-separated, e.g. --verbose, --search" })}
                 />
               </Field>
 
-              <Field label={tr("agentConfig.environmentVariables", "Environment variables")} hint={help.envVars}>
+              <Field label={t("agentConfig.environmentVariables", { defaultValue: "Environment variables" })} hint={helpHint("envVars")}>
                 <EnvVarEditor
                   value={
                     isCreate
@@ -1167,7 +1421,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               {/* Edit-only: timeout + grace period */}
               {!isCreate && (
                 <>
-                  <Field label={tr("agentConfig.timeoutSec", "Timeout (sec)")} hint={help.timeoutSec}>
+                  <Field label={t("agentConfig.timeoutSec", { defaultValue: "Timeout (sec)" })} hint={helpHint("timeoutSec")}>
                     <DraftNumberInput
                       value={eff(
                         "adapterConfig",
@@ -1179,7 +1433,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       className={inputClass}
                     />
                   </Field>
-                  <Field label={tr("agentConfig.graceSec", "Interrupt grace period (sec)")} hint={help.graceSec}>
+                  <Field label={t("agentConfig.graceSec", { defaultValue: "Grace period (sec)" })} hint={helpHint("graceSec")}>
                     <DraftNumberInput
                       value={eff(
                         "adapterConfig",
@@ -1201,20 +1455,20 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       {isCreate && showCreateRunPolicySection ? (
         <div className={cn(!cards && "border-b border-border")}>
           {cards
-            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><Heart className="h-3 w-3" /> {tr("agentConfig.runPolicy", "Run Policy")}</h3>
-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><Heart className="h-3 w-3" /> {tr("agentConfig.runPolicy", "Run Policy")}</div>
+            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><Heart className="h-3 w-3" /> {t("agentConfig.runPolicy", { defaultValue: "Run policy" })}</h3>
+            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><Heart className="h-3 w-3" /> {t("agentConfig.runPolicy", { defaultValue: "Run policy" })}</div>
           }
           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
             <ToggleWithNumber
-              label={tr("agentConfig.heartbeatOnInterval", "Heartbeat on interval")}
-              hint={help.heartbeatInterval}
+              label={t("agentConfig.heartbeatOnInterval", { defaultValue: "Heartbeat on interval" })}
+              hint={helpHint("heartbeatInterval")}
               checked={val!.heartbeatEnabled}
               onCheckedChange={(v) => set!({ heartbeatEnabled: v })}
               number={val!.intervalSec}
               onNumberChange={(v) => set!({ intervalSec: v })}
-              numberLabel={tr("agentConfig.seconds", "sec")}
-              numberPrefix={tr("agentConfig.runHeartbeatEvery", "Run heartbeat every")}
-              numberHint={help.intervalSec}
+              numberLabel={t("agentConfig.seconds", { defaultValue: "sec" })}
+              numberPrefix={t("agentConfig.runHeartbeatEvery", { defaultValue: "Run heartbeat every" })}
+              numberHint={helpHint("intervalSec")}
               showNumber={val!.heartbeatEnabled}
             />
           </div>
@@ -1222,34 +1476,34 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       ) : !isCreate ? (
         <div className={cn(!cards && "border-b border-border")}>
           {cards
-            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><Heart className="h-3 w-3" /> {tr("agentConfig.runPolicy", "Run Policy")}</h3>
-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><Heart className="h-3 w-3" /> {tr("agentConfig.runPolicy", "Run Policy")}</div>
+            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><Heart className="h-3 w-3" /> {t("agentConfig.runPolicy", { defaultValue: "Run policy" })}</h3>
+            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><Heart className="h-3 w-3" /> {t("agentConfig.runPolicy", { defaultValue: "Run policy" })}</div>
           }
           <div className={cn(cards ? "border border-border rounded-lg overflow-hidden" : "")}>
             <div className={cn(cards ? "p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
               <ToggleWithNumber
-                label={tr("agentConfig.heartbeatOnInterval", "Heartbeat on interval")}
-                hint={help.heartbeatInterval}
+                label={t("agentConfig.heartbeatOnInterval", { defaultValue: "Heartbeat on interval" })}
+                hint={helpHint("heartbeatInterval")}
                 checked={eff("heartbeat", "enabled", heartbeat.enabled === true)}
                 onCheckedChange={(v) => mark("heartbeat", "enabled", v)}
                 number={eff("heartbeat", "intervalSec", Number(heartbeat.intervalSec ?? 300))}
                 onNumberChange={(v) => mark("heartbeat", "intervalSec", v)}
-                numberLabel={tr("agentConfig.seconds", "sec")}
-                numberPrefix={tr("agentConfig.runHeartbeatEvery", "Run heartbeat every")}
-                numberHint={help.intervalSec}
+                numberLabel={t("agentConfig.seconds", { defaultValue: "sec" })}
+                numberPrefix={t("agentConfig.runHeartbeatEvery", { defaultValue: "Run heartbeat every" })}
+                numberHint={helpHint("intervalSec")}
                 showNumber={eff("heartbeat", "enabled", heartbeat.enabled === true)}
               />
             </div>
             <CollapsibleSection
-              title={tr("agentConfig.advancedRunPolicy", "Advanced Run Policy")}
+              title={t("agentConfig.advancedRunPolicy", { defaultValue: "Advanced run policy" })}
               bordered={cards}
               open={runPolicyAdvancedOpen}
               onToggle={() => setRunPolicyAdvancedOpen(!runPolicyAdvancedOpen)}
             >
             <div className="space-y-3">
               <ToggleField
-                label={tr("agentConfig.wakeOnDemand", "Wake on demand")}
-                hint={help.wakeOnDemand}
+                label={t("agentConfig.wakeOnDemand", { defaultValue: "Wake on demand" })}
+                hint={helpHint("wakeOnDemand")}
                 checked={eff(
                   "heartbeat",
                   "wakeOnDemand",
@@ -1257,7 +1511,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                 )}
                 onChange={(v) => mark("heartbeat", "wakeOnDemand", v)}
               />
-              <Field label={tr("agentConfig.cooldownSec", "Cooldown (sec)")} hint={help.cooldownSec}>
+              <Field label={t("agentConfig.cooldownSec", { defaultValue: "Cooldown (sec)" })} hint={helpHint("cooldownSec")}>
                 <DraftNumberInput
                   value={eff(
                     "heartbeat",
@@ -1269,7 +1523,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   className={inputClass}
                 />
               </Field>
-              <Field label={tr("agentConfig.maxConcurrentRuns", "Max concurrent runs")} hint={help.maxConcurrentRuns}>
+              <Field label={t("agentConfig.maxConcurrentRuns", { defaultValue: "Max concurrent runs" })} hint={helpHint("maxConcurrentRuns")}>
                 <DraftNumberInput
                   value={eff(
                     "heartbeat",
@@ -1283,14 +1537,14 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               </Field>
               <div className="rounded-md border border-border/70 px-3 py-2">
                 <ToggleField
-                  label={tr("agentConfig.continueAfterMaxTurnStop", "Continue after max-turn stop")}
-                  hint={help.maxTurnContinuationEnabled}
+                  label={t("agentConfig.continueAfterMaxTurnStop", { defaultValue: "Continue after max-turn stop" })}
+                  hint={helpHint("maxTurnContinuationEnabled")}
                   checked={maxTurnContinuationEnabled}
                   onChange={(v) => updateMaxTurnContinuation({ enabled: v })}
                 />
                 {maxTurnContinuationEnabled ? (
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <Field label={tr("agentConfig.continuationAttempts", "Continuation attempts")} hint={help.maxTurnContinuationMaxAttempts}>
+                    <Field label={t("agentConfig.continuationAttempts", { defaultValue: "Continuation attempts" })} hint={helpHint("maxTurnContinuationMaxAttempts")}>
                       <DraftNumberInput
                         value={maxTurnContinuationMaxAttempts}
                         onCommit={(v) =>
@@ -1301,7 +1555,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                         className={inputClass}
                       />
                     </Field>
-                    <Field label={tr("agentConfig.continuationDelaySec", "Continuation delay (sec)")} hint={help.maxTurnContinuationDelaySec}>
+                    <Field label={t("agentConfig.continuationDelaySec", { defaultValue: "Continuation delay (sec)" })} hint={helpHint("maxTurnContinuationDelaySec")}>
                       <DraftNumberInput
                         value={maxTurnContinuationDelaySec}
                         onCommit={(v) =>
@@ -1327,13 +1581,12 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
 
 export function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmentTestResult }) {
   const { t } = useTranslation();
-  const tr = (key: string, defaultValue: string) => t(key, { defaultValue });
   const statusLabel =
     result.status === "pass"
-      ? tr("agentConfig.passed", "Passed")
+      ? t("agentConfig.passed", { defaultValue: "Passed" })
       : result.status === "warn"
-        ? tr("agentConfig.warnings", "Warnings")
-        : tr("agentConfig.failed", "Failed");
+        ? t("agentConfig.warnings", { defaultValue: "Warnings" })
+        : t("agentConfig.failed", { defaultValue: "Failed" });
   const statusClass =
     result.status === "pass"
       ? "text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10"
@@ -1360,7 +1613,7 @@ export function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmen
             {check.detail && <span className="block opacity-75 break-all">({check.detail})</span>}
             {check.hint && (
               <span className="block opacity-90 break-words">
-                {tr("agentConfig.hint", "Hint")}: {check.hint}
+                {t("agentConfig.hint", { defaultValue: "Hint" })}: {check.hint}
               </span>
             )}
           </div>
@@ -1487,7 +1740,6 @@ function ModelDropdown({
   defaultLabel?: string;
 }) {
   const { t } = useTranslation();
-  const tr = (key: string, defaultValue: string) => t(key, { defaultValue });
   const [modelSearch, setModelSearch] = useState("");
   const [detectingModel, setDetectingModel] = useState(false);
   const selected = models.find((m) => m.id === value);
@@ -1559,11 +1811,8 @@ function ModelDropdown({
     }
   }
 
-  const detectButtonLabel = detectModelLabel ?? tr("agentConfig.detectFromConfig", "Detect from config");
-  const redetectButtonLabel = tr("agentConfig.redetectFromConfig", "Re-detect from config");
-
   return (
-    <Field label={tr("agentConfig.model", "Model")} hint={help.model}>
+    <Field label={t("agentConfig.model", { defaultValue: "Model" })} hint={translateAgentConfigHelp(t, "model")}>
       <Popover
         open={open}
         onOpenChange={(nextOpen) => {
@@ -1578,10 +1827,10 @@ function ModelDropdown({
                 ? selected.label
                 : value
                   || (allowDefault
-                    ? (defaultLabel ?? tr("agentConfig.default", "Default"))
+                    ? (defaultLabel ?? t("agentConfig.default", { defaultValue: "Default" }))
                     : required
-                      ? tr("agentConfig.selectModelRequired", "Select model (required)")
-                      : tr("agentConfig.selectModel", "Select model"))}
+                      ? t("agentConfig.selectModelRequired", { defaultValue: "Select model (required)" })
+                      : t("agentConfig.selectModel", { defaultValue: "Select model" }))}
             </span>
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </button>
@@ -1591,8 +1840,8 @@ function ModelDropdown({
             <input
               className="w-full px-2 py-1.5 pr-6 text-xs bg-transparent outline-none border-b border-border placeholder:text-muted-foreground/50"
               placeholder={creatable
-                ? tr("agentConfig.searchModelsCreateHint", "Search models... (type to create)")
-                : tr("agentConfig.searchModels", "Search models...")}
+                ? t("agentConfig.searchModelsCreateHint", { defaultValue: "Search models... (type to create)" })
+                : t("agentConfig.searchModels", { defaultValue: "Search models..." })}
               value={modelSearch}
               onChange={(e) => setModelSearch(e.target.value)}
               autoFocus
@@ -1624,10 +1873,10 @@ function ModelDropdown({
                 <path d="M3 3v5h5" />
               </svg>
               {detectingModel
-                ? tr("agentConfig.detectingModel", "Detecting...")
+                ? t("agentConfig.detectingModel", { defaultValue: "Detecting..." })
                 : detectedModel
-                  ? redetectButtonLabel
-                  : detectButtonLabel}
+                  ? t("agentConfig.redetectFromConfig", { defaultValue: detectModelLabel?.replace(/^Detect\b/, "Re-detect") ?? "Re-detect from config" })
+                  : (detectModelLabel ?? t("agentConfig.detectFromConfig", { defaultValue: "Detect from config" }))}
             </button>
           )}
           {onRefreshModels && !modelSearch.trim() && (
@@ -1646,8 +1895,8 @@ function ModelDropdown({
                 <path d="M8 16H3v5" />
               </svg>
               {refreshingModels
-                ? tr("agentConfig.refreshingModels", "Refreshing...")
-                : tr("agentConfig.refreshModels", "Refresh models")}
+                ? t("agentConfig.refreshingModels", { defaultValue: "Refreshing..." })
+                : t("agentConfig.refreshModels", { defaultValue: "Refresh models" })}
             </button>
           )}
           {value && (!models.some((m) => m.id === value) || promotedModelIds.has(value)) && (
@@ -1664,7 +1913,7 @@ function ModelDropdown({
                 {models.find((m) => m.id === value)?.label ?? value}
               </span>
               <span className="shrink-0 ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/20">
-                {tr("agentConfig.currentBadge", "current")}
+                {t("agentConfig.currentBadge", { defaultValue: "current" })}
               </span>
             </button>
           )}
@@ -1683,7 +1932,7 @@ function ModelDropdown({
                 {models.find((m) => m.id === detectedModel)?.label ?? detectedModel}
               </span>
               <span className="shrink-0 ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">
-                {tr("agentConfig.detectedBadge", "detected")}
+                {t("agentConfig.detectedBadge", { defaultValue: "detected" })}
               </span>
             </button>
           )}
@@ -1707,7 +1956,7 @@ function ModelDropdown({
                     {entry?.label ?? candidate}
                   </span>
                   <span className="shrink-0 ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/20">
-                    {tr("agentConfig.configBadge", "config")}
+                    {t("agentConfig.configBadge", { defaultValue: "config" })}
                   </span>
                 </button>
               );
@@ -1725,7 +1974,7 @@ function ModelDropdown({
                   onOpenChange(false);
                 }}
               >
-                {tr("agentConfig.default", "Default")}
+                {t("agentConfig.default", { defaultValue: "Default" })}
               </button>
             )}
             {canCreateManualModel && (
@@ -1738,7 +1987,7 @@ function ModelDropdown({
                   setModelSearch("");
                 }}
               >
-                <span>{tr("agentConfig.useManualModel", "Use manual model")}</span>
+                <span>{t("agentConfig.useManualModel", { defaultValue: "Use manual model" })}</span>
                 <span className="text-xs font-mono text-muted-foreground">{manualModel}</span>
               </button>
             )}
@@ -1773,8 +2022,8 @@ function ModelDropdown({
               <div className="px-2 py-2 space-y-2">
                 <p className="text-xs text-muted-foreground">
                   {onDetectModel
-                    ? (emptyDetectHint ?? tr("agentConfig.noModelDetectedEnterManually", "No model detected yet. Enter a provider/model manually."))
-                    : tr("agentConfig.noModelsFound", "No models found.")}
+                    ? (emptyDetectHint ?? "No model detected yet. Enter a provider/model manually.")
+                    : t("agentConfig.noModelsFound", { defaultValue: "No models found." })}
                 </p>
               </div>
             )}
@@ -1807,25 +2056,18 @@ function CheapModelSection({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const tr = (key: string, defaultValue: string) => t(key, { defaultValue });
   const placeholderHint = adapterDefaultModel
-    ? t("agentConfig.adapterDefaultModel", {
-        model: adapterDefaultModel,
-        defaultValue: "Adapter default · {{model}}",
-      })
-    : tr("agentConfig.noAdapterDefaultChooseCheapModel", "No adapter default — choose a cheaper model");
+    ? t("agentConfig.adapterDefaultModel", { defaultValue: "Adapter default · {{model}}", model: adapterDefaultModel })
+    : t("agentConfig.noAdapterDefaultChooseCheapModel", { defaultValue: "No adapter default — choose a cheaper model" });
   return (
     <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            {tr("agentConfig.cheapModel", "Cheap model")}
+            {t("agentConfig.cheapModel", { defaultValue: "Cheap model" })}
           </div>
           <p className="text-xs text-muted-foreground">
-            {tr(
-              "agentConfig.cheapModelHint",
-              "Used when a run requests the cheap profile (e.g. routine summaries). The primary model stays unchanged.",
-            )}
+            {t("agentConfig.cheapModelHint", { defaultValue: "Used when a run requests the cheap profile (e.g. routine summaries). The primary model stays unchanged." })}
           </p>
         </div>
         <ToggleSwitch checked={enabled} onCheckedChange={onEnabledChange} />
@@ -1849,18 +2091,12 @@ function CheapModelSection({
       ) : null}
       {enabled && !model && adapterDefaultModel ? (
         <p className="text-[11px] text-muted-foreground">
-          {t("agentConfig.noExplicitCheapModelFallback", {
-            model: adapterDefaultModel,
-            defaultValue: "No explicit cheap model selected — runtime falls back to {{model}}.",
-          })}
+          {t("agentConfig.noExplicitCheapModelFallback", { defaultValue: "No explicit cheap model selected — runtime falls back to {{model}}.", model: adapterDefaultModel })}
         </p>
       ) : null}
       {enabled && !model && !adapterDefaultModel ? (
         <p className="text-[11px] text-amber-500">
-          {tr(
-            "agentConfig.noCheapModelSelectedNoAdapterDefault",
-            "No cheap model selected and the adapter has no default. Cheap-lane runs will continue on the primary model with a fallback note.",
-          )}
+          {t("agentConfig.noCheapModelSelectedNoAdapterDefault", { defaultValue: "No cheap model selected and the adapter has no default. Cheap-lane runs will continue on the primary model with a fallback note." })}
         </p>
       ) : null}
     </div>
@@ -1881,19 +2117,17 @@ function ThinkingEffortDropdown({
   onOpenChange: (open: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const tr = (key: string, defaultValue: string) => t(key, { defaultValue });
   const selected = options.find((option) => option.id === value) ?? options[0];
-  const optionLabel = (option: { id: string; label: string }) =>
-    tr(`agentConfig.${option.id || "auto"}`, option.label);
+  const selectedLabel = selected
+    ? t(`agentConfig.${selected.id || "auto"}`, { defaultValue: selected.label })
+    : t("agentConfig.auto", { defaultValue: "Auto" });
 
   return (
-    <Field label={tr("agentConfig.thinkingEffort", "Thinking effort")} hint={help.thinkingEffort}>
+    <Field label={t("agentConfig.thinkingEffort", { defaultValue: "Thinking effort" })} hint={translateAgentConfigHelp(t, "thinkingEffort")}>
       <Popover open={open} onOpenChange={onOpenChange}>
         <PopoverTrigger asChild>
           <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
-            <span className={cn(!value && "text-muted-foreground")}>
-              {selected ? optionLabel(selected) : tr("agentConfig.auto", "Auto")}
-            </span>
+            <span className={cn(!value && "text-muted-foreground")}>{selectedLabel}</span>
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </button>
         </PopoverTrigger>
@@ -1910,7 +2144,7 @@ function ThinkingEffortDropdown({
                 onOpenChange(false);
               }}
             >
-              <span>{optionLabel(option)}</span>
+              <span>{t(`agentConfig.${option.id || "auto"}`, { defaultValue: option.label })}</span>
               {option.id ? <span className="text-xs text-muted-foreground font-mono">{option.id}</span> : null}
             </button>
           ))}

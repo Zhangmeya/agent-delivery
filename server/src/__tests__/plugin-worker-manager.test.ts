@@ -13,6 +13,7 @@ import {
   appendStderrExcerpt,
   createPluginWorkerHandle,
   formatWorkerFailureMessage,
+  normalizePluginWorkerExecArgv,
 } from "../services/plugin-worker-manager.js";
 
 const FIXTURES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -36,6 +37,24 @@ const TEST_MANIFEST: PaperclipPluginManifestV1 = {
 };
 
 describe("plugin-worker-manager stderr failure context", () => {
+  it("normalizes absolute ESM loader paths in worker execArgv for Windows", () => {
+    const loaderPath = String.raw`D:\penclipai\paperclip\cli\node_modules\tsx\dist\loader.mjs`;
+    const loaderUrl = "file:///D:/penclipai/paperclip/cli/node_modules/tsx/dist/loader.mjs";
+
+    expect(normalizePluginWorkerExecArgv(["--import", loaderPath])).toEqual([
+      "--import",
+      loaderUrl,
+    ]);
+    expect(normalizePluginWorkerExecArgv([`--import=${loaderPath}`])).toEqual([
+      `--import=${loaderUrl}`,
+    ]);
+    expect(normalizePluginWorkerExecArgv(["--import", "tsx"])).toEqual(["--import", "tsx"]);
+    expect(normalizePluginWorkerExecArgv(["--import", "file:///D:/loader.mjs"])).toEqual([
+      "--import",
+      "file:///D:/loader.mjs",
+    ]);
+  });
+
   it("appends worker stderr context to failure messages", () => {
     expect(
       formatWorkerFailureMessage(

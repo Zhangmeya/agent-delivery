@@ -24,6 +24,8 @@ import { useCompany } from "../context/CompanyContext";
 import { useToastActions } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
+import { translateStatusLabel } from "../lib/i18n-labels";
+import { resolveSkillSummaryText } from "../lib/company-skill-summary";
 import { AgentConfigForm } from "../components/AgentConfigForm";
 import { PageTabBar } from "../components/PageTabBar";
 import { adapterLabels, roleLabels, help } from "../components/agent-config-primitives";
@@ -127,9 +129,9 @@ const SECRET_ENV_KEY_RE =
 const COMMAND_ENV_KEY_RE = /(^command$|^cmd$|command[-_]?line|resolved[-_]?command|PAPERCLIP_RESOLVED_COMMAND)/i;
 const JWT_VALUE_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?$/;
 
-function formatOrgChainHealthPath(agent: AgentDetailRecord) {
+function formatOrgChainHealthPath(agent: AgentDetailRecord, t: TFunction) {
   return agent.orgChainHealth?.fullChain
-    .map((entry) => `${entry.name}${entry.status !== "active" && entry.status !== "idle" ? ` (${entry.status})` : ""}`)
+    .map((entry) => `${entry.name}${entry.status !== "active" && entry.status !== "idle" ? ` (${translateStatusLabel(t, entry.status)})` : ""}`)
     .join(" -> ") ?? agent.name;
 }
 
@@ -451,6 +453,8 @@ function workspaceOperationPhaseLabel(phase: WorkspaceOperation["phase"], t: TFu
   switch (phase) {
     case "worktree_prepare":
       return t("agentDetail.workspacePhase.worktreePrepare", { defaultValue: "Worktree setup" });
+    case "workspace_config_freshness":
+      return t("agentDetail.workspacePhase.workspaceConfigFreshness", { defaultValue: "Config freshness" });
     case "workspace_provision":
       return t("agentDetail.workspacePhase.workspaceProvision", { defaultValue: "Provision" });
     case "workspace_teardown":
@@ -1005,7 +1009,7 @@ export function AgentDetail() {
               {t("agentDetail.invalidReportingChainDescription", { name: agent.name })}
             </p>
             <p className="break-words font-mono text-xs text-amber-100/80">
-              {formatOrgChainHealthPath(agent)}
+              {formatOrgChainHealthPath(agent, t)}
             </p>
             {agent.orgChainHealth?.repairGuidance ? (
               <p className="text-amber-100/85">{agent.orgChainHealth.repairGuidance}</p>
@@ -1650,6 +1654,7 @@ function ConfigurationTab({
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.configRevisions(agent.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(agent.companyId) });
+      pushToast({ title: t("agentDetail.agentSaved", { defaultValue: "Agent saved" }), tone: "success" });
     },
     onError: (err) => {
       setAwaitingRefreshAfterSave(false);
@@ -1676,6 +1681,7 @@ function ConfigurationTab({
   }, [onSavingChange, isConfigSaving]);
 
   const canCreateAgents = Boolean(agent.permissions?.canCreateAgents);
+  const canCreateSkills = agent.permissions?.canCreateSkills !== false;
   const canAssignTasks = Boolean(agent.access?.canAssignTasks);
   const taskAssignSource = agent.access?.taskAssignSource ?? "none";
   const taskAssignLocked = agent.role === "ceo" || canCreateAgents;
@@ -1695,7 +1701,7 @@ function ConfigurationTab({
       <AgentConfigForm
         mode="edit"
         agent={agent}
-        onSave={(patch) => updateAgent.mutate(patch)}
+        onSave={(patch) => updateAgent.mutateAsync(patch)}
         isSaving={isConfigSaving}
         adapterModels={adapterModels}
         onDirtyChange={onDirtyChange}
@@ -1706,6 +1712,9 @@ function ConfigurationTab({
         hideInstructionsFile={hideInstructionsFile}
         sectionLayout="cards"
       />
+      <p className="text-xs text-muted-foreground">
+        Saved adapter config affects the next run. Active runs keep the config they started with, and config changes may start a fresh adapter session.
+      </p>
 
       <TrustPresetSection
         permissions={agent.permissions}
@@ -1723,6 +1732,7 @@ function ConfigurationTab({
         onChange={(nextPermissions) =>
           updatePermissions.mutate({
             canCreateAgents,
+            canCreateSkills,
             canAssignTasks,
             ...buildPermissionsForTrustPreset(nextPermissions, nextPermissions.trustPreset === "low_trust_review" ? "low_trust_review" : "standard"),
           })
@@ -1736,7 +1746,9 @@ function ConfigurationTab({
             <div className="space-y-1">
               <div>{t("agentDetail.canCreateAgents")}</div>
               <p className="text-xs text-muted-foreground">
-                Lets this agent create or hire agents and implicitly assign tasks.
+                {t("agentDetail.canCreateAgentsDescription", {
+                  defaultValue: "Lets this agent create or hire agents. This also grants task assignment authority.",
+                })}
               </p>
             </div>
             <ToggleSwitch
@@ -1744,7 +1756,30 @@ function ConfigurationTab({
               onCheckedChange={() =>
                 updatePermissions.mutate({
                   canCreateAgents: !canCreateAgents,
+                  canCreateSkills,
                   canAssignTasks: !canCreateAgents ? true : canAssignTasks,
+                })
+              }
+              disabled={updatePermissions.isPending}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 text-sm">
+            <div className="space-y-1">
+              <div>{t("agentDetail.canCreateSkills", { defaultValue: "Can create/import skills" })}</div>
+              <p className="text-xs text-muted-foreground">
+                {t("agentDetail.canCreateSkillsDescription", {
+                  defaultValue:
+                    "Lets this agent install, import, create, and scan company skills without creating agents.",
+                })}
+              </p>
+            </div>
+            <ToggleSwitch
+              checked={canCreateSkills}
+              onCheckedChange={() =>
+                updatePermissions.mutate({
+                  canCreateAgents,
+                  canCreateSkills: !canCreateSkills,
+                  canAssignTasks,
                 })
               }
               disabled={updatePermissions.isPending}
@@ -1762,6 +1797,7 @@ function ConfigurationTab({
               onCheckedChange={() =>
                 updatePermissions.mutate({
                   canCreateAgents,
+                  canCreateSkills,
                   canAssignTasks: !canAssignTasks,
                 })
               }
@@ -1922,7 +1958,9 @@ function PromptsTab({
 
   const uploadMarkdownImage = useMutation({
     mutationFn: async ({ file, namespace }: { file: File; namespace: string }) => {
-      if (!selectedCompanyId) throw new Error("Select a company to upload images");
+      if (!selectedCompanyId) {
+        throw new Error(t("agentConfig.selectCompanyToUploadImages", { defaultValue: "Select a company before uploading images." }));
+      }
       return assetsApi.uploadImage(selectedCompanyId, file, namespace);
     },
   });
@@ -2128,6 +2166,9 @@ function PromptsTab({
           ))}
         </div>
       )}
+      <p className="text-xs text-muted-foreground">
+        Saved instructions affect the next run. Active runs keep the instructions they started with, and instruction changes may start a fresh adapter session.
+      </p>
 
       <Collapsible defaultOpen={currentMode === "external"}>
         <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors group">
@@ -2820,8 +2861,7 @@ export function AgentSkillsTab({
         <>
           {(() => {
             const renderSkillRow = (skill: SkillRow) => {
-              const adapterEntry = skill.adapterEntry ?? adapterEntryByKey.get(skill.key);
-              const required = Boolean(adapterEntry?.required);
+              const summaryText = resolveSkillSummaryText(skill, { fallbackKey: true });
               const rowClassName = cn(
                 "flex items-start gap-3 border-b border-border px-3 py-3 text-sm last:border-b-0",
                 skill.readOnly ? "bg-muted/20" : "hover:bg-accent/20",
@@ -2841,9 +2881,9 @@ export function AgentSkillsTab({
                       </Link>
                     ) : null}
                   </div>
-                  {skill.description && (
+                  {summaryText && (
                     <MarkdownBody className="mt-1 text-xs text-muted-foreground prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                      {skill.description}
+                      {summaryText}
                     </MarkdownBody>
                   )}
                   {skill.readOnly && skill.originLabel && (
@@ -2867,8 +2907,8 @@ export function AgentSkillsTab({
                 );
               }
 
-              const checked = required || skillDraft.includes(skill.key);
-              const disabled = required || skillSnapshot?.mode === "unsupported";
+              const checked = skillDraft.includes(skill.key);
+              const disabled = skillSnapshot?.mode === "unsupported";
               const checkbox = (
                 <input
                   type="checkbox"
@@ -2886,14 +2926,7 @@ export function AgentSkillsTab({
 
               return (
                 <label key={skill.id} className={rowClassName}>
-                  {required && adapterEntry?.requiredReason ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>{checkbox}</span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">{adapterEntry.requiredReason}</TooltipContent>
-                    </Tooltip>
-                  ) : skillSnapshot?.mode === "unsupported" ? (
+                  {skillSnapshot?.mode === "unsupported" ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span>{checkbox}</span>
@@ -2934,7 +2967,7 @@ export function AgentSkillsTab({
               );
             };
 
-            if (optionalSkillRows.length === 0 && requiredSkillRows.length === 0 && unmanagedSkillRows.length === 0) {
+            if (optionalSkillRows.length === 0 && unmanagedSkillRows.length === 0) {
               return (
                 <section className="border-y border-border">
                   <div className="px-3 py-6 text-sm text-muted-foreground">

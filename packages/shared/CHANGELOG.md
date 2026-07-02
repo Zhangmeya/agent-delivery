@@ -1,4 +1,4 @@
-# @paperclipai/shared
+# @penclipai/shared
 
 ## 0.3.1
 

@@ -267,7 +267,7 @@ function getRuntimeDependencyNames(pkg) {
   return [...new Set([...dependencies, ...optionalDependencies])].filter((dependencyName) =>
     dependencyName !== "@paperclipai/plugin-sdk"
     && dependencyName !== "@penclipai/plugin-sdk"
-    && dependencyName !== "@paperclipai/shared"
+    && dependencyName !== "@penclipai/shared"
     && dependencyName !== "@penclipai/shared");
 }
 

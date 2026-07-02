@@ -21,7 +21,7 @@ import {
   type ToolResult,
   type ToolRunContext,
 } from "@paperclipai/plugin-sdk";
-import type { Goal, Issue } from "@paperclipai/shared";
+import type { Goal, Issue } from "@penclipai/shared";
 import {
   DEFAULT_CONFIG,
   JOB_KEYS,

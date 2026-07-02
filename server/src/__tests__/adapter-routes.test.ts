@@ -115,12 +115,16 @@ describe("adapter routes", () => {
     adapterRoutes = routes.adapterRoutes;
     errorHandler = middleware.errorHandler;
     setOverridePaused("claude_local", false);
+    unregisterServerAdapter("hermes_local");
+    unregisterServerAdapter("hermes_gateway");
     unregisterServerAdapter("claude_local");
     registerServerAdapter(overridingConfigSchemaAdapter);
   });
 
   afterEach(() => {
     setOverridePaused("claude_local", false);
+    unregisterServerAdapter("hermes_local");
+    unregisterServerAdapter("hermes_gateway");
     unregisterServerAdapter("claude_local");
   });
 
@@ -268,6 +272,18 @@ describe("adapter routes", () => {
     expect(keys).not.toContain("instructionsFilePath");
     expect(keys).not.toContain("promptTemplate");
     expect(keys).not.toContain("bootstrapPromptTemplate");
+  });
+
+  it("keeps Hermes config schemas behind external adapter installation", async () => {
+    const app = createApp();
+
+    const local = await request(app).get("/api/adapters/hermes_local/config-schema");
+    expect(local.status, JSON.stringify(local.body)).toBe(404);
+    expect(local.body.error).toContain('Adapter "hermes_local" is not registered.');
+
+    const gateway = await request(app).get("/api/adapters/hermes_gateway/config-schema");
+    expect(gateway.status, JSON.stringify(gateway.body)).toBe(404);
+    expect(gateway.body.error).toContain('Adapter "hermes_gateway" is not registered.');
   });
 
   it("GET /api/adapters includes ACPX model availability", async () => {

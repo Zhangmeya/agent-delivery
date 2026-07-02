@@ -47,6 +47,8 @@ paperclip_dir="$worktree_cwd/.paperclip"
 paperclip_dir_raw="$worktree_cwd_raw/.paperclip"
 worktree_config_path_raw="$paperclip_dir_raw/config.json"
 worktree_env_path_raw="$paperclip_dir_raw/.env"
+worktree_config_path="$(to_shell_path "$worktree_config_path_raw")"
+worktree_env_path="$(to_shell_path "$worktree_env_path_raw")"
 worktree_name="${PAPERCLIP_WORKSPACE_BRANCH:-$(basename "$worktree_cwd_raw")}"
 
 if [[ ! -d "$base_cwd" ]]; then
@@ -196,6 +198,85 @@ run_isolated_worktree_init() {
     --from-config \
     "$source_config_path_raw"
 }
+
+existing_worktree_config_is_usable() {
+  WORKTREE_CONFIG_PATH="$worktree_config_path" \
+  WORKTREE_ENV_PATH="$worktree_env_path" \
+  node <<'EOF'
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+function expandHomePrefix(value) {
+  if (!value) return value;
+  if (value === "~") return os.homedir();
+  if (value.startsWith("~/")) return path.resolve(os.homedir(), value.slice(2));
+  return value;
+}
+
+function parseEnvFile(contents) {
+  const entries = {};
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const match = rawLine.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    const value = rawValue.trim();
+    if (
+      (value.startsWith("\"") && value.endsWith("\"")) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      entries[key] = value.slice(1, -1);
+      continue;
+    }
+    entries[key] = value.replace(/\s+#.*$/, "").trim();
+  }
+  return entries;
+}
+
+function fail(reason) {
+  console.error(reason);
+  process.exit(1);
+}
+
+const configPath = path.resolve(process.env.WORKTREE_CONFIG_PATH);
+const envPath = path.resolve(process.env.WORKTREE_ENV_PATH);
+const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+const env = parseEnvFile(fs.readFileSync(envPath, "utf8"));
+const envConfigPath = expandHomePrefix(env.PAPERCLIP_CONFIG);
+if (envConfigPath && path.resolve(envConfigPath) !== configPath) {
+  fail(`existing worktree env points at ${envConfigPath}, not ${configPath}`);
+}
+
+const homeDir = expandHomePrefix(env.PAPERCLIP_HOME);
+const instanceId = env.PAPERCLIP_INSTANCE_ID;
+if (!homeDir || !instanceId) {
+  fail("existing worktree env is missing PAPERCLIP_HOME or PAPERCLIP_INSTANCE_ID");
+}
+if (!fs.existsSync(homeDir)) {
+  fail(`existing worktree home does not exist on this host: ${homeDir}`);
+}
+
+const instanceRoot = path.resolve(homeDir, "instances", instanceId);
+const runtimePaths = [
+  config.database?.embeddedPostgresDataDir,
+  config.database?.backup?.dir,
+  config.logging?.logDir,
+  config.storage?.localDisk?.baseDir,
+  config.secrets?.localEncrypted?.keyFilePath,
+].filter((value) => typeof value === "string" && value.length > 0);
+
+for (const rawValue of runtimePaths) {
+  const resolved = path.resolve(expandHomePrefix(rawValue));
+  const relative = path.relative(instanceRoot, resolved);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    fail(`existing worktree config path is outside ${instanceRoot}: ${resolved}`);
+  }
+}
+EOF
+}
+
 write_fallback_worktree_config() {
   local node_command
   node_command="$(resolve_node_command)"
@@ -458,20 +539,27 @@ main().catch((error) => {
 EOF
 }
 
-if [[ -e "$(to_shell_path "$worktree_config_path_raw")" && -e "$(to_shell_path "$worktree_env_path_raw")" ]]; then
+if [[ -e "$worktree_config_path" && -e "$worktree_env_path" ]] && existing_worktree_config_is_usable; then
   echo "Reusing existing isolated Paperclip worktree config at $worktree_config_path_raw" >&2
-elif ! run_isolated_worktree_init; then
-  resolve_penclip_invoker
-  if [[ "$resolved_penclip_invoker" == "none" ]]; then
-    echo "penclip CLI not available in this workspace; writing isolated fallback config without DB seeding." >&2
-    write_fallback_worktree_config
-  else
-    echo "penclip worktree init failed after CLI detection; refusing to write fallback config." >&2
-    exit 1
+else
+  if [[ -e "$worktree_config_path" || -e "$worktree_env_path" ]]; then
+    echo "Existing isolated Paperclip worktree config is stale for this host; regenerating." >&2
   fi
-elif [[ ! -e "$(to_shell_path "$worktree_config_path_raw")" || ! -e "$(to_shell_path "$worktree_env_path_raw")" ]]; then
-  echo "penclip worktree init did not materialize repo-local config; writing isolated fallback config." >&2
-  write_fallback_worktree_config
+  if run_isolated_worktree_init; then
+    if [[ ! -e "$worktree_config_path" || ! -e "$worktree_env_path" ]]; then
+      echo "penclip worktree init did not materialize repo-local config; writing isolated fallback config." >&2
+      write_fallback_worktree_config
+    fi
+  else
+    resolve_penclip_invoker
+    if [[ "$resolved_penclip_invoker" == "none" ]]; then
+      echo "penclip CLI not available in this workspace; writing isolated fallback config without DB seeding." >&2
+      write_fallback_worktree_config
+    else
+      echo "penclip worktree init failed after CLI detection; refusing to write fallback config." >&2
+      exit 1
+    fi
+  fi
 fi
 
 disable_seeded_routines() {

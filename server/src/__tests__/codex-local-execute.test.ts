@@ -6,16 +6,13 @@ import path from "node:path";
 import { runChildProcess } from "@penclipai/adapter-utils/server-utils";
 import { execute } from "@penclipai/adapter-codex-local/server";
 
-async function expectSharedCodexAuthMaterialized(target: string, source: string): Promise<void> {
-  const targetStat = await fs.lstat(target);
-  if (process.platform === "win32") {
-    expect(targetStat.isFile()).toBe(true);
-    expect(await fs.readFile(target, "utf8")).toBe(await fs.readFile(source, "utf8"));
-    return;
-  }
-
-  expect(targetStat.isSymbolicLink()).toBe(true);
-  expect(await fs.realpath(target)).toBe(await fs.realpath(source));
+async function writeWindowsNodeCommandShim(commandPath: string): Promise<void> {
+  if (process.platform !== "win32") return;
+  await fs.writeFile(
+    `${commandPath}.cmd`,
+    `@echo off\r\n"${process.execPath}" "%~dpn0" %*\r\n`,
+    "utf8",
+  );
 }
 
 async function writeFakeCodexCommand(commandPath: string): Promise<void> {
@@ -44,6 +41,7 @@ console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, c
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
 }
 
 async function writeFailingCodexCommand(commandPath: string, errorMessage: string): Promise<void> {
@@ -53,6 +51,7 @@ process.exit(1);
 `;
   await fs.writeFile(commandPath, script, "utf8");
   await fs.chmod(commandPath, 0o755);
+  await writeWindowsNodeCommandShim(commandPath);
 }
 
 type CapturePayload = {
@@ -70,6 +69,45 @@ type LogEntry = {
   stream: "stdout" | "stderr";
   chunk: string;
 };
+
+async function seedSharedCodexAuth(homeRoot: string): Promise<void> {
+  const sharedCodexHome = path.join(homeRoot, ".codex");
+  await fs.mkdir(sharedCodexHome, { recursive: true });
+  await fs.writeFile(path.join(sharedCodexHome, "auth.json"), '{"token":"shared"}\n', "utf8");
+}
+
+function installCodexExecuteTestEnv(homeRoot: string): () => void {
+  const previousHome = process.env.HOME;
+  const previousCodexHome = process.env.CODEX_HOME;
+  const previousPaperclipHome = process.env.PAPERCLIP_HOME;
+  const previousPaperclipInstanceId = process.env.PAPERCLIP_INSTANCE_ID;
+
+  process.env.HOME = homeRoot;
+  process.env.CODEX_HOME = path.join(homeRoot, ".codex");
+  process.env.PAPERCLIP_HOME = path.join(homeRoot, "paperclip-home");
+  process.env.PAPERCLIP_INSTANCE_ID = "default";
+
+  return () => {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previousCodexHome;
+    if (previousPaperclipHome === undefined) delete process.env.PAPERCLIP_HOME;
+    else process.env.PAPERCLIP_HOME = previousPaperclipHome;
+    if (previousPaperclipInstanceId === undefined) delete process.env.PAPERCLIP_INSTANCE_ID;
+    else process.env.PAPERCLIP_INSTANCE_ID = previousPaperclipInstanceId;
+  };
+}
+
+async function expectSeededFromSharedAuth(targetAuth: string, sharedAuth: string): Promise<void> {
+  if (process.platform === "win32") {
+    await expect(fs.readFile(targetAuth, "utf8")).resolves.toBe(await fs.readFile(sharedAuth, "utf8"));
+    return;
+  }
+
+  expect((await fs.lstat(targetAuth)).isSymbolicLink()).toBe(true);
+  expect(await fs.realpath(targetAuth)).toBe(await fs.realpath(sharedAuth));
+}
 
 function resolveTestPosixShellCommand() {
   if (process.platform !== "win32") return "sh";
@@ -115,9 +153,10 @@ function augmentTestPosixPath(env: Record<string, string>) {
 
 function envForGitShell(env: Record<string, string>) {
   if (process.platform !== "win32") return env;
+  const home = env.HOME ?? process.env.HOME;
   return augmentTestPosixPath({
     ...env,
-    ...(process.env.HOME ? { HOME: toGitShellPath(process.env.HOME) } : {}),
+    ...(home ? { HOME: toGitShellPath(home) } : {}),
   });
 }
 
@@ -224,9 +263,7 @@ describe("codex execute", () => {
           },
           promptTemplate: "Follow the paperclip heartbeat.",
         },
-        context: {
-          paperclipLocalizationPromptMarkdown: "Reply in zh-CN.",
-        },
+        context: {},
         authToken: "run-jwt-token",
         onLog: async (stream, chunk) => {
           logs.push({ stream, chunk });
@@ -241,7 +278,7 @@ describe("codex execute", () => {
 
       const managedAuth = path.join(managedCodexHome, "auth.json");
       const managedConfig = path.join(managedCodexHome, "config.toml");
-      await expectSharedCodexAuthMaterialized(managedAuth, path.join(sharedCodexHome, "auth.json"));
+      await expectSeededFromSharedAuth(managedAuth, path.join(sharedCodexHome, "auth.json"));
       expect((await fs.lstat(managedConfig)).isFile()).toBe(true);
       expect(await fs.readFile(managedConfig, "utf8")).toBe('model = "codex-mini-latest"\n');
       await expect(fs.lstat(path.join(sharedCodexHome, "companies", "company-1"))).rejects.toThrow();
@@ -274,8 +311,8 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
+    await seedSharedCodexAuth(root);
 
     let commandNotes: string[] = [];
     try {
@@ -302,9 +339,7 @@ describe("codex execute", () => {
           },
           promptTemplate: "Follow the paperclip heartbeat.",
         },
-        context: {
-          paperclipLocalizationPromptMarkdown: "Reply in zh-CN.",
-        },
+        context: {},
         authToken: "run-jwt-token",
         onLog: async () => {},
         onMeta: async (meta) => {
@@ -318,8 +353,7 @@ describe("codex execute", () => {
         "Codex exec automatically applies repo-scoped AGENTS.md instructions from the current workspace; Paperclip does not currently suppress that discovery.",
       );
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -334,10 +368,10 @@ describe("codex execute", () => {
     await fs.mkdir(binDir, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     const previousPath = process.env.PATH;
-    process.env.HOME = root;
     process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH ?? ""}`;
+    await seedSharedCodexAuth(root);
 
     let loggedCommand: string | null = null;
     let loggedEnv: Record<string, string> = {};
@@ -365,9 +399,7 @@ describe("codex execute", () => {
           },
           promptTemplate: "Follow the paperclip heartbeat.",
         },
-        context: {
-          paperclipLocalizationPromptMarkdown: "Reply in zh-CN.",
-        },
+        context: {},
         authToken: "run-jwt-token",
         onLog: async () => {},
         onMeta: async (meta) => {
@@ -378,12 +410,12 @@ describe("codex execute", () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.errorMessage).toBeNull();
-      expect(loggedCommand).toBe(commandPath);
+      const expectedResolvedCommand = process.platform === "win32" ? `${commandPath}.cmd` : commandPath;
+      expect(loggedCommand?.toLowerCase()).toBe(expectedResolvedCommand.toLowerCase());
       expect(loggedEnv.HOME).toBe(root);
-      expect(loggedEnv.PAPERCLIP_RESOLVED_COMMAND).toBe(commandPath);
+      expect(loggedEnv.PAPERCLIP_RESOLVED_COMMAND?.toLowerCase()).toBe(expectedResolvedCommand.toLowerCase());
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
       await fs.rm(root, { recursive: true, force: true });
@@ -397,7 +429,7 @@ describe("codex execute", () => {
     const binDir = path.join(root, "bin");
     const commandPath = path.join(binDir, "codex");
     const capturePath = path.join(remoteWorkspace, "capture.json");
-    const previousHome = process.env.HOME;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
     const previousPath = process.env.PATH;
 
     await fs.mkdir(localWorkspace, { recursive: true });
@@ -405,8 +437,8 @@ describe("codex execute", () => {
     await fs.mkdir(binDir, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    process.env.HOME = root;
     process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH ?? ""}`;
+    await seedSharedCodexAuth(root);
 
     try {
       const result = await execute({
@@ -451,18 +483,19 @@ describe("codex execute", () => {
       expect(result.errorMessage).toBeNull();
 
       const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload;
-      expect(path.normalize(capture.codexHome)).toBe(path.join(remoteWorkspace, ".paperclip-runtime", "codex", "home"));
+      expect(path.normalize(capture.codexHome ?? "")).toBe(
+        path.join(remoteWorkspace, ".paperclip-runtime", "codex", "home"),
+      );
       expect(capture.paperclipApiUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
       expect(capture.paperclipApiKey).not.toBe("run-jwt-token");
       expect(capture.paperclipApiBridgeMode).toBe("queue_v1");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       if (previousPath === undefined) delete process.env.PATH;
       else process.env.PATH = previousPath;
       await fs.rm(root, { recursive: true, force: true });
     }
-  }, 90_000);
+  });
 
   it("injects structured Paperclip wake payloads into env and prompt", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-wake-"));
@@ -472,8 +505,8 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
+    await seedSharedCodexAuth(root);
 
     try {
       const result = await execute({
@@ -566,8 +599,7 @@ describe("codex execute", () => {
       expect(capture.prompt).toContain("First comment");
       expect(capture.prompt).toContain("Second comment");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -582,8 +614,8 @@ describe("codex execute", () => {
       "Error running remote compact task: We're currently experiencing high demand, which may cause temporary errors.",
     );
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
+    await seedSharedCodexAuth(root);
 
     try {
       const result = await execute({
@@ -616,8 +648,7 @@ describe("codex execute", () => {
       expect(result.errorFamily).toBe("transient_upstream");
       expect(result.errorMessage).toContain("high demand");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -632,8 +663,8 @@ describe("codex execute", () => {
       "You've hit your usage limit for GPT-5.3-Codex-Spark. Switch to another model now, or try again at 11:31 PM.",
     );
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
+    await seedSharedCodexAuth(root);
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 3, 22, 22, 29, 0));
 
@@ -678,8 +709,7 @@ describe("codex execute", () => {
       );
     } finally {
       vi.useRealTimers();
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -692,8 +722,8 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
+    await seedSharedCodexAuth(root);
 
     let commandNotes: string[] = [];
     try {
@@ -754,8 +784,7 @@ describe("codex execute", () => {
       expect(commandNotes).toContain("Codex transient fallback requested safer invocation settings for this retry.");
       expect(commandNotes).toContain("Codex transient fallback forced a fresh session with a continuation handoff.");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -768,8 +797,8 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
+    await seedSharedCodexAuth(root);
 
     try {
       const result = await execute({
@@ -908,8 +937,7 @@ describe("codex execute", () => {
       expect(executorCapture.prompt).toContain("You are waking because changes were requested in the execution workflow.");
       expect(executorCapture.prompt).toContain("allowed actions: address_changes, resubmit");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -922,8 +950,8 @@ describe("codex execute", () => {
     await fs.mkdir(workspace, { recursive: true });
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
+    await seedSharedCodexAuth(root);
 
     try {
       const result = await execute({
@@ -1004,8 +1032,7 @@ describe("codex execute", () => {
       expect(capture.prompt).toContain("- checkout: already claimed by the harness for this run");
       expect(capture.prompt).toContain("The harness already checked out this issue for the current run.");
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -1020,8 +1047,8 @@ describe("codex execute", () => {
     await fs.writeFile(instructionsPath, "You are managed instructions.\n", "utf8");
     await writeFakeCodexCommand(commandPath);
 
-    const previousHome = process.env.HOME;
-    process.env.HOME = root;
+    const restoreTestEnv = installCodexExecuteTestEnv(root);
+    await seedSharedCodexAuth(root);
 
     let invocationPrompt = "";
     let invocationNotes: string[] = [];
@@ -1115,8 +1142,7 @@ describe("codex execute", () => {
       expect(promptMetrics.instructionsChars).toBe(0);
       expect(promptMetrics.heartbeatPromptChars).toBe(0);
     } finally {
-      if (previousHome === undefined) delete process.env.HOME;
-      else process.env.HOME = previousHome;
+      restoreTestEnv();
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -1177,10 +1203,11 @@ describe("codex execute", () => {
             PAPERCLIP_TEST_CAPTURE_PATH: capturePath,
           },
           promptTemplate: "Follow the paperclip heartbeat.",
+          paperclipSkillSync: {
+            desiredSkills: ["paperclip"],
+          },
         },
-        context: {
-          paperclipLocalizationPromptMarkdown: "Reply in zh-CN.",
-        },
+        context: {},
         authToken: "run-jwt-token",
         onLog: async (stream, chunk) => {
           logs.push({ stream, chunk });
@@ -1194,10 +1221,6 @@ describe("codex execute", () => {
       expect(capture.codexHome).toBe(isolatedCodexHome);
       expect(capture.argv).toEqual(expect.arrayContaining(["exec", "--json", "-"]));
       expect(capture.prompt).toContain("Follow the paperclip heartbeat.");
-      expect(capture.prompt).toContain("Reply in zh-CN.");
-      expect(capture.prompt.indexOf("Reply in zh-CN.")).toBeLessThan(
-        capture.prompt.indexOf("Follow the paperclip heartbeat."),
-      );
       expect(capture.paperclipEnvKeys).toEqual(
         expect.arrayContaining([
           "PAPERCLIP_AGENT_ID",
@@ -1211,7 +1234,7 @@ describe("codex execute", () => {
       const isolatedAuth = path.join(isolatedCodexHome, "auth.json");
       const isolatedConfig = path.join(isolatedCodexHome, "config.toml");
 
-      await expectSharedCodexAuthMaterialized(isolatedAuth, path.join(sharedCodexHome, "auth.json"));
+      await expectSeededFromSharedAuth(isolatedAuth, path.join(sharedCodexHome, "auth.json"));
       expect((await fs.lstat(isolatedConfig)).isFile()).toBe(true);
       expect(await fs.readFile(isolatedConfig, "utf8")).toBe('model = "codex-mini-latest"\n');
       expect((await fs.lstat(homeSkill)).isSymbolicLink()).toBe(true);
@@ -1290,6 +1313,9 @@ describe("codex execute", () => {
             CODEX_HOME: explicitCodexHome,
           },
           promptTemplate: "Follow the paperclip heartbeat.",
+          paperclipSkillSync: {
+            desiredSkills: ["paperclip"],
+          },
         },
         context: {},
         authToken: "run-jwt-token",

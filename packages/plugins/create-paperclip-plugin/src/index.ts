@@ -368,19 +368,19 @@ export function scaffoldPluginProject(options: ScaffoldPluginOptions): string {
           aliasName: "@paperclipai/plugin-sdk",
           dependencyRewrites: {
             "@penclipai/shared": {
-              name: "@paperclipai/shared",
+              name: "@penclipai/shared",
               version: sharedVersion,
             },
           },
           contentReplacements: [
-            ["@penclipai/shared", "@paperclipai/shared"],
+            ["@penclipai/shared", "@penclipai/shared"],
           ],
         });
   const packedCompatSharedTarball =
     useWorkspaceSdk || usePublishedPackages
       ? null
       : packCompatibilityPackage(localSharedPath, outputDir, {
-          aliasName: "@paperclipai/shared",
+          aliasName: "@penclipai/shared",
         });
 
   const sdkDependency = useWorkspaceSdk
@@ -420,14 +420,14 @@ export function scaffoldPluginProject(options: ScaffoldPluginOptions): string {
       ? {
           pnpm: {
             overrides: {
-              "@paperclipai/shared": formatRelativeFileDependency(outputDir, packedCompatSharedTarball),
+              "@penclipai/shared": formatRelativeFileDependency(outputDir, packedCompatSharedTarball),
             },
           },
         }
       : {}),
     devDependencies: {
       "@paperclipai/plugin-sdk": sdkDependency,
-      "@paperclipai/shared": sharedDependency,
+      "@penclipai/shared": sharedDependency,
       "@rollup/plugin-node-resolve": "^16.0.1",
       "@rollup/plugin-typescript": "^12.1.2",
       "@types/node": "^24.6.0",
@@ -910,7 +910,7 @@ ${useWorkspaceSdk
   ? `This scaffold keeps compatibility imports from \`@paperclipai/plugin-sdk*\` while resolving them to the workspace packages published as \`@penclipai/*\`.\n\n`
   : usePublishedPackages
     ? `This scaffold keeps compatibility imports from \`@paperclipai/plugin-sdk*\` while installing the published packages from \`@penclipai/*\` via npm alias dependencies pinned from your local Paperclip checkout at:\n\n\`${toPosixPath(localSdkPath)}\`\n\n`
-    : `This scaffold snapshots compatibility packages for \`@paperclipai/plugin-sdk\` and \`@paperclipai/shared\` from your local Paperclip checkout at:\n\n\`${toPosixPath(localSdkPath)}\`\n\nThe packed tarballs live in \`.paperclip-sdk/\` so the generated plugin can install immediately without waiting for npm publish.\n\n`}
+    : `This scaffold snapshots compatibility packages for \`@paperclipai/plugin-sdk\` and \`@penclipai/shared\` from your local Paperclip checkout at:\n\n\`${toPosixPath(localSdkPath)}\`\n\nThe packed tarballs live in \`.paperclip-sdk/\` so the generated plugin can install immediately without waiting for npm publish.\n\n`}
 
 \`pnpm dev\` rebuilds the worker, manifest, and UI bundles into \`dist/\`.
 When this package is installed from a local path, Paperclip watches that rebuilt

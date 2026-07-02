@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "description": "First-party execution workspace Changes tab powered by plugin-local workspace metadata",
   "license": "MIT",
-  "homepage": "https://github.com/penclipai/paperclip-cn",
+  "homepage": "https://github.com/paperclipai/paperclip",
   "bugs": {
-    "url": "https://github.com/penclipai/paperclip-cn/issues"
+    "url": "https://github.com/paperclipai/paperclip/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/penclipai/paperclip-cn",
+    "url": "https://github.com/paperclipai/paperclip",
     "directory": "packages/plugins/plugin-workspace-diff"
   },
   "type": "module",
@@ -42,26 +42,25 @@
     "diff"
   ],
   "scripts": {
-    "postinstall": "node ../../../scripts/link-plugin-dev-sdk.mjs",
     "prebuild": "pnpm --filter @penclipai/plugin-sdk ensure-build-deps",
     "build": "tsc && node ./scripts/build-ui.mjs",
-    "clean": "node ../../../scripts/fs-ops.mjs rm dist",
+    "clean": "rm -rf dist",
     "typecheck": "pnpm --filter @penclipai/plugin-sdk ensure-build-deps && tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
-    "prepack": "node ../../../scripts/fs-ops.mjs rm package.dev.json && node ../../../scripts/fs-ops.mjs cp package.json package.dev.json && node ../../../scripts/generate-plugin-package-json.mjs",
-    "postpack": "node ../../../scripts/fs-ops.mjs mv package.dev.json package.json --if-exists"
+    "prepack": "rm -f package.dev.json && cp package.json package.dev.json && node ../../../scripts/generate-plugin-package-json.mjs",
+    "postpack": "if [ -f package.dev.json ]; then mv package.dev.json package.json; fi"
   },
   "dependencies": {
     "@paperclipai/plugin-sdk": "workspace:@penclipai/plugin-sdk@*",
-    "@pierre/diffs": "^1.1.22"
+    "@pierre/diffs": "^1.2.11"
   },
   "devDependencies": {
-    "@types/node": "^24.6.0",
-    "@types/react": "^19.0.8",
-    "@types/react-dom": "^19.0.3",
-    "esbuild": "^0.28.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "@types/node": "^22.19.21",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "typescript": "^5.7.3",
     "vitest": "^4.1.8"
   },

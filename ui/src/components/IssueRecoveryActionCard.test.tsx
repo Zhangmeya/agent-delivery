@@ -162,7 +162,7 @@ describe("IssueRecoveryActionCard", () => {
     expect(node.textContent).toContain("RECOVERY NEEDED");
     expect(node.textContent).toContain("Missing Disposition");
     expect(node.textContent).not.toContain("missing_disposition");
-    expect(node.textContent).toContain("This issue's run finished, but no next step was chosen.");
+    expect(node.textContent).toContain("This task's run finished, but no next step was chosen.");
     expect(node.textContent).toContain("ClaudeCoder");
     expect(node.textContent).toContain("CodexCoder");
     expect(node.textContent).toContain("Choose and record a valid issue disposition.");
@@ -206,7 +206,7 @@ describe("IssueRecoveryActionCard", () => {
     expect(node.textContent).toContain("Workspace Validation");
     expect(node.textContent).not.toContain("workspace_validation\n");
     expect(node.textContent).toContain(
-      "Paperclip stopped this run because the issue's git workspace could not be validated.",
+      "Paperclip stopped this run because the task's git workspace could not be validated.",
     );
     expect(node.textContent).toContain("Repair the source issue workspace link");
     expect(node.textContent).toContain("manual repair required");

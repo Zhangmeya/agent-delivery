@@ -7,7 +7,11 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(scriptDir, "..");
-const tscCliPath = path.join(rootDir, "node_modules", "typescript", "bin", "tsc");
+const tscCliCandidates = [
+  path.join(rootDir, "node_modules", "typescript", "bin", "tsc"),
+  path.join(process.cwd(), "node_modules", "typescript", "bin", "tsc"),
+];
+const tscCliPath = tscCliCandidates.find((candidate) => fs.existsSync(candidate));
 const lockDir = path.join(rootDir, "node_modules", ".cache", "paperclip-plugin-build-deps.lock");
 const lockTimeoutMs = 60_000;
 const lockPollMs = 100;
@@ -27,8 +31,8 @@ const buildTargets = [
   },
 ];
 
-if (!fs.existsSync(tscCliPath)) {
-  throw new Error(`TypeScript CLI not found at ${tscCliPath}`);
+if (!tscCliPath) {
+  throw new Error(`TypeScript CLI not found. Checked: ${tscCliCandidates.join(", ")}`);
 }
 
 function newestSourceMtimeMs(sourceDir) {

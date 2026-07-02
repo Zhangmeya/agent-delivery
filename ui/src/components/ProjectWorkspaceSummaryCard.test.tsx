@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { act } from "react";
 import type { ComponentProps, ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import type { ExecutionWorkspace, Issue } from "@penclipai/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +28,20 @@ vi.mock("./IssuesQuicklook", () => ({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+function act(callback: () => void | Promise<void>) {
+  let result: void | Promise<void> = undefined;
+  flushSync(() => {
+    result = callback();
+  });
+  const maybePromise = result as Promise<void> | undefined;
+  if (maybePromise !== undefined && typeof maybePromise.then === "function") {
+    return maybePromise.then(() => {
+      flushSync(() => {});
+    });
+  }
+  return result;
+}
 
 function createIssue(overrides: Partial<Issue> = {}): Issue {
   return {
@@ -67,6 +81,13 @@ function createIssue(overrides: Partial<Issue> = {}): Issue {
 }
 
 function createSummary(overrides: Partial<ProjectWorkspaceSummary> = {}): ProjectWorkspaceSummary {
+  const issues = overrides.issues ?? [
+    createIssue({ id: "issue-1", identifier: "PAP-1364" }),
+    createIssue({ id: "issue-2", identifier: "PAP-1367" }),
+    createIssue({ id: "issue-3", identifier: "PAP-1362" }),
+    createIssue({ id: "issue-4", identifier: "PAP-1363" }),
+    createIssue({ id: "issue-5", identifier: "PAP-1340" }),
+  ];
   return {
     key: overrides.key ?? "execution:workspace-1",
     kind: overrides.kind ?? "execution_workspace",
@@ -83,13 +104,8 @@ function createSummary(overrides: Partial<ProjectWorkspaceSummary> = {}): Projec
     primaryServiceUrl: overrides.primaryServiceUrl ?? "http://127.0.0.1:62474",
     primaryServiceUrlRunning: overrides.primaryServiceUrlRunning ?? false,
     hasRuntimeConfig: overrides.hasRuntimeConfig ?? true,
-    issues: overrides.issues ?? [
-      createIssue({ id: "issue-1", identifier: "PAP-1364" }),
-      createIssue({ id: "issue-2", identifier: "PAP-1367" }),
-      createIssue({ id: "issue-3", identifier: "PAP-1362" }),
-      createIssue({ id: "issue-4", identifier: "PAP-1363" }),
-      createIssue({ id: "issue-5", identifier: "PAP-1340" }),
-    ],
+    linkedIssueCount: overrides.linkedIssueCount ?? issues.length,
+    issues,
   };
 }
 
@@ -134,7 +150,7 @@ describe("ProjectWorkspaceSummaryCard", () => {
     expect(container.textContent).toContain("Branch");
     expect(container.textContent).toContain("Path");
     expect(container.textContent).toContain("Service");
-    expect(container.textContent).toContain("Linked issues");
+    expect(container.textContent).toContain("Linked tasks");
     expect(container.textContent).toContain("Start services");
     expect(container.textContent).toContain("Close workspace");
     expect(container.textContent).toContain("+1 more");
@@ -243,12 +259,14 @@ describe("ProjectWorkspaceSummaryCard", () => {
 
     await act(async () => {
       branchTextButton!.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(writeClipboard).toHaveBeenLastCalledWith(summary.branchName);
     expect(branchTextButton?.nextElementSibling?.className).toContain("opacity-100");
 
     await act(async () => {
       pathTextButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(writeClipboard).toHaveBeenLastCalledWith(summary.cwd);
     expect(pathTextButton?.nextElementSibling?.className).toContain("opacity-100");
@@ -256,6 +274,7 @@ describe("ProjectWorkspaceSummaryCard", () => {
     await act(async () => {
       branchIconButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       pathIconButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(writeClipboard).toHaveBeenCalledWith(summary.branchName);
     expect(writeClipboard).toHaveBeenCalledWith(summary.cwd);
