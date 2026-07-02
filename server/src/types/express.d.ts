@@ -2,7 +2,7 @@ import type { UiLocale } from "@penclipai/shared";
 
 export {};
 
-import type { AgentApiKeyScope } from "@paperclipai/shared";
+import type { AgentApiKeyScope } from "@penclipai/shared";
 
 declare global {
   namespace Express {

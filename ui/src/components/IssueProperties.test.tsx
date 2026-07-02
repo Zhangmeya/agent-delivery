@@ -15,6 +15,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Issue } from "@penclipai/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IssueProperties } from "./IssueProperties";
+import { queryKeys } from "../lib/queryKeys";
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>();
@@ -383,7 +384,7 @@ function createExecutionState(overrides: Partial<IssueExecutionState> = {}): Iss
   };
 }
 
-function renderProperties(container: HTMLDivElement, props: ComponentProps<typeof IssueProperties>) {
+function renderPropertiesWithQueryClient(container: HTMLDivElement, props: ComponentProps<typeof IssueProperties>) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -397,6 +398,11 @@ function renderProperties(container: HTMLDivElement, props: ComponentProps<typeo
       </QueryClientProvider>,
     );
   });
+  return { root, queryClient };
+}
+
+function renderProperties(container: HTMLDivElement, props: ComponentProps<typeof IssueProperties>) {
+  const { root } = renderPropertiesWithQueryClient(container, props);
   return root;
 }
 
@@ -1826,18 +1832,76 @@ describe("IssueProperties", () => {
     act(() => root.unmount());
   });
 
+  it("updates cached issue detail when saving a watchdog", async () => {
+    mockInstanceSettingsApi.getExperimental.mockResolvedValue({
+      enableTaskWatchdogs: true,
+    });
+    mockAgentsApi.list.mockResolvedValue([watchdogAgent]);
+    const savedWatchdog = createWatchdogSummary({
+      instructions: "Watch the deploy",
+    });
+    mockIssuesApi.upsertWatchdog.mockResolvedValueOnce(savedWatchdog);
+    const issue = createIssue({ watchdog: null });
+    const { root, queryClient } = renderPropertiesWithQueryClient(container, {
+      issue,
+      childIssues: [],
+      onUpdate: vi.fn(),
+      inline: true,
+    });
+    queryClient.setQueryData(queryKeys.issues.detail(issue.id), issue);
+    await flush();
+
+    let trigger: HTMLButtonElement | undefined;
+    await waitForAssertion(() => {
+      trigger = Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("Set watchdog"));
+      expect(trigger).toBeTruthy();
+    });
+
+    await act(async () => {
+      trigger!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    let agentOption: HTMLElement | undefined;
+    await waitForAssertion(() => {
+      agentOption = Array.from(container.querySelectorAll("button, [role='option']"))
+        .find((node) => node.textContent?.includes("ClaudeCoder")) as HTMLElement | undefined;
+      expect(agentOption).toBeTruthy();
+    });
+    await act(async () => {
+      agentOption!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    const finalSave = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Set watchdog" && button !== trigger);
+    expect(finalSave).toBeTruthy();
+    await act(async () => {
+      finalSave!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flush();
+
+    expect(queryClient.getQueryData<Issue>(queryKeys.issues.detail(issue.id))?.watchdog)
+      .toEqual(savedWatchdog);
+
+    act(() => root.unmount());
+  });
+
   it("renders an existing watchdog and removes it via the API", async () => {
     mockInstanceSettingsApi.getExperimental.mockResolvedValue({
       enableTaskWatchdogs: true,
     });
     mockAgentsApi.list.mockResolvedValue([watchdogAgent]);
     const onUpdate = vi.fn();
-    const root = renderProperties(container, {
-      issue: createIssue({ watchdog: createWatchdogSummary() }),
+    const issue = createIssue({ watchdog: createWatchdogSummary() });
+    const { root, queryClient } = renderPropertiesWithQueryClient(container, {
+      issue,
       childIssues: [],
       onUpdate,
       inline: true,
     });
+    queryClient.setQueryData(queryKeys.issues.detail(issue.id), issue);
     await flush();
 
     await waitForAssertion(() => {
@@ -1860,6 +1924,8 @@ describe("IssueProperties", () => {
     await flush();
 
     expect(mockIssuesApi.deleteWatchdog).toHaveBeenCalledWith("issue-1");
+    expect(queryClient.getQueryData<Issue>(queryKeys.issues.detail(issue.id))?.watchdog)
+      .toBeNull();
 
     act(() => root.unmount());
   });

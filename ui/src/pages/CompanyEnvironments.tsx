@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Check, Play, RefreshCw, RotateCcw, Trash2, X } from "lucide-react";
 import {
   type EnvBinding,
   type Environment,
+  type EnvironmentProviderCapability,
   type EnvironmentProbeResult,
+  type EnvironmentCustomImageSetupSession,
   type JsonSchema,
 } from "@penclipai/shared";
-import { environmentsApi } from "@/api/environments";
+import {
+  environmentsApi,
+  type EnvironmentCustomImageConnectionPayload,
+  type EnvironmentCustomImageSetupSessionResult,
+} from "@/api/environments";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { secretsApi } from "@/api/secrets";
 import { Button } from "@/components/ui/button";
@@ -163,6 +170,495 @@ function summarizeSandboxConfig(config: Record<string, unknown>): string | null 
     }
   }
   return null;
+}
+
+const ACTIVE_CUSTOM_IMAGE_SETUP_STATUSES = new Set<EnvironmentCustomImageSetupSession["status"]>([
+  "starting",
+  "waiting_for_user",
+  "capturing",
+]);
+
+function isActiveCustomImageSetupSession(session: EnvironmentCustomImageSetupSession | null | undefined) {
+  return Boolean(session && ACTIVE_CUSTOM_IMAGE_SETUP_STATUSES.has(session.status));
+}
+
+function readEnvironmentSandboxProvider(environment: Environment): string | null {
+  return environment.driver === "sandbox" && typeof environment.config.provider === "string"
+    ? environment.config.provider
+    : null;
+}
+
+function formatDateTime(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleString();
+}
+
+function readConnectionCommand(payload: EnvironmentCustomImageConnectionPayload | null | undefined): string | null {
+  return typeof payload?.command === "string" && payload.command.trim().length > 0
+    ? payload.command
+    : null;
+}
+
+function capabilityState(capability: EnvironmentProviderCapability | null | undefined) {
+  if (!capability || capability.status !== "supported" || !capability.supportsInteractiveSetup) {
+    return {
+      kind: "unsupported" as const,
+      labelKey: "companySettings.customImage.unsupportedProvider",
+      labelDefault: "Unsupported provider",
+      reasonKey: "companySettings.customImage.unsupportedProviderReason",
+      reasonDefault: "This provider does not advertise interactive template setup.",
+    };
+  }
+
+  if (!capability.supportsTemplateCapture) {
+    return {
+      kind: "capture_unavailable" as const,
+      labelKey: "companySettings.customImage.captureUnavailable",
+      labelDefault: "Setup capture unavailable",
+      reasonKey: "companySettings.customImage.captureUnavailableReason",
+      reasonDefault: "This provider advertises setup, but image capture is unavailable.",
+    };
+  }
+
+  return {
+    kind: "supported" as const,
+    labelKey: "companySettings.customImage.templateSetup",
+    labelDefault: "Template setup",
+    reasonKey: null,
+    reasonDefault: null,
+  };
+}
+
+function sessionStatusCopy(status: EnvironmentCustomImageSetupSession["status"]) {
+  switch (status) {
+    case "starting":
+      return { key: "companySettings.customImage.status.starting", defaultValue: "Setup starting" };
+    case "waiting_for_user":
+      return { key: "companySettings.customImage.status.waitingForUser", defaultValue: "Setup running" };
+    case "capturing":
+      return { key: "companySettings.customImage.status.capturing", defaultValue: "Capturing template" };
+    case "promoted":
+      return { key: "companySettings.customImage.status.promoted", defaultValue: "Template captured" };
+    case "cancelled":
+      return { key: "companySettings.customImage.status.cancelled", defaultValue: "Setup cancelled" };
+    case "timed_out":
+      return { key: "companySettings.customImage.status.timedOut", defaultValue: "Setup expired" };
+    case "failed":
+      return { key: "companySettings.customImage.status.failed", defaultValue: "Setup failed" };
+    default:
+      return { key: "companySettings.customImage.status.unknown", defaultValue: "Setup status" };
+  }
+}
+
+function EnvironmentImageTemplatePanel({
+  companyId,
+  environment,
+  providerCapability,
+  providerDisplayName,
+}: {
+  companyId: string;
+  environment: Environment;
+  providerCapability: EnvironmentProviderCapability | null | undefined;
+  providerDisplayName: string;
+}) {
+  const { t } = useTranslation();
+  const { pushToast } = useToast();
+  const queryClient = useQueryClient();
+  const state = capabilityState(providerCapability);
+  const overviewKey = queryKeys.environments.customImageTemplate(companyId, environment.id);
+  const stateLabel = t(state.labelKey, { defaultValue: state.labelDefault });
+  const stateReason = state.reasonKey && state.reasonDefault
+    ? t(state.reasonKey, { defaultValue: state.reasonDefault })
+    : null;
+  const sessionStatusText = (status: EnvironmentCustomImageSetupSession["status"]) => {
+    const copy = sessionStatusCopy(status);
+    return t(copy.key, { defaultValue: copy.defaultValue });
+  };
+
+  const overviewQuery = useQuery({
+    queryKey: overviewKey,
+    queryFn: () => environmentsApi.customImageTemplate(environment.id, companyId),
+    enabled: state.kind === "supported",
+    retry: false,
+  });
+
+  const activeSessionId = overviewQuery.data?.activeSession?.id ?? null;
+  const sessionQuery = useQuery({
+    queryKey: activeSessionId
+      ? queryKeys.environments.customImageSetupSession(activeSessionId)
+      : ["environment-custom-image-setup-sessions", "none", environment.id],
+    queryFn: () => environmentsApi.customImageSetupSession(activeSessionId!),
+    enabled: Boolean(activeSessionId && isActiveCustomImageSetupSession(overviewQuery.data?.activeSession)),
+    retry: false,
+  });
+
+  function setSessionResult(result: EnvironmentCustomImageSetupSessionResult) {
+    queryClient.setQueryData(
+      queryKeys.environments.customImageSetupSession(result.session.id),
+      result,
+    );
+  }
+
+  function invalidateOverview() {
+    void queryClient.invalidateQueries({ queryKey: overviewKey });
+  }
+
+  const startSetupMutation = useMutation({
+    mutationFn: (input: { templateId?: string | null } = {}) =>
+      environmentsApi.startCustomImageSetupSession(environment.id, companyId, {
+        templateId: input.templateId ?? null,
+      }),
+    onSuccess: (result) => {
+      queryClient.setQueryData(overviewKey, (current: typeof overviewQuery.data) => ({
+        activeTemplate: current?.activeTemplate ?? null,
+        activeSession: result.session,
+        latestSession: result.session,
+      }));
+      setSessionResult(result);
+      invalidateOverview();
+      pushToast({
+        title: t("companySettings.customImage.setupStartedTitle", { defaultValue: "Setup session started" }),
+        body: t("companySettings.customImage.setupStartedBody", {
+          defaultValue: "Connect details are available while the session is active.",
+        }),
+        tone: "success",
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        title: t("companySettings.customImage.setupStartFailedTitle", { defaultValue: "Failed to start setup" }),
+        body: error instanceof Error
+          ? error.message
+          : t("companySettings.customImage.setupStartFailedBody", {
+              defaultValue: "Setup session could not be started.",
+            }),
+        tone: "error",
+      });
+    },
+  });
+
+  const finishSetupMutation = useMutation({
+    mutationFn: (sessionId: string) => environmentsApi.finishCustomImageSetupSession(sessionId, {}),
+    onSuccess: (result) => {
+      queryClient.setQueryData(overviewKey, {
+        activeTemplate: result.template,
+        activeSession: null,
+        latestSession: result.session,
+      });
+      setSessionResult({ session: result.session, connectionPayload: null });
+      invalidateOverview();
+      pushToast({
+        title: t("companySettings.customImage.templateCapturedTitle", { defaultValue: "Template captured" }),
+        body: t("companySettings.customImage.templateCapturedBody", {
+          defaultValue: "Future runs can use the promoted template.",
+        }),
+        tone: "success",
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        title: t("companySettings.customImage.templateCaptureFailedTitle", {
+          defaultValue: "Failed to capture template",
+        }),
+        body: error instanceof Error
+          ? error.message
+          : t("companySettings.customImage.templateCaptureFailedBody", {
+              defaultValue: "Template capture failed.",
+            }),
+        tone: "error",
+      });
+    },
+  });
+
+  const cancelSetupMutation = useMutation({
+    mutationFn: (sessionId: string) =>
+      environmentsApi.cancelCustomImageSetupSession(sessionId, { reason: "operator cancelled" }),
+    onSuccess: (session) => {
+      queryClient.setQueryData(overviewKey, (current: typeof overviewQuery.data) => ({
+        activeTemplate: current?.activeTemplate ?? null,
+        activeSession: null,
+        latestSession: session,
+      }));
+      setSessionResult({ session, connectionPayload: null });
+      invalidateOverview();
+      pushToast({
+        title: t("companySettings.customImage.setupCancelledTitle", { defaultValue: "Setup cancelled" }),
+        body: t("companySettings.customImage.setupCancelledBody", {
+          defaultValue: "The active template was not changed.",
+        }),
+        tone: "success",
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        title: t("companySettings.customImage.setupCancelFailedTitle", { defaultValue: "Failed to cancel setup" }),
+        body: error instanceof Error
+          ? error.message
+          : t("companySettings.customImage.setupCancelFailedBody", {
+              defaultValue: "Setup session could not be cancelled.",
+            }),
+        tone: "error",
+      });
+    },
+  });
+
+  const rollbackTemplateMutation = useMutation({
+    mutationFn: () => environmentsApi.rollbackCustomImageTemplate(environment.id, companyId),
+    onSuccess: (result) => {
+      queryClient.setQueryData(overviewKey, (current: typeof overviewQuery.data) => ({
+        activeTemplate: result.activeTemplate,
+        activeSession: null,
+        latestSession: current?.latestSession ?? null,
+      }));
+      invalidateOverview();
+      pushToast({
+        title: t("companySettings.customImage.templateRolledBackTitle", { defaultValue: "Template rolled back" }),
+        body: t("companySettings.customImage.templateRolledBackBody", {
+          defaultValue: "Future runs will use the previous template.",
+        }),
+        tone: "success",
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        title: t("companySettings.customImage.templateRollbackFailedTitle", {
+          defaultValue: "Failed to roll back template",
+        }),
+        body: error instanceof Error
+          ? error.message
+          : t("companySettings.customImage.templateRollbackFailedBody", { defaultValue: "Rollback failed." }),
+        tone: "error",
+      });
+    },
+  });
+
+  const disableTemplateMutation = useMutation({
+    mutationFn: () => environmentsApi.disableCustomImageTemplate(environment.id, companyId),
+    onSuccess: (template) => {
+      queryClient.setQueryData(overviewKey, (current: typeof overviewQuery.data) => ({
+        activeTemplate: null,
+        activeSession: null,
+        latestSession: current?.latestSession ?? null,
+      }));
+      invalidateOverview();
+      pushToast({
+        title: t("companySettings.customImage.templateDisabledTitle", { defaultValue: "Template disabled" }),
+        body: t("companySettings.customImage.templateDisabledBody", {
+          defaultValue: "Future runs will use the base provider configuration.",
+        }),
+        tone: "success",
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        title: t("companySettings.customImage.templateDisableFailedTitle", {
+          defaultValue: "Failed to disable template",
+        }),
+        body: error instanceof Error
+          ? error.message
+          : t("companySettings.customImage.templateDisableFailedBody", { defaultValue: "Disable failed." }),
+        tone: "error",
+      });
+    },
+  });
+
+  if (state.kind !== "supported") {
+    return (
+      <div className="mt-3 border-t border-border/60 pt-3 text-xs" data-testid={`custom-image-template-state-${environment.id}`}>
+        <div className="font-medium text-foreground">{stateLabel}</div>
+        <div className="mt-1 text-muted-foreground">{stateReason}</div>
+      </div>
+    );
+  }
+
+  if (overviewQuery.isLoading) {
+    return (
+      <div className="mt-3 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+        {t("companySettings.customImage.loading", { defaultValue: "Loading template setup..." })}
+      </div>
+    );
+  }
+
+  if (overviewQuery.isError) {
+    return (
+      <div className="mt-3 border-t border-border/60 pt-3 text-xs text-destructive">
+        {overviewQuery.error instanceof Error
+          ? overviewQuery.error.message
+          : t("companySettings.customImage.loadFailed", { defaultValue: "Template setup could not be loaded." })}
+      </div>
+    );
+  }
+
+  const overview = overviewQuery.data;
+  const activeTemplate = overview?.activeTemplate ?? null;
+  const refreshedSession = sessionQuery.data?.session ?? null;
+  const session = refreshedSession ?? overview?.activeSession ?? null;
+  const latestSession = !isActiveCustomImageSetupSession(session)
+    ? session ?? overview?.latestSession ?? null
+    : overview?.latestSession ?? null;
+  const connectionPayload = session?.status === "waiting_for_user"
+    ? sessionQuery.data?.connectionPayload ?? null
+    : null;
+  const connectionCommand = readConnectionCommand(connectionPayload);
+  const sessionExpiresAt = formatDateTime(connectionPayload?.expiresAt ?? session?.expiresAt ?? null);
+  const capturedAt = formatDateTime(activeTemplate?.capturedAt ?? activeTemplate?.createdAt ?? null);
+  const lastUsedAt = formatDateTime(activeTemplate?.lastUsedAt ?? null);
+  const isMutating =
+    startSetupMutation.isPending ||
+    finishSetupMutation.isPending ||
+    cancelSetupMutation.isPending ||
+    rollbackTemplateMutation.isPending ||
+    disableTemplateMutation.isPending;
+
+  if (session && isActiveCustomImageSetupSession(session)) {
+    const isCapturing = session.status === "capturing";
+    return (
+      <div className="mt-3 border-t border-border/60 pt-3" data-testid={`custom-image-template-state-${environment.id}`}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="text-xs font-medium">{sessionStatusText(session.status)}</div>
+            <div className="text-xs text-muted-foreground">
+              {providerDisplayName}
+              {sessionExpiresAt
+                ? t("companySettings.customImage.expiresAt", {
+                    defaultValue: " · expires {{time}}",
+                    time: sessionExpiresAt,
+                  })
+                : ""}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => finishSetupMutation.mutate(session.id)}
+              disabled={isMutating || session.status !== "waiting_for_user"}
+            >
+              <Check className="mr-1.5 h-3.5 w-3.5" />
+              {t("companySettings.customImage.finished", { defaultValue: "Finished" })}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => cancelSetupMutation.mutate(session.id)}
+              disabled={isMutating || isCapturing}
+            >
+              <X className="mr-1.5 h-3.5 w-3.5" />
+              {t("Cancel", { defaultValue: "Cancel" })}
+            </Button>
+          </div>
+        </div>
+        {session.status === "waiting_for_user" && connectionCommand ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-muted/30 px-3 py-2">
+            <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-[11px] leading-5">
+              {connectionCommand}
+            </code>
+          </div>
+        ) : null}
+        {session.status === "waiting_for_user" && !connectionCommand ? (
+          <div className="mt-2 text-xs text-muted-foreground">
+            {t("companySettings.customImage.connectionUnavailable", {
+              defaultValue: "Connection details are not available yet.",
+            })}
+          </div>
+        ) : null}
+        {session.failureReason ? (
+          <div className="mt-2 text-xs text-destructive">{session.failureReason}</div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (activeTemplate) {
+    return (
+      <div className="mt-3 border-t border-border/60 pt-3" data-testid={`custom-image-template-state-${environment.id}`}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="text-xs font-medium">
+              {t("companySettings.customImage.activeTemplate", { defaultValue: "Active template" })}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {providerDisplayName} · {activeTemplate.templateKind}
+              {capturedAt
+                ? t("companySettings.customImage.capturedAt", {
+                    defaultValue: " · captured {{time}}",
+                    time: capturedAt,
+                  })
+                : ""}
+              {lastUsedAt
+                ? t("companySettings.customImage.lastUsedAt", {
+                    defaultValue: " · last used {{time}}",
+                    time: lastUsedAt,
+                  })
+                : ""}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => startSetupMutation.mutate({ templateId: activeTemplate.id })}
+              disabled={isMutating}
+            >
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              {t("Refresh", { defaultValue: "Refresh" })}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => rollbackTemplateMutation.mutate()}
+              disabled={isMutating}
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              {t("companySettings.customImage.rollback", { defaultValue: "Rollback" })}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => disableTemplateMutation.mutate()}
+              disabled={isMutating}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              {t("companySettings.customImage.disable", { defaultValue: "Disable" })}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 border-t border-border/60 pt-3" data-testid={`custom-image-template-state-${environment.id}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="text-xs font-medium">
+            {t("companySettings.customImage.notConfigured", { defaultValue: "Not configured" })}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {latestSession
+              ? sessionStatusText(latestSession.status)
+              : t("companySettings.customImage.captureDescription", {
+                  defaultValue: "Capture a custom {{provider}} image with your tools already logged in.",
+                  provider: providerDisplayName,
+                })}
+          </div>
+          {latestSession?.failureReason ? (
+            <div className="text-xs text-destructive">{latestSession.failureReason}</div>
+          ) : null}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => startSetupMutation.mutate({ templateId: null })}
+          disabled={isMutating}
+        >
+          <Play className="mr-1.5 h-3.5 w-3.5" />
+          {t("companySettings.customImage.configureImage", { defaultValue: "Configure image" })}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function CompanyEnvironments() {
@@ -481,6 +977,14 @@ export function CompanyEnvironments() {
       Object.keys(sandboxConfigErrors).length === 0);
 
   const savedEnvironments = environments ?? [];
+  const editingEnvironment = editingEnvironmentId
+    ? savedEnvironments.find((environment) => environment.id === editingEnvironmentId) ?? null
+    : null;
+  const editingSandboxProvider = editingEnvironment ? readEnvironmentSandboxProvider(editingEnvironment) : null;
+  const editingSandboxCapability = editingSandboxProvider
+    ? environmentCapabilities?.sandboxProviders?.[editingSandboxProvider]
+    : null;
+  const editingSandboxDisplayName = editingSandboxCapability?.displayName ?? editingSandboxProvider ?? "sandbox";
   const nonLocalEnvironments = savedEnvironments.filter((environment) => !isLocalEnvironment(environment));
   const instanceDefaultEnvironmentId = normalizeNonLocalEnvironmentId(
     instanceSettings?.defaultEnvironmentId ?? null,
@@ -557,6 +1061,12 @@ export function CompanyEnvironments() {
             savedEnvironments.map((environment) => {
               const probe = probeResults[environment.id] ?? null;
               const isEditing = editingEnvironmentId === environment.id;
+              const sandboxProvider = readEnvironmentSandboxProvider(environment);
+              const sandboxProviderCapability = sandboxProvider
+                ? environmentCapabilities?.sandboxProviders?.[sandboxProvider]
+                : null;
+              const sandboxProviderDisplayName =
+                sandboxProviderCapability?.displayName ?? sandboxProvider ?? "sandbox";
               return (
                 <div
                   key={environment.id}
@@ -582,20 +1092,16 @@ export function CompanyEnvironments() {
                       ) : environment.driver === "sandbox" ? (
                         <div className="text-xs text-muted-foreground">
                           {(() => {
-                            const provider =
-                              typeof environment.config.provider === "string" ? environment.config.provider : "sandbox";
-                            const displayName =
-                              environmentCapabilities?.sandboxProviders?.[provider]?.displayName ?? provider;
                             const summary = summarizeSandboxConfig(environment.config as Record<string, unknown>);
                             return summary
                               ? t("{{name}} sandbox provider · {{summary}}", {
                                 defaultValue: "{{name}} sandbox provider · {{summary}}",
-                                name: displayName,
+                                name: sandboxProviderDisplayName,
                                 summary,
                               })
                               : t("{{name}} sandbox provider", {
                                 defaultValue: "{{name}} sandbox provider",
-                                name: displayName,
+                                name: sandboxProviderDisplayName,
                               });
                           })()}
                         </div>
@@ -613,7 +1119,7 @@ export function CompanyEnvironments() {
                         >
                           {testingEnvironmentId === environment.id
                             ? t("Testing...", { defaultValue: "Testing..." })
-                            : environment.driver === "ssh"
+                          : environment.driver === "ssh"
                               ? t("companySettings.testConnection")
                               : t("companySettings.testProvider")}
                         </Button>
@@ -667,7 +1173,7 @@ export function CompanyEnvironments() {
             </DialogTitle>
             <DialogDescription>
               {t("companySettings.environmentDialogDescription", {
-                defaultValue: "Configure a reusable execution target for your agents.",
+                defaultValue: "Configure a reusable execution target for your agents. Saved changes affect future runs; Paperclip may start fresh sessions or sandbox leases after environment config changes.",
               })}
             </DialogDescription>
           </DialogHeader>
@@ -857,6 +1363,27 @@ export function CompanyEnvironments() {
                       {t("companySettings.sandboxNoExtraFields")}
                     </div>
                   )}
+                </div>
+              ) : null}
+
+              {editingEnvironment &&
+              editingEnvironment.driver === "sandbox" &&
+              environmentForm.driver === "sandbox" ? (
+                <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 px-3 py-3">
+                  <div className="text-sm font-medium">
+                    {t("companySettings.customImage.title", { defaultValue: "Custom image" })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t("companySettings.customImage.description", {
+                      defaultValue: "Start a setup sandbox, SSH in to customize the instance, then capture the running machine as a reusable image for future runs.",
+                    })}
+                  </div>
+                  <EnvironmentImageTemplatePanel
+                    companyId={selectedCompanyId}
+                    environment={editingEnvironment}
+                    providerCapability={editingSandboxCapability}
+                    providerDisplayName={editingSandboxDisplayName}
+                  />
                 </div>
               ) : null}
 
