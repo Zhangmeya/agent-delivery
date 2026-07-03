@@ -45,7 +45,7 @@ async function installPortableAgentRoutes(page: Page) {
 
   await page.route("**/agent-hires", async (route) => {
     const request = route.request();
-    const headers = request.headers();
+    const headers = await request.allHeaders();
     const body = JSON.parse(request.postData() || "{}") as Record<
       string,
       unknown
