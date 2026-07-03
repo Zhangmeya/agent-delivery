@@ -5,7 +5,7 @@ import { buildCodexLocalConfig } from "@penclipai/adapter-codex-local/ui";
 
 export const codexLocalUIAdapter: UIAdapterModule = {
   type: "codex_local",
-  label: "Codex (local)",
+  label: "Codex",
   parseStdoutLine: parseCodexStdoutLine,
   ConfigFields: CodexLocalConfigFields,
   buildAdapterConfig: buildCodexLocalConfig,

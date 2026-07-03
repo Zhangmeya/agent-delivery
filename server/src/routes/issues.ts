@@ -968,6 +968,7 @@ function queueResolvedInteractionContinuationWakeup(input: {
   const workspaceRefreshReason = readNonEmptyString(input.workspaceRefreshReason);
   const planTarget = readPlanConfirmationTargetForIssue(input.interaction.payload, input.issue.id);
   const interactionResult = readConfirmationResultForWake(input.interaction.result);
+  const checkboxSelection = readCheckboxSelectionForWake(input.interaction);
   const planReviewInteraction =
     planTarget && input.interaction.kind === "request_confirmation"
       ? {
@@ -991,6 +992,7 @@ function queueResolvedInteractionContinuationWakeup(input: {
       sourceCommentId: input.interaction.sourceCommentId ?? null,
       sourceRunId: input.interaction.sourceRunId ?? null,
       ...(planReviewInteraction ? { planReviewInteraction } : {}),
+      ...(checkboxSelection ? { checkboxSelection } : {}),
       mutation: "interaction",
     },
     requestedByActorType: input.actor.actorType,
@@ -1004,6 +1006,7 @@ function queueResolvedInteractionContinuationWakeup(input: {
       sourceCommentId: input.interaction.sourceCommentId ?? null,
       sourceRunId: input.interaction.sourceRunId ?? null,
       ...(planReviewInteraction ? { planReviewInteraction } : {}),
+      ...(checkboxSelection ? { checkboxSelection } : {}),
       wakeReason: "issue_commented",
       source: input.source,
       ...(forceFreshSession ? { forceFreshSession: true } : {}),
@@ -1015,6 +1018,41 @@ function queueResolvedInteractionContinuationWakeup(input: {
     interactionId: input.interaction.id,
     agentId: input.issue.assigneeAgentId,
   }, "failed to wake assignee on issue interaction resolution"));
+}
+
+function readCheckboxSelectionForWake(input: {
+  kind: string;
+  payload?: unknown;
+  result?: unknown;
+}) {
+  if (input.kind !== "request_checkbox_confirmation") return null;
+  const result = readObject(input.result);
+  if (result.outcome !== "accepted") return null;
+  const selectedOptionIds = Array.isArray(result.selectedOptionIds)
+    ? result.selectedOptionIds.filter((value): value is string => typeof value === "string" && value.length > 0)
+    : [];
+  const payload = readObject(input.payload);
+  const options = Array.isArray(payload.options)
+    ? payload.options
+        .map((value) => {
+          const option = readObject(value);
+          const id = readNonEmptyString(option.id);
+          if (!id) return null;
+          return {
+            id,
+            label: readNonEmptyString(option.label) ?? id,
+            description: readNonEmptyString(option.description),
+          };
+        })
+        .filter((value): value is { id: string; label: string; description: string | null } => Boolean(value))
+    : [];
+  const optionById = new Map(options.map((option) => [option.id, option]));
+
+  return {
+    prompt: readNonEmptyString(payload.prompt),
+    selectedOptionIds,
+    selectedOptions: selectedOptionIds.map((id) => optionById.get(id) ?? { id, label: id, description: null }),
+  };
 }
 
 function diffExecutionParticipants(

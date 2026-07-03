@@ -103,17 +103,26 @@ function fromGitShellPath(value: string) {
   );
 }
 
+function normalizePathValueForSearch(value: string) {
+  if (process.platform !== "win32") return value;
+  return value
+    .replace(/\\/g, "/")
+    .replace(/(^|[;:])([A-Za-z]):\//g, (_match, prefix: string, drive: string) => `${prefix}/${drive.toLowerCase()}/`)
+    .toLowerCase();
+}
+
 function augmentTestPosixPath(env: Record<string, string>) {
   if (process.platform !== "win32") return env;
   const entries = [
     "/usr/bin",
     "/bin",
-    "C:\\Program Files\\Git\\usr\\bin",
-    "C:\\Program Files\\Git\\bin",
-  ].filter((entry) => entry.startsWith("/") || existsSync(entry));
+    toGitShellPath(path.dirname(process.execPath)),
+    toGitShellPath("C:\\Program Files\\Git\\usr\\bin"),
+    toGitShellPath("C:\\Program Files\\Git\\bin"),
+  ].filter((entry) => entry.startsWith("/") || existsSync(fromGitShellPath(entry)));
   return {
     ...env,
-    PATH: [...entries, env.PATH ?? process.env.PATH ?? ""].join(path.delimiter),
+    PATH: [...entries, env.PATH ?? process.env.PATH ?? ""].join(":"),
   };
 }
 
@@ -124,13 +133,6 @@ function envForGitShell(env: Record<string, string>) {
     ...env,
     ...(home ? { HOME: toGitShellPath(home) } : {}),
   });
-}
-
-function firstPathEntry(pathValue: string) {
-  if (process.platform !== "win32") return pathValue.split(":")[0];
-  const gitShellMatch = pathValue.match(/^\/[a-zA-Z]\/[^:]*/);
-  if (gitShellMatch) return fromGitShellPath(gitShellMatch[0]);
-  return pathValue.split(path.delimiter)[0];
 }
 
 function createLocalSandboxRunner() {
@@ -456,7 +458,12 @@ describe("cursor execute", () => {
         path: string;
       };
       expect(capture.command).toBe(cursorAgentPath);
-      expect(path.normalize(firstPathEntry(capture.path) ?? "")).toBe(path.join(homeDir, ".local", "bin"));
+      const capturedPath = normalizePathValueForSearch(capture.path);
+      const localBinPathEntry = normalizePathValueForSearch(toGitShellPath(path.join(homeDir, ".local", "bin")));
+      const cursorBinPathEntry = normalizePathValueForSearch(toGitShellPath(path.join(homeDir, ".cursor", "bin")));
+      expect(capturedPath).toContain(localBinPathEntry);
+      expect(capturedPath).toContain(cursorBinPathEntry);
+      expect(capturedPath.indexOf(localBinPathEntry)).toBeLessThan(capturedPath.indexOf(cursorBinPathEntry));
       expect(capture.prompt).toContain("Follow the paperclip heartbeat.");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
