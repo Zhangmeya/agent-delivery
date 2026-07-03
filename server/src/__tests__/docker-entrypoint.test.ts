@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const DOCKERFILE = join(REPO_ROOT, "Dockerfile");
 
 /**
  * Behavioral tests for scripts/docker-entrypoint.sh privilege handling.
@@ -22,7 +24,7 @@ const execFileAsync = promisify(execFile);
  * PATH so the branching logic runs unmodified on any host.
  */
 
-const ENTRYPOINT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "docker-entrypoint.sh");
+const ENTRYPOINT = join(REPO_ROOT, "scripts", "docker-entrypoint.sh");
 const describePosixEntrypoint = process.platform === "win32" ? describe.skip : describe;
 
 let stubDir: string;
@@ -65,6 +67,40 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(stubDir, { recursive: true, force: true });
+});
+
+function dockerfilePackageJsonCopySources(): string[] {
+  const dockerfile = readFileSync(DOCKERFILE, "utf8");
+  return dockerfile
+    .split(/\r?\n/)
+    .map((line) => line.trim().match(/^COPY\s+(?:--parents\s+)?(\S+?package\.json)\s+/)?.[1])
+    .filter((source): source is string => Boolean(source))
+    .map((source) => source.replace("/./", "/"));
+}
+
+function expandDockerfileCopySource(source: string): string[] {
+  if (!source.includes("*")) return [source];
+  const [prefix, suffix] = source.split("*", 2);
+  return readdirSync(join(REPO_ROOT, prefix), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `${prefix}${entry.name}${suffix}`);
+}
+
+describe("Dockerfile", () => {
+  it("only copies package manifests that exist in the repository", () => {
+    const missingSources = dockerfilePackageJsonCopySources()
+      .flatMap(expandDockerfileCopySource)
+      .filter((source) => !existsSync(join(REPO_ROOT, source)));
+
+    expect(missingSources).toEqual([]);
+  });
+
+  it("keeps external Hermes adapters out of the core image package-manifest layer", () => {
+    const sources = dockerfilePackageJsonCopySources();
+
+    expect(sources).not.toContain("packages/adapters/hermes/package.json");
+    expect(sources).not.toContain("packages/adapters/hermes-gateway/package.json");
+  });
 });
 
 describePosixEntrypoint("docker-entrypoint.sh", () => {
