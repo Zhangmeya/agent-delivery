@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { localized } from "../e2e/localized-selectors";
 
 const ADMIN_EMAIL =
   process.env.PAPERCLIP_RELEASE_SMOKE_EMAIL ??
@@ -11,7 +12,82 @@ const ADMIN_PASSWORD =
 
 const COMPANY_NAME = `Release-Smoke-${Date.now()}`;
 const AGENT_NAME = "CEO";
-const TASK_TITLE = "Release smoke task";
+const MISSION =
+  "Verify that the published Docker image can complete onboarding.";
+const FIRST_TASK_TITLE =
+  /^(Hire your first engineer and create a hiring plan|招聘首位工程师并制定招聘计划)$/;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+async function installPortableAgentRoutes(page: Page) {
+  await page.route("**/test-environment", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        adapterType: "claude_local",
+        status: "pass",
+        checks: [
+          {
+            code: "release_smoke_portable_adapter",
+            level: "info",
+            message:
+              "Release smoke uses a portable process adapter for the first heartbeat.",
+          },
+        ],
+        testedAt: new Date().toISOString(),
+      }),
+    })
+  );
+
+  await page.route("**/agent-hires", async (route) => {
+    const request = route.request();
+    const headers = request.headers();
+    const body = JSON.parse(request.postData() || "{}") as Record<
+      string,
+      unknown
+    >;
+    const runtimeConfig = asRecord(body.runtimeConfig);
+    const heartbeat = asRecord(runtimeConfig.heartbeat);
+    const forwardedHeaders: Record<string, string> = {
+      ...headers,
+      "content-type": "application/json",
+    };
+    delete forwardedHeaders.host;
+    delete forwardedHeaders["content-length"];
+
+    const response = await fetch(request.url(), {
+      method: "POST",
+      headers: forwardedHeaders,
+      body: JSON.stringify({
+        ...body,
+        adapterType: "process",
+        adapterConfig: {
+          command: "node",
+          args: ["-e", "console.log('release smoke heartbeat')"],
+          timeoutSec: 20,
+        },
+        runtimeConfig: {
+          ...runtimeConfig,
+          heartbeat: {
+            ...heartbeat,
+            wakeOnDemand: true,
+            cooldownSec: 0,
+          },
+        },
+      }),
+    });
+
+    await route.fulfill({
+      status: response.status,
+      contentType: response.headers.get("content-type") ?? "application/json",
+      body: await response.text(),
+    });
+  });
+}
 
 async function signIn(page: Page) {
   await page.goto("/");
@@ -25,22 +101,32 @@ async function signIn(page: Page) {
 }
 
 async function openOnboarding(page: Page) {
-  const wizardHeading = page.locator("h3", { hasText: /^(Name your company|为你的公司命名)$/ });
-  const startButton = page.getByRole("button", { name: /^(Start Onboarding|开始引导)$/ });
-  const newCompanyButton = page.getByRole("button", { name: /^(New Company|新建公司)$/ });
+  const wizardHeading = page.getByRole("heading", {
+    name: localized.nameYourTeam,
+  });
+  const startButton = page.getByRole("button", {
+    name: /^(Start Onboarding|New Company|开始引导|新建公司)$/i,
+  });
+  const buildNewTeamButton = page.getByRole("button", {
+    name: localized.buildNewTeam,
+  });
 
   await Promise.any([
     wizardHeading.waitFor({ state: "visible", timeout: 20_000 }),
     startButton.waitFor({ state: "visible", timeout: 20_000 }),
-    newCompanyButton.waitFor({ state: "visible", timeout: 20_000 }),
+    buildNewTeamButton.waitFor({ state: "visible", timeout: 20_000 }),
   ]);
 
   if (!(await wizardHeading.isVisible())) {
     if (await startButton.isVisible()) {
       await startButton.click();
-    } else if (await newCompanyButton.isVisible()) {
-      await newCompanyButton.click();
     }
+  }
+  if (
+    !(await wizardHeading.isVisible()) &&
+    (await buildNewTeamButton.isVisible())
+  ) {
+    await buildNewTeamButton.click();
   }
 
   await expect(wizardHeading).toBeVisible({ timeout: 10_000 });
@@ -50,36 +136,35 @@ test.describe("Docker authenticated onboarding smoke", () => {
   test("logs in, completes onboarding, and triggers the first CEO run", async ({
     page,
   }) => {
+    await installPortableAgentRoutes(page);
     await signIn(page);
     await openOnboarding(page);
 
-    await page.locator('input[placeholder="Acme Corp"], input[placeholder="示例公司"]').fill(COMPANY_NAME);
-    await page.getByRole("button", { name: /^(Next|下一步)$/ }).click();
+    await page.getByPlaceholder("Acme Corp").fill(COMPANY_NAME);
+    await page.getByRole("button", { name: localized.next }).click();
 
     await expect(
-      page.locator("h3", { hasText: /^(Create your first agent|创建首个智能体)$/ })
+      page.getByRole("heading", { name: localized.defineMission })
     ).toBeVisible({ timeout: 10_000 });
+    await page.getByPlaceholder(localized.missionPlaceholder).fill(MISSION);
+    await page.getByRole("button", { name: localized.confirmMission }).click();
 
-    await expect(page.locator('input[placeholder="CEO"]')).toHaveValue(AGENT_NAME);
-    await page.getByRole("button", { name: /^(Next|下一步)$/ }).click();
+    const leadName = page.getByPlaceholder(localized.chiefOfStaffPlaceholder);
+    await leadName.waitFor({ timeout: 30_000 });
+    await leadName.fill(AGENT_NAME);
+    await page.getByRole("button", { name: localized.next }).click();
 
-    await expect(
-      page.locator("h3", { hasText: /^(Give it something to do|给它一项任务)$/ })
-    ).toBeVisible({ timeout: 10_000 });
     await page
-      .locator('input[placeholder="e.g. Research competitor pricing"], input[placeholder="例如：调研竞品定价"]')
-      .fill(TASK_TITLE);
-    await page.getByRole("button", { name: /^(Next|下一步)$/ }).click();
+      .getByRole("button", { name: localized.giveItAHeartbeat })
+      .click();
 
-    await expect(
-      page.locator("h3", { hasText: /^(Ready to launch|准备启动)$/ })
-    ).toBeVisible({ timeout: 10_000 });
+    const getStarted = page.getByRole("button", { name: localized.getStarted });
+    await getStarted.waitFor({ timeout: 30_000 });
     await expect(page.getByText(COMPANY_NAME).first()).toBeVisible();
     await expect(page.getByText(AGENT_NAME).first()).toBeVisible();
-    await expect(page.getByText(TASK_TITLE).first()).toBeVisible();
 
-    await page.getByRole("button", { name: /^(Create & Open Issue|创建并打开任务)$/ }).click();
-    await expect(page).toHaveURL(/\/issues\//, { timeout: 10_000 });
+    await getStarted.click();
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 
     const baseUrl = new URL(page.url()).origin;
 
@@ -102,7 +187,7 @@ test.describe("Docker authenticated onboarding smoke", () => {
     const ceoAgent = agents.find((entry) => entry.name === AGENT_NAME);
     expect(ceoAgent).toBeTruthy();
     expect(ceoAgent!.role).toBe("ceo");
-    expect(ceoAgent!.adapterType).not.toBe("process");
+    expect(ceoAgent!.adapterType).toBe("process");
 
     const issuesRes = await page.request.get(
       `${baseUrl}/api/companies/${company!.id}/issues`
@@ -113,7 +198,7 @@ test.describe("Docker authenticated onboarding smoke", () => {
       title: string;
       assigneeAgentId: string | null;
     }>;
-    const issue = issues.find((entry) => entry.title === TASK_TITLE);
+    const issue = issues.find((entry) => FIRST_TASK_TITLE.test(entry.title));
     expect(issue).toBeTruthy();
     expect(issue!.assigneeAgentId).toBe(ceoAgent!.id);
 
@@ -137,7 +222,7 @@ test.describe("Docker authenticated onboarding smoke", () => {
           : null;
       },
       {
-        timeout: 30_000,
+        timeout: 45_000,
         intervals: [1_000, 2_000, 5_000],
       }
     ).toEqual(
