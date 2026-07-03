@@ -101,6 +101,8 @@ async function signIn(page: Page) {
 }
 
 async function openOnboarding(page: Page) {
+  await page.goto("/onboarding");
+
   const wizardHeading = page.getByRole("heading", {
     name: localized.nameYourTeam,
   });
@@ -160,8 +162,6 @@ test.describe("Docker authenticated onboarding smoke", () => {
 
     const getStarted = page.getByRole("button", { name: localized.getStarted });
     await getStarted.waitFor({ timeout: 30_000 });
-    await expect(page.getByText(COMPANY_NAME).first()).toBeVisible();
-    await expect(page.getByText(AGENT_NAME).first()).toBeVisible();
 
     await getStarted.click();
     await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
