@@ -120,8 +120,8 @@ vi.mock("./ReportsToPicker", () => ({
   ReportsToPicker: ({ chooseLabel }: { chooseLabel: string }) => <button type="button">{chooseLabel}</button>,
 }));
 
-vi.mock("./EnvVarEditor", () => ({
-  EnvVarEditor: () => <div>ENV</div>,
+vi.mock("./environment-variables-editor", () => ({
+  EnvironmentVariablesEditor: () => <div>ENV</div>,
 }));
 
 vi.mock("./PathInstructionsModal", () => ({

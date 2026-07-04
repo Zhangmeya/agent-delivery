@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { CompanySecret, RoutineEnvConfig } from "@penclipai/shared";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "./EmptyState";
-import { EnvVarEditor } from "./EnvVarEditor";
+import { EnvironmentVariablesEditor } from "./environment-variables-editor";
 import { AgentIcon } from "./AgentIconPicker";
 
 export interface StageSecretsPanelProps {
@@ -29,8 +29,8 @@ export interface StageSecretsPanelProps {
  * Stage Secrets tab body. Stage secrets are env bindings on the step's backing
  * automation routine — the same company-secret backbone used by routines,
  * agents, and projects. This panel is intentionally dense and reuses
- * `EnvVarEditor` for secret refs, inline secret creation, version selection,
- * and missing/disabled-secret warnings.
+ * `EnvironmentVariablesEditor` for secret refs, inline secret creation, version
+ * selection, and missing/disabled-secret warnings.
  */
 export function StageSecretsPanel({
   hasAutomation,
@@ -83,7 +83,7 @@ export function StageSecretsPanel({
       {secretsLoading ? (
         <p className="text-sm text-muted-foreground">{t("stageSecrets.loadingSecrets", { defaultValue: "Loading secrets..." })}</p>
       ) : (
-        <EnvVarEditor
+        <EnvironmentVariablesEditor
           value={value}
           secrets={secrets}
           onCreateSecret={onCreateSecret}

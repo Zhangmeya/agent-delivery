@@ -48,7 +48,10 @@ import { MarkdownEditor } from "./MarkdownEditor";
 import { ChoosePathButton } from "./PathInstructionsModal";
 import { OpenCodeLogoIcon } from "./OpenCodeLogoIcon";
 import { ReportsToPicker } from "./ReportsToPicker";
-import { EnvVarEditor } from "./EnvVarEditor";
+import {
+  EnvironmentVariablesEditor,
+  type EnvironmentVariablesEditorHandle,
+} from "./environment-variables-editor";
 import { shouldShowLegacyWorkingDirectoryField } from "../lib/legacy-agent-config";
 import { listAdapterOptions, listVisibleAdapterTypes } from "../adapters/metadata";
 import { getAdapterDisplay, getAdapterLabel } from "../adapters/adapter-display-registry";
@@ -220,6 +223,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const hideInstructionsFile = props.hideInstructionsFile ?? false;
   const { selectedCompanyId } = useCompany();
   const queryClient = useQueryClient();
+  const environmentVariablesEditorRef = useRef<EnvironmentVariablesEditorHandle | null>(null);
 
   // Sync disabled adapter types from server so dropdown filters them out
   const disabledTypes = useDisabledAdaptersSync();
@@ -323,14 +327,29 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     }));
   }
 
+  function flushEnvironmentDraft() {
+    return environmentVariablesEditorRef.current?.flushPendingDraft() ?? null;
+  }
+
   /** Build accumulated patch and send to parent */
   const handleCancel = useCallback(() => {
     setOverlay({ ...emptyOverlay });
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (isCreate || !isDirty) return;
-    await props.onSave(buildAgentUpdatePatch(props.agent, overlay));
+    if (isCreate) return;
+    const flushedEnv = flushEnvironmentDraft();
+    const nextOverlay = flushedEnv
+      ? {
+          ...overlay,
+          adapterConfig: {
+            ...overlay.adapterConfig,
+            env: flushedEnv,
+          },
+        }
+      : overlay;
+    if (!isOverlayDirty(nextOverlay)) return;
+    await props.onSave(buildAgentUpdatePatch(props.agent, nextOverlay));
   }, [isCreate, isDirty, overlay, props]);
 
   useEffect(() => {
@@ -547,7 +566,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     return next;
   }
 
-  function buildCheapAdapterConfigForTest(): Record<string, unknown> {
+  function buildCheapAdapterConfigForTest(adapterConfigPatch?: Record<string, unknown>): Record<string, unknown> {
     const adapterDefaultConfig = asObject(adapterCheapDefault?.adapterConfig);
     const createCheapModel = isCreate ? (val!.cheapModel ?? "").trim() : "";
     const cheapAdapterConfig = isCreate
@@ -560,12 +579,12 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
           ...cheapProfileFromAgent.adapterConfig,
           ...asObject(cheapOverlay?.adapterConfig),
         };
-    return buildAdapterConfigForTest(cheapAdapterConfig);
+    return buildAdapterConfigForTest({ ...cheapAdapterConfig, ...adapterConfigPatch });
   }
 
-  function getCheapModelTestCase(): { model: string; adapterConfig: Record<string, unknown> } | null {
+  function getCheapModelTestCase(adapterConfigPatch?: Record<string, unknown>): { model: string; adapterConfig: Record<string, unknown> } | null {
     if (!currentCheapEnabled) return null;
-    const adapterConfig = buildCheapAdapterConfigForTest();
+    const adapterConfig = buildCheapAdapterConfigForTest(adapterConfigPatch);
     const configModel = typeof adapterConfig.model === "string" ? adapterConfig.model.trim() : "";
     const model = configModel || currentCheapModel.trim();
     if (!model) return null;
@@ -632,8 +651,10 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       if (!selectedCompanyId) {
         throw new Error(t("agentConfig.selectCompanyToTestEnvironment", { defaultValue: "Select a company before testing the adapter environment." }));
       }
+      const flushedEnv = flushEnvironmentDraft();
+      const adapterConfigPatch = flushedEnv ? { env: flushedEnv } : undefined;
       const primaryModel = currentModelId.trim() || null;
-      const cheapTestCase = getCheapModelTestCase();
+      const cheapTestCase = getCheapModelTestCase(adapterConfigPatch);
       const environmentId = currentDefaultEnvironmentId || null;
       const testResults: Array<{ label: string; model: string | null; result: AdapterEnvironmentTestResult }> = [
         {
@@ -642,7 +663,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
           result: await runEnvironmentTestCase(
             "Primary model",
             primaryModel,
-            buildAdapterConfigForTest(),
+            buildAdapterConfigForTest(adapterConfigPatch),
             environmentId,
           ),
         },
@@ -1398,7 +1419,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               </Field>
 
               <Field label={t("agentConfig.environmentVariables", { defaultValue: "Environment variables" })} hint={helpHint("envVars")}>
-                <EnvVarEditor
+                <EnvironmentVariablesEditor
+                  ref={environmentVariablesEditorRef}
                   value={
                     isCreate
                       ? ((val!.envBindings ?? EMPTY_ENV) as Record<string, EnvBinding>)
