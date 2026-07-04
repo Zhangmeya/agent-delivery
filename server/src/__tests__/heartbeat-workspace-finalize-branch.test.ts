@@ -279,6 +279,8 @@ describeEmbeddedPostgres("heartbeat workspace finalization branch guard", () => 
     await db.delete(environmentLeases);
     await db.delete(activityLog);
     await db.delete(heartbeatRunEvents);
+    // Heartbeat completion can enqueue a final activity row after idle is observed.
+    await db.delete(activityLog);
     await db.delete(heartbeatRuns);
     await db.delete(issueComments);
     await db.delete(issues);
