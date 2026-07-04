@@ -1,5 +1,6 @@
 appId: ai.penclip.desktop
 productName: Paperclip CN
+executableName: Paperclip-CN
 artifactName: "Paperclip-CN-${version}-${arch}.${ext}"
 asar: false
 compression: maximum
