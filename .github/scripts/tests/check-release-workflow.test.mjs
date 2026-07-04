@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const releaseWorkflow = readFileSync(".github/workflows/release.yml", "utf8");
+const desktopBuilderConfig = readFileSync("packages/desktop-electron/electron-builder.yml", "utf8");
 
 test("release verification uses split Vitest jobs before publishing", () => {
   for (const job of [
@@ -56,4 +57,8 @@ test("release publish jobs trigger smoke and desktop follow-ups", () => {
   assert.match(releaseWorkflow, /paperclip_version: latest/);
   assert.match(releaseWorkflow, /uses: \.\/\.github\/workflows\/desktop-release\.yml/);
   assert.match(releaseWorkflow, /source_ref: \$\{\{ needs\.publish_stable\.outputs\.tag \}\}/);
+});
+
+test("desktop release config uses a safe executable name", () => {
+  assert.match(desktopBuilderConfig, /^executableName: Paperclip-CN$/m);
 });
