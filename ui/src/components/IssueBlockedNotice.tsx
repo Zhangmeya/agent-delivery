@@ -252,7 +252,7 @@ export function IssueBlockedNotice({
                 ) : null}
                 <span className="rounded-md border border-amber-300/70 bg-background/80 px-2 py-1 text-amber-900 dark:border-amber-500/40 dark:bg-background/40 dark:text-amber-100">
                   {t("issueBlocked.correctiveWakeQueued", {
-                    agentName: agentName ?? t("issueBlocked.assignee", { defaultValue: "the assignee" }),
+                    agentName: agentName ?? t("issueBlocked.assignee", { defaultValue: "the responsible" }),
                     defaultValue: "Corrective wake queued for {{agentName}}",
                   })}
                 </span>
@@ -279,9 +279,9 @@ export function IssueBlockedNotice({
           {blockers.length > 0 || issueStatus === "blocked" ? (
             <>
               <p className="leading-5">
-                {blockers.length > 0
-                  ? isStalled
-                    ? stalledLeafBlockers.length > 1
+                  {blockers.length > 0
+                    ? isStalled
+                      ? stalledLeafBlockers.length > 1
                       ? t("issueBlocked.stalledMany", {
                         blockerLabel,
                         defaultValue: "Work on this task is blocked by {{blockerLabel}}, but the chain is stalled in review without a clear next step. Resolve the stalled reviews below or remove them as blockers.",
@@ -293,10 +293,10 @@ export function IssueBlockedNotice({
                     : t(blockers.length === 1 ? "issueBlocked.blockedByOne" : "issueBlocked.blockedByMany", {
                       blockerLabel,
                       defaultValue: blockers.length === 1
-                        ? "Work on this task is blocked by {{blockerLabel}} until it is complete. Comments still wake the assignee for questions or triage."
-                        : "Work on this task is blocked by {{blockerLabel}} until they are complete. Comments still wake the assignee for questions or triage.",
+                        ? "Work on this task is blocked by {{blockerLabel}} until it is complete. Comments still wake the responsible for questions or triage."
+                        : "Work on this task is blocked by {{blockerLabel}} until they are complete. Comments still wake the responsible for questions or triage.",
                     })
-                  : t("issueBlocked.blockedNoLinks", { defaultValue: "Work on this task is blocked until it is moved back to todo. Comments still wake the assignee for questions or triage." })}
+                  : t("issueBlocked.blockedNoLinks", { defaultValue: "Work on this task is blocked until it is moved back to todo. Comments still wake the responsible for questions or triage." })}
               </p>
               {blockers.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">

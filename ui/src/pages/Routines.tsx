@@ -690,10 +690,10 @@ export function Routines() {
                     value={draft.assigneeAgentId}
                     options={assigneeOptions}
                     recentOptionIds={recentAssigneeIds}
-                    placeholder={t("Assignee")}
-                    noneLabel={t("No assignee")}
-                    searchPlaceholder={t("Search assignees...")}
-                    emptyMessage={t("No assignees found.")}
+                    placeholder={t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+                    noneLabel={t("issueChat.noAssignee", { defaultValue: "No responsible" })}
+                    searchPlaceholder={t("issueChat.searchAssignees", { defaultValue: "Search responsible..." })}
+                    emptyMessage={t("issueChat.noAssigneesFound", { defaultValue: "No responsible found." })}
                     onChange={(assigneeAgentId) => {
                       if (assigneeAgentId) trackRecentAssignee(assigneeAgentId);
                       setDraft((current) => ({ ...current, assigneeAgentId }));
@@ -716,7 +716,9 @@ export function Routines() {
                           <span className="truncate">{option.label}</span>
                         )
                       ) : (
-                        <span className="text-muted-foreground">{t("Assignee")}</span>
+                        <span className="text-muted-foreground">
+                          {t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+                        </span>
                       )
                     }
                     renderOption={(option) => {

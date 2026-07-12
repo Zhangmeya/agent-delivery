@@ -4083,14 +4083,20 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
             ref={reassignTriggerRef}
             value={reassignTarget}
             options={reassignOptions}
-            placeholder={t("issueChat.assigneePlaceholder")}
-            noneLabel={t("issueChat.noAssignee")}
-            searchPlaceholder={t("issueChat.searchAssignees")}
-            emptyMessage={t("issueChat.noAssigneesFound")}
+            placeholder={t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+            noneLabel={t("issueChat.noAssignee", { defaultValue: "No responsible" })}
+            searchPlaceholder={t("issueChat.searchAssignees", { defaultValue: "Search responsible..." })}
+            emptyMessage={t("issueChat.noAssigneesFound", { defaultValue: "No responsible found." })}
             onChange={setReassignTarget}
             className="h-8 text-xs"
             renderTriggerValue={(option) => {
-              if (!option) return <span className="text-muted-foreground">{t("issueChat.assigneePlaceholder")}</span>;
+              if (!option) {
+                return (
+                  <span className="text-muted-foreground">
+                    {t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+                  </span>
+                );
+              }
               const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
               const agent = agentId ? agentMap?.get(agentId) : null;
               return (
@@ -4135,9 +4141,14 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
           }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("issueChat.noAssigneeSelectedTitle")}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("issueChat.noAssigneeSelectedTitle", { defaultValue: "No responsible selected" })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("issueChat.noAssigneeSelectedDescription")}
+              {t("issueChat.noAssigneeSelectedDescription", {
+                defaultValue:
+                  "This comment will be posted without a responsible, so no agent will be woken to act on it. Go back to pick a responsible, or send anyway.",
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

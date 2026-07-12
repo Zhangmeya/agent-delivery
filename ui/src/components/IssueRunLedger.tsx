@@ -1,5 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { ActivityEvent, Issue, Agent } from "@penclipai/shared";
+import {
+  isResponsibleUserDenialCode,
+  responsibleUserLabel,
+  type ActivityEvent,
+  type Agent,
+  type Issue,
+} from "@penclipai/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -21,6 +27,7 @@ import { describeRunRetryState } from "../lib/runRetryState";
 import { translateStatusLabel } from "../lib/i18n-labels";
 import { readSourceResolvedWatchdogFold } from "../lib/source-resolved-watchdog-fold";
 import { SourceResolvedFoldBadge } from "./SourceResolvedFoldBadge";
+import { ResponsibleUserDenialNotice } from "./ResponsibleUserDenialNotice";
 
 type IssueRunLedgerProps = {
   issueId: string;
@@ -31,6 +38,7 @@ type IssueRunLedgerProps = {
   hasLiveRuns: boolean;
   activityEvents?: ActivityEvent[];
   renderActivityEvent?: (event: ActivityEvent) => ReactNode;
+  resolveUserLabel?: (userId: string) => string | null | undefined;
 };
 
 type IssueRunLedgerContentProps = {
@@ -42,6 +50,7 @@ type IssueRunLedgerContentProps = {
   agentMap: ReadonlyMap<string, Pick<Agent, "name">>;
   activityEvents?: ActivityEvent[];
   renderActivityEvent?: (event: ActivityEvent) => ReactNode;
+  resolveUserLabel?: (userId: string) => string | null | undefined;
   pendingWatchdogDecision?: WatchdogDecisionInput["decision"] | null;
   canRecordWatchdogDecisions?: boolean;
   watchdogDecisionError?: string | null;
@@ -572,6 +581,7 @@ export function IssueRunLedger({
   hasLiveRuns,
   activityEvents,
   renderActivityEvent,
+  resolveUserLabel,
 }: IssueRunLedgerProps) {
   const { t } = useTranslation(undefined, { useSuspense: false });
   const queryClient = useQueryClient();
@@ -637,6 +647,7 @@ export function IssueRunLedger({
       agentMap={agentMap}
       activityEvents={activityEvents}
       renderActivityEvent={renderActivityEvent}
+      resolveUserLabel={resolveUserLabel}
       pendingWatchdogDecision={watchdogDecision.variables?.decision ?? null}
       canRecordWatchdogDecisions={canBoardRecordWatchdogDecision(companyId, boardAccess)}
       watchdogDecisionError={watchdogDecisionError}
@@ -654,6 +665,7 @@ export function IssueRunLedgerContent({
   agentMap,
   activityEvents,
   renderActivityEvent,
+  resolveUserLabel,
   pendingWatchdogDecision,
   canRecordWatchdogDecisions = true,
   watchdogDecisionError,
@@ -897,6 +909,10 @@ export function IssueRunLedgerContent({
             const outputSilence = outputSilenceCopy
               ? translateOutputSilenceCopy(outputSilenceCopy, t)
               : null;
+            const onBehalfOfLabel = run.responsibleUserId
+              ? responsibleUserLabel(resolveUserLabel?.(run.responsibleUserId))
+              : null;
+            const denialCode = isResponsibleUserDenialCode(run.errorCode) ? run.errorCode : null;
             const sourceResolvedFold = readSourceResolvedWatchdogFold(run.resultJson);
             return (
               <article
@@ -912,6 +928,19 @@ export function IssueRunLedgerContent({
                     {run.runId.slice(0, 8)}
                   </Link>
                   <span>{t("issueRunLedger.byAgent", { agentName, defaultValue: "by {{agentName}}" })}</span>
+                  {onBehalfOfLabel ? (
+                    <span
+                      data-testid="run-on-behalf-of"
+                      className="min-w-0 max-w-full truncate text-muted-foreground"
+                      title={t("issueRunLedger.actingOnBehalfOfTitle", {
+                        user: onBehalfOfLabel,
+                        defaultValue: "Acting on behalf of {{user}}",
+                      })}
+                    >
+                      {t("issueRunLedger.onBehalfOf", { defaultValue: "on behalf of" })}{" "}
+                      <span className="text-foreground">{onBehalfOfLabel}</span>
+                    </span>
+                  ) : null}
                   <span className="rounded-md border border-border px-1.5 py-0.5 text-[11px] capitalize text-muted-foreground">
                     {statusLabel(run.status, t)}
                   </span>
@@ -1048,6 +1077,13 @@ export function IssueRunLedgerContent({
                   <p className="min-w-0 break-words text-xs leading-5 text-muted-foreground">
                     {formatLivenessReason(run.livenessReason, t)}
                   </p>
+                ) : null}
+
+                {denialCode ? (
+                  <ResponsibleUserDenialNotice
+                    code={denialCode}
+                    userName={run.responsibleUserId ? resolveUserLabel?.(run.responsibleUserId) : null}
+                  />
                 ) : null}
 
                 {run.nextAction ? (

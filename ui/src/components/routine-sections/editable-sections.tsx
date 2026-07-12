@@ -149,10 +149,10 @@ export function OverviewSection({
             value={editDraft.assigneeAgentId}
             options={assigneeOptions}
             recentOptionIds={recentAssigneeIds}
-            placeholder={t("Assignee", { defaultValue: "Assignee" })}
-            noneLabel={t("issueChat.noAssignee", { defaultValue: "No assignee" })}
-            searchPlaceholder={t("issueChat.searchAssignees", { defaultValue: "Search assignees..." })}
-            emptyMessage={t("issueChat.noAssigneesFound", { defaultValue: "No assignees found." })}
+            placeholder={t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+            noneLabel={t("issueChat.noAssignee", { defaultValue: "No responsible" })}
+            searchPlaceholder={t("issueChat.searchAssignees", { defaultValue: "Search responsible..." })}
+            emptyMessage={t("issueChat.noAssigneesFound", { defaultValue: "No responsible found." })}
             onChange={(assigneeAgentId) =>
               setEditDraft((current) => ({ ...current, assigneeAgentId }))
             }
@@ -174,7 +174,9 @@ export function OverviewSection({
                   <span className="truncate">{option.label}</span>
                 )
               ) : (
-                <span className="text-muted-foreground">{t("Assignee", { defaultValue: "Assignee" })}</span>
+                <span className="text-muted-foreground">
+                  {t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+                </span>
               )
             }
             renderOption={(option) => {

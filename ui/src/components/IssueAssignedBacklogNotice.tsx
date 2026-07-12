@@ -22,7 +22,7 @@ export function IssueAssignedBacklogNotice({
   if (issueStatus !== "backlog") return null;
   if (!assigneeAgent && !assigneeUserId) return null;
 
-  const assigneeLabel = assigneeAgent?.name ?? t("issueAssignedBacklogNotice.assignee", { defaultValue: "the assignee" });
+  const assigneeLabel = assigneeAgent?.name ?? t("issueAssignedBacklogNotice.assignee", { defaultValue: "the responsible" });
 
   return (
     <div
@@ -47,7 +47,7 @@ export function IssueAssignedBacklogNotice({
           {assigneeAgent ? (
             <p className="text-xs leading-5 text-amber-800 dark:text-amber-200">
               {t("issueAssignedBacklogNotice.commentsStillWake", {
-                defaultValue: "Comments still wake the assignee for questions or triage. Leave this parked only if the work is intentionally on hold.",
+                defaultValue: "Comments still wake the responsible for questions or triage. Leave this parked only if the work is intentionally on hold.",
               })}
             </p>
           ) : null}

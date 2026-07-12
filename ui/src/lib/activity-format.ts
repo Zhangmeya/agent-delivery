@@ -376,11 +376,11 @@ function formatIssueUpdatedAction(details: ActivityDetails, options: ActivityFor
     const assigneeName = formatAssigneeName(details, options);
     parts.push(
       assigneeName
-        ? translateInstant("assigned the issue to {{assignee}}", {
+        ? translateInstant("made {{assignee}} responsible for the task", {
             assignee: assigneeName,
-            defaultValue: `assigned the issue to ${assigneeName}`,
+            defaultValue: `made ${assigneeName} responsible for the task`,
           })
-        : translateActivityText("unassigned the issue"),
+        : translateActivityText("cleared the responsible"),
     );
   }
   if (details.title !== undefined) parts.push(translateActivityText("updated the title"));

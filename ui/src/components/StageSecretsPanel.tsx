@@ -61,7 +61,7 @@ export function StageSecretsPanel({
     );
   }
 
-  const displayName = agentName?.trim() || t("stageSecrets.assignedAgentFallback", { defaultValue: "the assigned agent" });
+  const displayName = agentName?.trim() || t("stageSecrets.assignedAgentFallback", { defaultValue: "the responsible agent" });
 
   return (
     <div className="space-y-5">

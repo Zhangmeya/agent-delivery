@@ -276,6 +276,14 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
     queryFn: () => secretsApi.list(selectedCompanyId!),
     enabled: Boolean(selectedCompanyId),
   });
+  const { data: userSecretDefinitions = [] } = useQuery({
+    queryKey: selectedCompanyId
+      ? queryKeys.secrets.userDefinitions(selectedCompanyId)
+      : ["user-secret-definitions", "none"],
+    queryFn: () => secretsApi.listUserSecretDefinitions(selectedCompanyId!),
+    enabled: Boolean(selectedCompanyId),
+    retry: false,
+  });
   const createSecret = useMutation({
     mutationFn: (input: { name: string; value: string }) => {
       if (!selectedCompanyId) {
@@ -639,6 +647,7 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
             <EnvironmentVariablesEditor
               value={project.env ?? {}}
               secrets={availableSecrets}
+              userSecretDefinitions={userSecretDefinitions}
               onCreateSecret={async (name, value) => {
                 const created = await createSecret.mutateAsync({ name, value });
                 return created;

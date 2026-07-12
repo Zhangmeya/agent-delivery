@@ -6,9 +6,10 @@ import {
   MoreHorizontal,
   ShieldAlert,
   Type as TypeIcon,
+  UserRound,
   X,
 } from "lucide-react";
-import type { CompanySecret } from "@penclipai/shared";
+import type { CompanySecret, UserSecretDefinition } from "@penclipai/shared";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -23,10 +24,12 @@ import { CreateSecretPopover, ConvertToSecretPopover } from "./CreateSecretPopov
 import { isSensitiveEnv } from "./sensitive";
 import {
   computeRowHealth,
+  computeUserSecretRowHealth,
   planSourceSwitch,
   secretNameFromKey,
   type EnvRow,
   type NameIssue,
+  type RowSource,
 } from "./model";
 
 const nameInputClass =
@@ -45,6 +48,7 @@ export interface EnvironmentVariableRowProps {
   row: EnvRow;
   isLast: boolean;
   secrets: readonly CompanySecret[];
+  userSecretDefinitions?: readonly UserSecretDefinition[];
   recentlyUsedSecrets?: readonly CompanySecret[];
   disabled?: boolean;
   nameIssue: NameIssue | null;
@@ -68,6 +72,7 @@ export function EnvironmentVariableRow({
   row,
   isLast,
   secrets,
+  userSecretDefinitions,
   recentlyUsedSecrets,
   disabled,
   nameIssue,
@@ -91,8 +96,9 @@ export function EnvironmentVariableRow({
   const [versionOpen, setVersionOpen] = useState(false);
   const [undoPrev, setUndoPrev] = useState<EnvRow | null>(null);
 
-  const health = computeRowHealth(row, secrets);
+  const health = computeRowHealth(row, secrets) ?? computeUserSecretRowHealth(row, userSecretDefinitions);
   const boundSecret = row.source === "secret" ? secrets.find((s) => s.id === row.secretId) ?? null : null;
+  const userSecretsEnabled = (userSecretDefinitions?.length ?? 0) > 0;
   const sensitive =
     row.source === "text" && !row.sensitiveDismissed && isSensitiveEnv(row.name, row.textValue);
 
@@ -103,9 +109,11 @@ export function EnvironmentVariableRow({
       nameInputRef.current?.focus();
     } else if (row.source === "text") {
       valueInputRef.current?.focus();
-    } else {
+    } else if (row.source === "secret") {
       // Focusing the combobox trigger opens SearchableSelect (non-pointer focus).
       valueCellRef.current?.querySelector<HTMLElement>("[role=combobox]")?.focus();
+    } else {
+      valueCellRef.current?.querySelector<HTMLElement>("select,input")?.focus();
     }
     onFocusConsumed();
   }, [focusRequest, onFocusConsumed, row.source]);
@@ -117,7 +125,14 @@ export function EnvironmentVariableRow({
     return () => window.clearTimeout(handle);
   }, [undoPrev]);
 
-  function switchSource(next: "text" | "secret") {
+  function switchSource(next: RowSource) {
+    if (next === "user_secret") {
+      if (row.source === "user_secret") return;
+      onPatch({ source: "user_secret", secretId: "", version: "latest" });
+      window.setTimeout(() => valueCellRef.current?.querySelector<HTMLElement>("select,input")?.focus(), 0);
+      return;
+    }
+
     const plan = planSourceSwitch(row, next);
     switch (plan.kind) {
       case "noop":
@@ -135,7 +150,7 @@ export function EnvironmentVariableRow({
         return;
       }
       case "to-secret":
-        onPatch({ source: "secret" });
+        onPatch({ source: "secret", userSecretKey: "", required: true });
         // Auto-open the picker.
         window.setTimeout(() => {
           valueCellRef.current?.querySelector<HTMLElement>("[role=combobox]")?.focus();
@@ -143,7 +158,7 @@ export function EnvironmentVariableRow({
         return;
       case "to-text":
         if (plan.undoFrom) setUndoPrev(plan.undoFrom);
-        onPatch({ source: "text", secretId: "", version: "latest" });
+        onPatch({ source: "text", secretId: "", userSecretKey: "", required: true, version: "latest" });
         window.setTimeout(() => valueInputRef.current?.focus(), 0);
         return;
     }
@@ -151,7 +166,14 @@ export function EnvironmentVariableRow({
 
   async function submitSecretPopover(name: string, value: string) {
     const created = await onCreateSecret(name, value);
-    onPatch({ source: "secret", secretId: created.id, version: "latest", textValue: "" });
+    onPatch({
+      source: "secret",
+      secretId: created.id,
+      userSecretKey: "",
+      required: true,
+      version: "latest",
+      textValue: "",
+    });
     onToast(t("envVarEditor.secretCreated", {
       defaultValue: "Secret {{name}} created",
       name: created.name,
@@ -165,9 +187,12 @@ export function EnvironmentVariableRow({
     window.setTimeout(() => setSecretPopover({ mode: "store", name, value: textValue }), 0);
   }
 
-  const sourceLabel = row.source === "text"
-    ? t("envVarEditor.textValue", { defaultValue: "Text value" })
-    : t("envVarEditor.secretReference", { defaultValue: "Secret reference" });
+  const sourceLabel =
+    row.source === "text"
+      ? t("envVarEditor.textValue", { defaultValue: "Text value" })
+      : row.source === "secret"
+        ? t("envVarEditor.companySecretReference", { defaultValue: "Company secret reference" })
+        : t("envVarEditor.userSecretReference", { defaultValue: "User secret reference" });
   const nameErrorId = `${row.id}-name-error`;
   const healthId = `${row.id}-health`;
   const isDirty = dirtyFields.name || dirtyFields.value;
@@ -212,7 +237,7 @@ export function EnvironmentVariableRow({
             if (event.key === "Enter") {
               event.preventDefault();
               if (row.source === "text") valueInputRef.current?.focus();
-              else valueCellRef.current?.querySelector<HTMLElement>("[role=combobox]")?.focus();
+              else valueCellRef.current?.querySelector<HTMLElement>("[role=combobox],select,input")?.focus();
             }
           }}
         />
@@ -247,8 +272,10 @@ export function EnvironmentVariableRow({
                       >
                         {row.source === "text" ? (
                           <TypeIcon className="size-3.5" />
-                        ) : (
+                        ) : row.source === "secret" ? (
                           <KeyRound className="size-3.5" />
+                        ) : (
+                          <UserRound className="size-3.5" />
                         )}
                         <ChevronDown className="size-3 opacity-60" />
                       </button>
@@ -264,9 +291,19 @@ export function EnvironmentVariableRow({
                     </span>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="flex-col items-start gap-0.5" onSelect={() => switchSource("secret")}>
-                    <span className="text-sm">{t("envVarEditor.secretReference", { defaultValue: "Secret reference" })}</span>
+                    <span className="text-sm">
+                      {t("envVarEditor.companySecret", { defaultValue: "Company secret" })}
+                    </span>
                     <span className="text-[11px] text-muted-foreground">
                       {t("envVarEditor.secretReferenceDescription", { defaultValue: "Resolve a stored company secret at run start." })}
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="flex-col items-start gap-0.5" onSelect={() => switchSource("user_secret")}>
+                    <span className="text-sm">{t("envVarEditor.userSecret", { defaultValue: "User secret" })}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {t("envVarEditor.userSecretReferenceDescription", {
+                        defaultValue: "Resolve the responsible user's own value at run start.",
+                      })}
                     </span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -318,7 +355,7 @@ export function EnvironmentVariableRow({
                     </div>
                   ) : null}
                 </>
-              ) : (
+              ) : row.source === "secret" ? (
                 <div className="relative min-w-0 flex-1">
                   <SecretPicker
                     secretId={row.secretId}
@@ -403,6 +440,63 @@ export function EnvironmentVariableRow({
                       </PopoverContent>
                     </Popover>
                   ) : null}
+                </div>
+              ) : (
+                <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto]">
+                  {userSecretsEnabled ? (
+                    <select
+                      aria-label={t("envVarEditor.userSecretAria", { defaultValue: "User secret" })}
+                      value={row.userSecretKey}
+                      disabled={disabled}
+                      onChange={(event) => {
+                        const key = event.target.value;
+                        const definition = userSecretDefinitions?.find((candidate) => candidate.key === key);
+                        onPatch({
+                          userSecretKey: key,
+                          ...(definition && !row.name.trim() ? { name: definition.key.toUpperCase() } : {}),
+                        });
+                      }}
+                      className="min-w-0 bg-transparent px-2 py-1.5 text-sm font-mono outline-none disabled:pointer-events-none"
+                    >
+                      <option value="">
+                        {t("envVarEditor.selectUserSecret", { defaultValue: "Select user secret..." })}
+                      </option>
+                      {row.userSecretKey && !userSecretDefinitions?.some((definition) => definition.key === row.userSecretKey) ? (
+                        <option value={row.userSecretKey}>
+                          {t("envVarEditor.unknownUserSecret", {
+                            defaultValue: "Unknown ({{key}})",
+                            key: row.userSecretKey,
+                          })}
+                        </option>
+                      ) : null}
+                      {(userSecretDefinitions ?? []).map((definition) => (
+                        <option key={definition.id} value={definition.key}>
+                          {definition.name}
+                          {definition.status !== "active" ? ` (${definition.status})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className={valueTextInputClass}
+                      placeholder={t("envVarEditor.userSecretKeyPlaceholder", { defaultValue: "user-secret key" })}
+                      value={row.userSecretKey}
+                      spellCheck={false}
+                      disabled={disabled}
+                      aria-label={t("envVarEditor.userSecretKeyAria", { defaultValue: "User secret key" })}
+                      onChange={(event) => onPatch({ userSecretKey: event.target.value })}
+                    />
+                  )}
+                  <select
+                    aria-label={t("envVarEditor.requirementAria", { defaultValue: "Requirement" })}
+                    value={row.required ? "required" : "optional"}
+                    disabled={disabled}
+                    onChange={(event) => onPatch({ required: event.target.value === "required" })}
+                    className="border-l border-border bg-transparent px-2 py-1.5 text-xs font-medium text-muted-foreground outline-none disabled:pointer-events-none"
+                  >
+                    <option value="required">{t("envVarEditor.required", { defaultValue: "Required" })}</option>
+                    <option value="optional">{t("envVarEditor.optional", { defaultValue: "Optional" })}</option>
+                  </select>
                 </div>
               )}
             </div>

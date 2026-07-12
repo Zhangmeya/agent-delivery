@@ -253,6 +253,7 @@ function createIssue(): Issue {
     priority: "medium",
     assigneeAgentId: null,
     assigneeUserId: null,
+    responsibleUserId: null,
     createdByAgentId: null,
     createdByUserId: "user-1",
     issueNumber: 807,

@@ -1104,17 +1104,23 @@ export function CommentThread({
               </div>
             )}
             {enableReassign && reassignOptions.length > 0 && (
-              <InlineEntitySelector
-                value={reassignTarget}
-                options={reassignOptions}
-                placeholder={t("Assignee", { defaultValue: "Assignee" })}
-                noneLabel={t("No assignee", { defaultValue: "No assignee" })}
-                searchPlaceholder={t("Search assignees...", { defaultValue: "Search assignees..." })}
-                emptyMessage={t("No assignees found.", { defaultValue: "No assignees found." })}
+                <InlineEntitySelector
+                  value={reassignTarget}
+                  options={reassignOptions}
+                placeholder={t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+                noneLabel={t("issueChat.noAssignee", { defaultValue: "No responsible" })}
+                searchPlaceholder={t("issueChat.searchAssignees", { defaultValue: "Search responsible..." })}
+                emptyMessage={t("issueChat.noAssigneesFound", { defaultValue: "No responsible found." })}
                 onChange={setReassignTarget}
                 className="text-xs h-8"
                 renderTriggerValue={(option) => {
-                  if (!option) return <span className="text-muted-foreground">{t("Assignee", { defaultValue: "Assignee" })}</span>;
+                  if (!option) {
+                    return (
+                      <span className="text-muted-foreground">
+                        {t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+                      </span>
+                    );
+                  }
                   const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
                   const agent = agentId ? agentMap?.get(agentId) : null;
                   return (

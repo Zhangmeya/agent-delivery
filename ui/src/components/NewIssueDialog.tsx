@@ -2,13 +2,14 @@ import { memo, useState, useEffect, useRef, useCallback, useMemo, type ChangeEve
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { IssueWorkMode } from "@penclipai/shared";
+import type { AgentEnvConfig, EnvBinding, IssueWorkMode } from "@penclipai/shared";
 import { pickTextColorForSolidBg } from "@/lib/color-contrast";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { useAdapterCapabilities } from "../adapters/use-adapter-capabilities";
 import { executionWorkspacesApi } from "../api/execution-workspaces";
 import { issuesApi } from "../api/issues";
+import { MissingUserSecretsBanner } from "../pages/secrets/MissingUserSecretsBanner";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { projectsApi } from "../api/projects";
 import { agentsApi } from "../api/agents";
@@ -228,18 +229,46 @@ function buildStatusOptions(t: TFunction): ReadonlyArray<{ value: string; label:
       value: "backlog",
       label: t("status.backlog", { defaultValue: "Backlog" }),
       color: palette.backlog ?? issueStatusTextDefault,
-      description: t("newIssue.statusDescriptions.backlog", { defaultValue: "Parked - assignee will not be woken" }),
+      description: t("newIssue.statusDescriptions.backlog", { defaultValue: "Parked - responsible will not be woken" }),
     },
     {
       value: "todo",
       label: t("status.todo", { defaultValue: "Todo" }),
       color: palette.todo ?? issueStatusTextDefault,
-      description: t("newIssue.statusDescriptions.todo", { defaultValue: "Executable - assignee will be woken" }),
+      description: t("newIssue.statusDescriptions.todo", { defaultValue: "Executable - responsible will be woken" }),
     },
     { value: "in_progress", label: t("status.inProgress", { defaultValue: "In Progress" }), color: palette.in_progress ?? issueStatusTextDefault },
     { value: "in_review", label: t("status.inReview", { defaultValue: "In Review" }), color: palette.in_review ?? issueStatusTextDefault },
     { value: "done", label: t("status.done", { defaultValue: "Done" }), color: palette.done ?? issueStatusTextDefault },
   ];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isRequiredUserSecretBinding(value: unknown): value is Extract<EnvBinding, { type: "user_secret_ref" }> {
+  return isRecord(value)
+    && value.type === "user_secret_ref"
+    && typeof value.key === "string"
+    && value.key.trim().length > 0
+    && value.required !== false
+    && value.allowMissingOverride !== true;
+}
+
+function collectRequiredUserSecretKeysFromEnv(env: AgentEnvConfig | Record<string, unknown> | null | undefined): string[] {
+  if (!isRecord(env)) return [];
+  return Object.values(env).flatMap((binding) =>
+    isRequiredUserSecretBinding(binding) ? [binding.key.trim()] : [],
+  );
+}
+
+function uniqueRequiredUserSecretKeys(inputs: Array<AgentEnvConfig | Record<string, unknown> | null | undefined>): string[] {
+  return [...new Set(inputs.flatMap(collectRequiredUserSecretKeysFromEnv))];
+}
+
+function shouldWarnAboutRunUserSecrets(status: string, assigneeAgentId: string | null | undefined) {
+  return Boolean(assigneeAgentId) && (status === "todo" || status === "in_progress");
 }
 
 const priorities = [
@@ -1122,6 +1151,16 @@ export function NewIssueDialog() {
     : null;
   const currentAssigneeLowTrust = getTrustPreset(currentAssignee?.permissions) === "low_trust_review";
   const currentProject = orderedProjects.find((project) => project.id === projectId);
+  const neededUserSecretKeys = useMemo(
+    () => {
+      if (!shouldWarnAboutRunUserSecrets(status, selectedAssigneeAgentId)) return [];
+      return uniqueRequiredUserSecretKeys([
+        isRecord(currentAssignee?.adapterConfig) ? currentAssignee.adapterConfig.env as Record<string, unknown> : null,
+        currentProject?.env ?? null,
+      ]);
+    },
+    [currentAssignee?.adapterConfig, currentProject?.env, selectedAssigneeAgentId, status],
+  );
   const currentProjectExecutionWorkspacePolicy =
     experimentalSettings?.enableIsolatedWorkspaces === true
       ? currentProject?.executionWorkspacePolicy ?? null
@@ -1392,6 +1431,17 @@ export function NewIssueDialog() {
               onChange={handleTitleChange}
             />
           </div>
+
+          {effectiveCompanyId ? (
+            <div className="px-4 pb-2">
+              {neededUserSecretKeys.length > 0 ? (
+                <MissingUserSecretsBanner
+                  companyId={effectiveCompanyId}
+                  definitionKeys={neededUserSecretKeys}
+                />
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="px-4 pb-2">
             <div className="overflow-x-auto overscroll-x-contain">
@@ -2206,11 +2256,11 @@ export function NewIssueDialog() {
           <div
             data-testid="new-issue-assigned-backlog-note"
             className="mx-4 mb-2 flex items-start gap-2 rounded-md border border-amber-300/70 bg-amber-50/90 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100"
-          >
-            <Flag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
-            <span className="leading-snug">
-              {t("newIssue.assignedBacklogNote.beforeBacklog", { defaultValue: "Assigning implies executable intent - leave status as" })} <span className="font-medium">{t("status.backlog", { defaultValue: "Backlog" })}</span> {t("newIssue.assignedBacklogNote.afterBacklog", { defaultValue: "only to deliberately park this. The assignee will not be woken until status moves to" })} <span className="font-medium">{t("status.todo", { defaultValue: "Todo" })}</span> {t("newIssue.assignedBacklogNote.or", { defaultValue: "or" })} <span className="font-medium">{t("status.inProgress", { defaultValue: "In Progress" })}</span>.
-            </span>
+            >
+              <Flag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
+              <span className="leading-snug">
+              {t("newIssue.assignedBacklogNote.beforeBacklog", { defaultValue: "Assigning implies executable intent - leave status as" })} <span className="font-medium">{t("status.backlog", { defaultValue: "Backlog" })}</span> {t("newIssue.assignedBacklogNote.afterBacklog", { defaultValue: "only to deliberately park this. The responsible will not be woken until status moves to" })} <span className="font-medium">{t("status.todo", { defaultValue: "Todo" })}</span> {t("newIssue.assignedBacklogNote.or", { defaultValue: "or" })} <span className="font-medium">{t("status.inProgress", { defaultValue: "In Progress" })}</span>.
+              </span>
           </div>
         ) : null}
 

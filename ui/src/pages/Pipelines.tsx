@@ -3053,9 +3053,9 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                           >
                             {retryPlan.data.routine.assigneeAgent.name}
                           </Link>
-                        ) : (
-                          <span className="font-medium text-muted-foreground"><PipelineText k="pipelines.noAssignee" defaultValue="No assignee" /></span>
-                        )}
+                          ) : (
+                          <span className="font-medium text-muted-foreground"><PipelineText k="pipelines.noAssignee" defaultValue="No responsible" /></span>
+                          )}
                       </>
                     ) : (
                       "No routine configured"

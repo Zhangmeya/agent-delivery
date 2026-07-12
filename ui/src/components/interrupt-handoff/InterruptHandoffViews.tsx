@@ -84,7 +84,7 @@ export function AssigneeChip({
       data-testid="handoff-assignee-chip"
       data-kind="unassigned"
     >
-      <span className="sr-only">{t("issueChat.noAssignee", { defaultValue: "No assignee" })} - </span>
+      <span className="sr-only">{t("issueChat.noAssignee", { defaultValue: "No responsible" })} - </span>
       {t("Unassigned", { defaultValue: "Unassigned" })}
     </span>
   );
@@ -287,7 +287,7 @@ export function ComposerMentionCoach({
   );
 }
 
-/** Live banner shown at the top of the assignee picker while a run is in flight,
+/** Live banner shown at the top of the responsible picker while a run is in flight,
  * warning that reassigning will interrupt it. (design surface 2) */
 export function AssigneeRunningBanner({
   copy,

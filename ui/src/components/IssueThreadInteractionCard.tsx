@@ -349,7 +349,7 @@ function TaskTreeNode({
         {hasMetadata ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {hasExplicitAssignee ? (
-              <TaskField label="Assignee" value={assigneeLabel} />
+              <TaskField label="Responsible" value={assigneeLabel} />
             ) : null}
             {node.task.billingCode ? (
               <TaskField label="Billing" value={node.task.billingCode} />
@@ -1961,12 +1961,12 @@ export function IssueThreadInteractionCard({
             </span>
             {interaction.continuationPolicy === "wake_assignee"
               || interaction.continuationPolicy === "wake_assignee_on_accept" ? (
-              <span className="inline-flex items-center gap-1 rounded-sm border border-border/70 bg-transparent px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-foreground/70">
-                <ListChecks className="h-3.5 w-3.5" />
-                {interaction.continuationPolicy === "wake_assignee_on_accept"
+                <span className="inline-flex items-center gap-1 rounded-sm border border-border/70 bg-transparent px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-foreground/70">
+                  <ListChecks className="h-3.5 w-3.5" />
+                  {interaction.continuationPolicy === "wake_assignee_on_accept"
                   ? translateInstant("issueThreadInteraction.wakesOnConfirm", { defaultValue: "Wakes on confirm" })
-                  : translateInstant("issueThreadInteraction.wakesAssignee", { defaultValue: "Wakes assignee" })}
-              </span>
+                  : translateInstant("issueThreadInteraction.wakesAssignee", { defaultValue: "Wakes responsible" })}
+                </span>
             ) : null}
           </div>
 

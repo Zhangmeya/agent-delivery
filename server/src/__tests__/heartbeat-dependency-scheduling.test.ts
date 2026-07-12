@@ -176,6 +176,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       name: "Paperclip",
       issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
       requireBoardApprovalForNewAgents: false,
+      defaultResponsibleUserId: "responsible-user",
     });
     await db.insert(agents).values({
       id: agentId,
@@ -200,6 +201,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         title: "Mission 0",
         status: "todo",
         priority: "high",
+        responsibleUserId: "responsible-user",
       },
       {
         id: blockedIssueId,
@@ -208,6 +210,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         status: "todo",
         priority: "medium",
         assigneeAgentId: agentId,
+        responsibleUserId: "responsible-user",
       },
       {
         id: readyIssueId,
@@ -216,6 +219,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         status: "todo",
         priority: "critical",
         assigneeAgentId: agentId,
+        responsibleUserId: "responsible-user",
       },
     ]);
     await db.insert(issueRelations).values({
@@ -575,6 +579,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       name: "Paperclip",
       issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
       requireBoardApprovalForNewAgents: false,
+      defaultResponsibleUserId: "responsible-user",
     });
     await db.insert(agents).values({
       id: agentId,
@@ -600,6 +605,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         status: "todo",
         priority: "high",
         assigneeAgentId: agentId,
+        responsibleUserId: "responsible-user",
       },
       {
         id: secondIssueId,
@@ -608,6 +614,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         status: "todo",
         priority: "high",
         assigneeAgentId: agentId,
+        responsibleUserId: "responsible-user",
       },
     ]);
 
@@ -712,6 +719,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       name: "Paperclip",
       issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
       requireBoardApprovalForNewAgents: false,
+      defaultResponsibleUserId: "responsible-user",
     });
     await db.insert(agents).values({
       id: agentId,
@@ -736,6 +744,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         title: "Security review",
         status: "blocked",
         priority: "high",
+        responsibleUserId: "responsible-user",
       },
       {
         id: blockedIssueId,
@@ -744,6 +753,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         status: "blocked",
         priority: "medium",
         assigneeAgentId: agentId,
+        responsibleUserId: "responsible-user",
       },
       {
         id: readyIssueId,
@@ -752,6 +762,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         status: "todo",
         priority: "low",
         assigneeAgentId: agentId,
+        responsibleUserId: "responsible-user",
       },
     ]);
     await db.insert(issueRelations).values({
@@ -908,6 +919,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       name: "Paperclip",
       issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
       requireBoardApprovalForNewAgents: false,
+      defaultResponsibleUserId: "responsible-user",
     });
     await db.insert(agents).values({
       id: agentId,
@@ -933,6 +945,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         status: "todo",
         priority: "medium",
         assigneeAgentId: agentId,
+        responsibleUserId: "responsible-user",
       },
       ...issueChain.map((issueId, index) => ({
         id: issueId,
@@ -942,6 +955,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
         status: "todo",
         priority: "medium",
         assigneeAgentId: agentId,
+        responsibleUserId: "responsible-user",
       })),
     ]);
     const [hold] = await db
@@ -1037,6 +1051,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       name: "Paperclip",
       issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
       requireBoardApprovalForNewAgents: false,
+      defaultResponsibleUserId: "responsible-user",
     });
     await db.insert(agents).values({
       id: agentId,
@@ -1061,6 +1076,7 @@ describeEmbeddedPostgres("heartbeat dependency-aware queued run selection", () =
       status: "todo",
       priority: "medium",
       assigneeAgentId: agentId,
+      responsibleUserId: "responsible-user",
     });
     await db.insert(issueTreeHolds).values({
       companyId,
