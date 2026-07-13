@@ -168,6 +168,14 @@ export const agentStatusMotion: Record<string, string> = {
 export const runningLabelText = "text-[#1D4ED8] dark:text-[#2563EB]";
 
 /**
+ * Liveness-blue badge recipe — the shared "Live" / "Running" pill treatment
+ * (translucent blue fill + border + blue text). One source of truth so every
+ * live/running indicator reads as the same blue.
+ */
+export const liveBlueBadge =
+  "bg-(--status-agent-running-soft) border-(--status-agent-running-border) text-(--status-agent-running)";
+
+/**
  * Issue/task status → brand colour name (PAP-75). `in_progress` is blue
  * (liveness), `todo` amber (queued), `in_review` violet (awaiting review),
  * `done` green, `blocked` red, `backlog`/`cancelled` gray (inert).

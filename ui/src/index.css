@@ -156,6 +156,8 @@
      amber queued, violet review, green done, red blocked). */
   --status-agent-idle: #a8aeb2;
   --status-agent-running: #2563eb;
+  --status-agent-running-soft: color-mix(in srgb, var(--status-agent-running) 10%, transparent);
+  --status-agent-running-border: color-mix(in srgb, var(--status-agent-running) 30%, transparent);
   --status-agent-paused: #f59e0b;
   --status-agent-error: #dc2626;
   --status-task-backlog: #a8aeb2;

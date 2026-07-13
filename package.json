@@ -29,7 +29,7 @@
     "build-storybook": "pnpm --filter @penclipai/ui build-storybook",
     "build": "pnpm run preflight:workspace-links && pnpm -r build",
     "typecheck": "pnpm run preflight:workspace-links && pnpm -r typecheck",
-    "typecheck:build-gaps": "pnpm run preflight:workspace-links && node scripts/run-typecheck-build-gaps.mjs",
+    "typecheck:build-gaps": "pnpm run preflight:workspace-links && pnpm --filter @penclipai/plugin-sdk ensure-build-deps && pnpm --filter @penclipai/server build && node scripts/run-typecheck-build-gaps.mjs",
     "test": "pnpm run test:run",
     "test:watch": "pnpm run preflight:workspace-links && vitest",
     "test:run": "pnpm run preflight:workspace-links && node scripts/run-vitest-stable.mjs",

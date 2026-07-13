@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { NavLink } from "@/lib/router";
 import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
 import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
@@ -89,6 +90,7 @@ export function SidebarNavItem({
   trailingLabel,
   liveAccessory,
 }: SidebarNavItemProps) {
+  const { t } = useTranslation();
   const { isMobile, setSidebarOpen, collapsed, peeking } = useSidebar();
   // A fixed-width contextual pane (SecondarySidebar) forces full labels even
   // when the global app sidebar is collapsed to its rail (PAP-10700).
@@ -100,11 +102,14 @@ export function SidebarNavItem({
 
   const hasBadge = badge != null && badge > 0;
   const hasLive = liveCount != null && liveCount > 0;
+  const liveStatusText = hasLive
+    ? t("{{count}} live", { count: liveCount ?? 0, defaultValue: "{{count}} live" })
+    : undefined;
 
   // Accessible text equivalent for the collapsed dot indicator. The visible
   // label is `sr-only` in the rail, so the count must be surfaced here.
   const railStatusText = hasLive
-    ? `${liveCount} live`
+    ? liveStatusText
     : hasBadge
       ? `${badge}${badgeLabel ? ` ${badgeLabel}` : ""}`
       : alert
@@ -181,7 +186,7 @@ export function SidebarNavItem({
                 <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-(--status-agent-running) opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-(--status-agent-running)" />
               </span>
-              <span className="text-(length:--text-micro) font-medium text-blue-600 dark:text-blue-400">{liveCount} live</span>
+              <span className="text-(length:--text-micro) font-medium text-(--status-agent-running)">{liveStatusText}</span>
             </>
           )}
         </span>
