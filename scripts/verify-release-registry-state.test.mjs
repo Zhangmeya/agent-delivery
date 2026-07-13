@@ -69,7 +69,7 @@ test("collectInternalDependencyProblems accepts version-specific manifests when 
 test("collectInternalDependencyProblems ignores peer dependency range specifiers", () => {
   const manifest = {
     peerDependencies: {
-      "@paperclipai/server": "^2026.430.0-canary.0",
+      "@penclipai/server": "^2026.430.0-canary.0",
     },
   };
 
@@ -97,7 +97,7 @@ test("collectInternalDependencyProblems reports unfetched transitive dependency 
 test("verifyPackageRegistryState tolerates a stale root versions map when dist-tags and direct manifests are correct", () => {
   const packageDocsByName = new Map([
     [
-      "@paperclipai/ui",
+      "@penclipai/ui",
       {
         "dist-tags": {
           canary: "2026.430.0-canary.0",
@@ -107,7 +107,7 @@ test("verifyPackageRegistryState tolerates a stale root versions map when dist-t
       },
     ],
     [
-      "@paperclipai/shared",
+      "@penclipai/shared",
       {
         versions: {},
       },
@@ -115,19 +115,19 @@ test("verifyPackageRegistryState tolerates a stale root versions map when dist-t
   ]);
   const packageManifestsByKey = new Map([
     [
-      createManifestLookupKey("@paperclipai/ui", "2026.430.0-canary.0"),
+      createManifestLookupKey("@penclipai/ui", "2026.430.0-canary.0"),
       {
-        name: "@paperclipai/ui",
+        name: "@penclipai/ui",
         version: "2026.430.0-canary.0",
         dependencies: {
-          "@paperclipai/shared": "2026.430.0-canary.0",
+          "@penclipai/shared": "2026.430.0-canary.0",
         },
       },
     ],
     [
-      createManifestLookupKey("@paperclipai/shared", "2026.430.0-canary.0"),
+      createManifestLookupKey("@penclipai/shared", "2026.430.0-canary.0"),
       {
-        name: "@paperclipai/shared",
+        name: "@penclipai/shared",
         version: "2026.430.0-canary.0",
       },
     ],
@@ -135,8 +135,8 @@ test("verifyPackageRegistryState tolerates a stale root versions map when dist-t
 
   assert.deepEqual(
     verifyPackageRegistryState({
-      packageName: "@paperclipai/ui",
-      packageDoc: packageDocsByName.get("@paperclipai/ui"),
+      packageName: "@penclipai/ui",
+      packageDoc: packageDocsByName.get("@penclipai/ui"),
       packageDocsByName,
       packageManifestsByKey,
       channel: "canary",
@@ -283,14 +283,14 @@ test("verifyPackageRegistryState allows intentional canary latest but still chec
         versions: {
           "2026.427.0-canary.3": {
             dependencies: {
-              "@paperclipai/server": "2026.427.0-canary.3",
+              "@penclipai/server": "2026.427.0-canary.3",
             },
           },
         },
       },
     ],
     [
-      "@paperclipai/server",
+      "@penclipai/server",
       {
         versions: {
           "2026.427.0-canary.3": {},
@@ -316,7 +316,7 @@ test("verifyPackageRegistryState allows intentional canary latest but still chec
 test("verifyPackageRegistryState still fails when the dist-tag is stale", () => {
   const packageDocsByName = new Map([
     [
-      "@paperclipai/ui",
+      "@penclipai/ui",
       {
         "dist-tags": {
           canary: "2026.429.0-canary.2",
@@ -327,9 +327,9 @@ test("verifyPackageRegistryState still fails when the dist-tag is stale", () => 
   ]);
   const packageManifestsByKey = new Map([
     [
-      createManifestLookupKey("@paperclipai/ui", "2026.430.0-canary.0"),
+      createManifestLookupKey("@penclipai/ui", "2026.430.0-canary.0"),
       {
-        name: "@paperclipai/ui",
+        name: "@penclipai/ui",
         version: "2026.430.0-canary.0",
       },
     ],
@@ -337,8 +337,8 @@ test("verifyPackageRegistryState still fails when the dist-tag is stale", () => 
 
   assert.deepEqual(
     verifyPackageRegistryState({
-      packageName: "@paperclipai/ui",
-      packageDoc: packageDocsByName.get("@paperclipai/ui"),
+      packageName: "@penclipai/ui",
+      packageDoc: packageDocsByName.get("@penclipai/ui"),
       packageDocsByName,
       packageManifestsByKey,
       channel: "canary",
@@ -346,7 +346,7 @@ test("verifyPackageRegistryState still fails when the dist-tag is stale", () => 
       targetVersion: "2026.430.0-canary.0",
       allowCanaryLatest: false,
     }),
-    ["@paperclipai/ui: dist-tag canary resolves to 2026.429.0-canary.2, expected 2026.430.0-canary.0"],
+    ["@penclipai/ui: dist-tag canary resolves to 2026.429.0-canary.2, expected 2026.430.0-canary.0"],
   );
 });
 
@@ -361,7 +361,7 @@ test("verifyPackageRegistryState ignores internal peer dependency ranges", () =>
         versions: {
           "2026.430.0-canary.0": {
             peerDependencies: {
-              "@paperclipai/server": "^2026.430.0-canary.0",
+              "@penclipai/server": "^2026.430.0-canary.0",
             },
           },
         },

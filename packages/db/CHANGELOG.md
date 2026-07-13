@@ -1,4 +1,4 @@
-# @paperclipai/db
+# @penclipai/db
 
 ## 0.3.1
 

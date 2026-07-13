@@ -126,7 +126,7 @@ export function SecretPopoverForm({
             }
           }}
         />
-        {nameError ? <span className="block text-[11px] text-destructive">{nameError}</span> : null}
+        {nameError ? <span className="block text-(length:--text-micro) text-destructive">{nameError}</span> : null}
       </label>
 
       <label className="block space-y-1">
@@ -156,10 +156,10 @@ export function SecretPopoverForm({
             {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
         </div>
-        {valueError ? <span className="block text-[11px] text-destructive">{valueError}</span> : null}
+        {valueError ? <span className="block text-(length:--text-micro) text-destructive">{valueError}</span> : null}
       </label>
 
-      {error ? <p className="text-[11px] text-destructive">{error}</p> : null}
+      {error ? <p className="text-(length:--text-micro) text-destructive">{error}</p> : null}
 
       <div className="flex items-center justify-end gap-2 pt-0.5">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>

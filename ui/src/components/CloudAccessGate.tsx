@@ -7,6 +7,7 @@ import { authApi } from "@/api/auth";
 import { healthApi } from "@/api/health";
 import { queryKeys } from "@/lib/queryKeys";
 import { BootstrapPendingPage } from "@/components/BootstrapPendingPage";
+import { Card } from "@/components/ui/card";
 
 function NoBoardAccessPage() {
   const { t } = useTranslation();

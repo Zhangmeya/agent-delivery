@@ -1,6 +1,9 @@
 import type { SecretStatus, UserSecretCoverageSummary } from "@penclipai/shared";
 import { UserRound } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { cn } from "../../lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 /**
  * User secrets are visually distinct from company secrets via a violet accent
@@ -12,11 +15,12 @@ export const USER_SECRET_ACCENT_BORDER = "border-violet-500/30";
 export const USER_SECRET_ACCENT_BG = "bg-violet-500/10";
 
 /** Small pill used to mark user-scoped rows and headers. */
-export function UserSecretChip({ className, label = "User secret" }: { className?: string; label?: string }) {
+export function UserSecretChip({ className, label }: { className?: string; label?: string }) {
+  const { t } = useTranslation();
   return (
-    <span
+    <Badge variant="outline"
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+        "text-(length:--text-micro)",
         USER_SECRET_ACCENT_BORDER,
         USER_SECRET_ACCENT_BG,
         USER_SECRET_ACCENT_TEXT,
@@ -24,8 +28,8 @@ export function UserSecretChip({ className, label = "User secret" }: { className
       )}
     >
       <UserRound className="h-3 w-3" />
-      {label}
-    </span>
+      {label ?? t("secrets.userSecret", { defaultValue: "User secret" })}
+    </Badge>
   );
 }
 
@@ -57,14 +61,14 @@ export function myValueTone(state: MyValueState): string {
   }
 }
 
-export function myValueLabel(state: MyValueState): string {
+export function myValueLabel(state: MyValueState, t?: TFunction): string {
   switch (state) {
     case "set":
-      return "Value set";
+      return t ? t("secrets.myValue.set", { defaultValue: "Value set" }) : "Value set";
     case "not_set":
-      return "Not set";
+      return t ? t("secrets.myValue.notSet", { defaultValue: "Not set" }) : "Not set";
     case "inactive":
-      return "Disabled";
+      return t ? t("status.disabled", { defaultValue: "Disabled" }) : "Disabled";
   }
 }
 
@@ -72,8 +76,15 @@ export function myValueLabel(state: MyValueState): string {
  * Coverage is surfaced as counts only, never values, per the UX terminology
  * decisions. E.g. "5 of 7 members set".
  */
-export function coverageSummaryLabel(summary: UserSecretCoverageSummary | undefined): string {
+export function coverageSummaryLabel(summary: UserSecretCoverageSummary | undefined, t?: TFunction): string {
   if (!summary) return "—";
   const total = summary.configuredCount + summary.missingCount + summary.inactiveCount;
+  if (t) {
+    return t("secrets.coverageSummary", {
+      configured: summary.configuredCount,
+      total,
+      defaultValue: "{{configured}} of {{total}} set",
+    });
+  }
   return `${summary.configuredCount} of ${total} set`;
 }

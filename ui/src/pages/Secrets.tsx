@@ -349,7 +349,7 @@ function StatusBadge({ status }: { status: SecretStatus }) {
 
 function MetaChip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+    <span className="inline-flex min-w-0 items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-(length:--text-micro) text-muted-foreground">
       {children}
     </span>
   );
@@ -1144,13 +1144,20 @@ export function Secrets() {
     mutationFn: ({ definition, status }: { definition: UserSecretDefinition; status: SecretStatus }) =>
       secretsApi.updateUserSecretDefinition(selectedCompanyId!, definition.id, { status }),
     onSuccess: (updated) => {
-      pushToast({ title: `User-provided secret ${updated.status}`, body: updated.name, tone: "info" });
+      pushToast({
+        title: t("secrets.toast.userSecretStatusUpdated", {
+          status: translateStatusLabel(t, updated.status),
+          defaultValue: "User-provided secret {{status}}",
+        }),
+        body: updated.name,
+        tone: "info",
+      });
       invalidateAll([updated.id]);
     },
     onError: (error) => {
       pushToast({
-        title: "Status update failed",
-        body: error instanceof Error ? error.message : "Try again",
+        title: t("secrets.toast.statusUpdateFailed", { defaultValue: "Status update failed" }),
+        body: error instanceof Error ? error.message : t("common.tryAgain", { defaultValue: "Try again" }),
         tone: "error",
       });
     },
@@ -1177,15 +1184,19 @@ export function Secrets() {
     mutationFn: (definition: UserSecretDefinition) =>
       secretsApi.removeUserSecretDefinition(selectedCompanyId!, definition.id),
     onSuccess: (_response, definition) => {
-      pushToast({ title: "User-provided secret removed", body: definition.name, tone: "info" });
+      pushToast({
+        title: t("secrets.toast.userSecretRemoved", { defaultValue: "User-provided secret removed" }),
+        body: definition.name,
+        tone: "info",
+      });
       setDefinitionDeleteConfirm(null);
       if (selectedDefinitionId === definition.id) setSelectedDefinitionId(null);
       invalidateAll([definition.id]);
     },
     onError: (error) => {
       pushToast({
-        title: "Delete failed",
-        body: error instanceof Error ? error.message : "Try again",
+        title: t("secrets.toast.deleteFailed", { defaultValue: "Delete failed" }),
+        body: error instanceof Error ? error.message : t("common.tryAgain", { defaultValue: "Try again" }),
         tone: "error",
       });
     },
@@ -1420,11 +1431,17 @@ export function Secrets() {
 
   function copySecretKey(key: string) {
     void copyTextToClipboard(key)
-      .then(() => pushToast({ title: "Secret key copied", body: key, tone: "success" }))
+      .then(() => pushToast({
+        title: t("secrets.toast.keyCopied", { defaultValue: "Secret key copied" }),
+        body: key,
+        tone: "success",
+      }))
       .catch((error) =>
         pushToast({
-          title: "Copy failed",
-          body: error instanceof Error ? error.message : "Unable to copy secret key",
+          title: t("secrets.toast.copyFailed", { defaultValue: "Copy failed" }),
+          body: error instanceof Error
+            ? error.message
+            : t("secrets.toast.copyKeyFailed", { defaultValue: "Unable to copy secret key" }),
           tone: "error",
         }),
       );
@@ -1438,7 +1455,7 @@ export function Secrets() {
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label={`Actions for ${name}`}
+            aria-label={t("secrets.actionsFor", { name, defaultValue: "Actions for {{name}}" })}
             onClick={(event) => event.stopPropagation()}
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -1451,16 +1468,23 @@ export function Secrets() {
               else openUserDefinition(row.definition);
             }}
           >
-            <KeyRound className="h-4 w-4" /> View details
+            <KeyRound className="h-4 w-4" />
+            {t("common.viewDetails", { defaultValue: "View details" })}
           </DropdownMenuItem>
           {row.kind === "company" ? (
             <>
               <DropdownMenuItem onSelect={() => setUsageDialogSecretId(row.secret.id)}>
-                <Link2 className="h-4 w-4" /> View references ({row.secret.referenceCount ?? 0})
+                <Link2 className="h-4 w-4" />
+                {t("secrets.viewReferencesCount", {
+                  count: row.secret.referenceCount ?? 0,
+                  defaultValue: "View references ({{count}})",
+                })}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => openRotateSecret(row.secret)}>
                 <RefreshCw className="h-4 w-4" />
-                {row.secret.managedMode === "external_reference" ? "Update reference" : "Update value"}
+                {row.secret.managedMode === "external_reference"
+                  ? t("secrets.updateReference", { defaultValue: "Update reference" })
+                  : t("secrets.updateValue", { defaultValue: "Update value" })}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -1473,7 +1497,9 @@ export function Secrets() {
                 }
               >
                 {row.secret.status === "active" ? <Ban className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-                {row.secret.status === "active" ? "Disable" : "Activate"}
+                {row.secret.status === "active"
+                  ? t("common.disable", { defaultValue: "Disable" })
+                  : t("common.activate", { defaultValue: "Activate" })}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={statusMutation.isPending}
@@ -1489,11 +1515,14 @@ export function Secrets() {
                 ) : (
                   <Archive className="h-4 w-4" />
                 )}
-                {row.secret.status === "archived" ? "Unarchive" : "Archive"}
+                {row.secret.status === "archived"
+                  ? t("common.unarchive", { defaultValue: "Unarchive" })
+                  : t("common.archive", { defaultValue: "Archive" })}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setDeleteConfirm(row.secret)}>
-                <Trash2 className="h-4 w-4" /> Delete secret
+                <Trash2 className="h-4 w-4" />
+                {t("secrets.deleteSecret", { defaultValue: "Delete secret" })}
               </DropdownMenuItem>
             </>
           ) : (
@@ -1511,11 +1540,12 @@ export function Secrets() {
               >
                 <KeyRound className="h-4 w-4" />
                 {myUserSecrets.find((entry) => entry.definition.id === row.definition.id)?.secret
-                  ? "Update my value"
-                  : "Set my value"}
+                  ? t("secrets.updateMyValue", { defaultValue: "Update my value" })
+                  : t("secrets.setMyValue", { defaultValue: "Set my value" })}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => openEditDefinition(row.definition)}>
-                <Pencil className="h-4 w-4" /> Edit definition
+                <Pencil className="h-4 w-4" />
+                {t("secrets.editDefinition", { defaultValue: "Edit definition" })}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -1532,7 +1562,9 @@ export function Secrets() {
                 ) : (
                   <CheckCircle2 className="h-4 w-4" />
                 )}
-                {row.definition.status === "active" ? "Disable" : "Activate"}
+                {row.definition.status === "active"
+                  ? t("common.disable", { defaultValue: "Disable" })
+                  : t("common.activate", { defaultValue: "Activate" })}
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={definitionStatusMutation.isPending}
@@ -1548,11 +1580,14 @@ export function Secrets() {
                 ) : (
                   <Archive className="h-4 w-4" />
                 )}
-                {row.definition.status === "archived" ? "Unarchive" : "Archive"}
+                {row.definition.status === "archived"
+                  ? t("common.unarchive", { defaultValue: "Unarchive" })
+                  : t("common.archive", { defaultValue: "Archive" })}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={() => setDefinitionDeleteConfirm(row.definition)}>
-                <Trash2 className="h-4 w-4" /> Delete definition
+                <Trash2 className="h-4 w-4" />
+                {t("secrets.deleteDefinition", { defaultValue: "Delete definition" })}
               </DropdownMenuItem>
             </>
           )}
@@ -1662,7 +1697,7 @@ export function Secrets() {
                 >
                   <div
                     role="row"
-                    className="grid grid-cols-[minmax(12rem,2.4fr)_minmax(5.25rem,0.75fr)_minmax(7rem,1fr)_minmax(5rem,0.7fr)_2.75rem] items-center gap-3 bg-muted/40 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground"
+                    className="grid grid-cols-(--gtc-54) items-center gap-3 bg-muted/40 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground"
                   >
                     <div role="columnheader" className="font-medium">{t("secrets.secret", { defaultValue: "Secret" })}</div>
                     <div role="columnheader" className="font-medium">{t("common.status", { defaultValue: "Status" })}</div>
@@ -1704,7 +1739,7 @@ export function Secrets() {
                           key={row.id}
                           role="row"
                           className={cn(
-                            "grid cursor-pointer grid-cols-[minmax(12rem,2.4fr)_minmax(5.25rem,0.75fr)_minmax(7rem,1fr)_minmax(5rem,0.7fr)_2.75rem] items-center gap-3 border-b border-border/60 px-3 py-3 hover:bg-accent/40",
+                            "grid cursor-pointer grid-cols-(--gtc-54) items-center gap-3 border-b border-border/60 px-3 py-3 hover:bg-accent/40",
                             row.kind === "company" && selectedSecretId === row.secret.id && "bg-accent/60",
                             row.kind === "user" && selectedDefinitionId === row.definition.id && "bg-accent/60",
                           )}
@@ -1744,7 +1779,7 @@ export function Secrets() {
                                 </Tooltip>
                               )}
                             </div>
-                            <code className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                            <code className="mt-0.5 block truncate text-(length:--text-micro) text-muted-foreground">
                               {row.kind === "company" ? row.secret.key : row.definition.key}
                             </code>
                             <div className="mt-1">
@@ -1803,7 +1838,7 @@ export function Secrets() {
                             <div className="truncate font-medium text-foreground">
                               {row.kind === "company" ? row.secret.name : row.definition.name}
                             </div>
-                            <code className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                            <code className="mt-0.5 block truncate text-(length:--text-micro) text-muted-foreground">
                               {row.kind === "company" ? row.secret.key : row.definition.key}
                             </code>
                           </div>
@@ -2054,7 +2089,10 @@ export function Secrets() {
                   </span>
                 </SheetTitle>
                 <SheetDescription className="sr-only">
-                  Each user secret definition {selectedDefinition.key}
+                  {t("secrets.userDefinitionDescription", {
+                    key: selectedDefinition.key,
+                    defaultValue: "Each-user secret definition {{key}}",
+                  })}
                 </SheetDescription>
                 <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-muted/20 px-2 py-1.5">
                   <code className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
@@ -2067,11 +2105,14 @@ export function Secrets() {
                     className="h-7 shrink-0 px-2 text-xs"
                     onClick={() => copySecretKey(selectedDefinition.key)}
                   >
-                    <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+                    <Copy className="mr-1 h-3.5 w-3.5" />
+                    {t("common.copy", { defaultValue: "Copy" })}
                   </Button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  <UserSecretChip label="Each user" />
+                  <UserSecretChip
+                    label={t("secrets.valueProvider.eachUser", { defaultValue: "Each user" })}
+                  />
                   <MetaChip>
                     <CoverageInline companyId={selectedCompanyId} definitionId={selectedDefinition.id} compact />
                   </MetaChip>
@@ -2088,17 +2129,28 @@ export function Secrets() {
                   disabled={selectedDefinition.status !== "active"}
                 >
                   <KeyRound className="h-3.5 w-3.5 mr-1" />
-                  {selectedDefinitionMyEntry?.secret ? "Update my value" : "Set my value"}
+                  {selectedDefinitionMyEntry?.secret
+                    ? t("secrets.updateMyValue", { defaultValue: "Update my value" })
+                    : t("secrets.setMyValue", { defaultValue: "Set my value" })}
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" aria-label={`More actions for ${selectedDefinition.name}`}>
-                      <MoreHorizontal className="mr-1 h-3.5 w-3.5" /> More
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label={t("secrets.moreActionsFor", {
+                        name: selectedDefinition.name,
+                        defaultValue: "More actions for {{name}}",
+                      })}
+                    >
+                      <MoreHorizontal className="mr-1 h-3.5 w-3.5" />
+                      {t("common.more", { defaultValue: "More" })}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
                     <DropdownMenuItem onSelect={() => openEditDefinition(selectedDefinition)}>
-                      <Pencil className="h-4 w-4" /> Edit definition
+                      <Pencil className="h-4 w-4" />
+                      {t("secrets.editDefinition", { defaultValue: "Edit definition" })}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -2115,7 +2167,9 @@ export function Secrets() {
                       ) : (
                         <CheckCircle2 className="h-4 w-4" />
                       )}
-                      {selectedDefinition.status === "active" ? "Disable" : "Activate"}
+                      {selectedDefinition.status === "active"
+                        ? t("common.disable", { defaultValue: "Disable" })
+                        : t("common.activate", { defaultValue: "Activate" })}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       disabled={definitionStatusMutation.isPending}
@@ -2131,11 +2185,14 @@ export function Secrets() {
                       ) : (
                         <Archive className="h-4 w-4" />
                       )}
-                      {selectedDefinition.status === "archived" ? "Unarchive" : "Archive"}
+                      {selectedDefinition.status === "archived"
+                        ? t("common.unarchive", { defaultValue: "Unarchive" })
+                        : t("common.archive", { defaultValue: "Archive" })}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem variant="destructive" onSelect={() => setDefinitionDeleteConfirm(selectedDefinition)}>
-                      <Trash2 className="h-4 w-4" /> Delete definition
+                      <Trash2 className="h-4 w-4" />
+                      {t("secrets.deleteDefinition", { defaultValue: "Delete definition" })}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -2144,10 +2201,10 @@ export function Secrets() {
                 <div className="border-b border-border px-4">
                   <PageTabBar
                     items={[
-                      { value: "details", label: "Details" },
-                      { value: "coverage", label: "Coverage" },
-                      { value: "usage", label: "Usage" },
-                      { value: "events", label: "Access events" },
+                      { value: "details", label: t("secrets.details", { defaultValue: "Details" }) },
+                      { value: "coverage", label: t("secrets.coverage", { defaultValue: "Coverage" }) },
+                      { value: "usage", label: t("secrets.usage", { defaultValue: "Usage" }) },
+                      { value: "events", label: t("secrets.accessEvents", { defaultValue: "Access events" }) },
                     ]}
                     align="start"
                     value={secretDetailTab}
@@ -2228,7 +2285,7 @@ export function Secrets() {
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto p-4 sm:max-w-lg sm:p-6">
+        <DialogContent className="max-h-(--sz-calc-18) overflow-y-auto p-4 sm:max-w-lg sm:p-6">
           <DialogHeader>
             <DialogTitle>
               {editingDefinition
@@ -2258,7 +2315,9 @@ export function Secrets() {
                           : normalizeSecretKeyForPreview(name),
                     })); 
                   }}
-                  placeholder={secretValueProvider === "user" ? "Personal GitHub token" : "OPENAI_API_KEY"}
+                  placeholder={secretValueProvider === "user"
+                    ? t("secrets.userSecretNamePlaceholder", { defaultValue: "Personal GitHub token" })
+                    : "OPENAI_API_KEY"}
                   autoFocus
                 />
               </div>
@@ -2280,7 +2339,7 @@ export function Secrets() {
                   disabled={Boolean(editingDefinition)}
                   className={secretValueProvider === "user" ? "font-mono text-sm" : undefined}
                 />
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-(length:--text-micro) text-muted-foreground">
                   {secretValueProvider === "user"
                     ? editingDefinition
                       ? t("secrets.userSecretKeyStable", { defaultValue: "Stable env binding key. Cannot be changed." })
@@ -2395,12 +2454,12 @@ export function Secrets() {
                     ))}
                   </select>
                   {createProviderBlockReason ? (
-                    <p className="mt-1 flex items-center gap-1 text-[11px] text-destructive">
+                    <p className="mt-1 flex items-center gap-1 text-(length:--text-micro) text-destructive">
                       <AlertCircle className="h-3 w-3" />
                       {createProviderBlockReason}
                     </p>
                   ) : createProviderHealthText ? (
-                    <p className="mt-1 text-[11px] text-muted-foreground">{createProviderHealthText}</p>
+                    <p className="mt-1 text-(length:--text-micro) text-muted-foreground">{createProviderHealthText}</p>
                   ) : null}
                 </div>
                 <div>
@@ -2542,7 +2601,7 @@ export function Secrets() {
       </Dialog>
 
       <Dialog open={vaultDialogOpen} onOpenChange={setVaultDialogOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-(--sz-85vh) overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {editingVault
@@ -2817,14 +2876,24 @@ export function Secrets() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete user-provided secret</DialogTitle>
+            <DialogTitle>
+              {t("secrets.deleteUserSecret", { defaultValue: "Delete user-provided secret" })}
+            </DialogTitle>
             <DialogDescription>
-              Permanently removes <strong>{definitionDeleteConfirm?.name}</strong> for the whole company.
-              Existing member values become unreferenced and active bindings must be remapped.
+              {t("secrets.deleteUserSecretDescriptionPrefix", {
+                defaultValue: "Permanently removes",
+              })}{" "}
+              <strong>{definitionDeleteConfirm?.name}</strong>{" "}
+              {t("secrets.deleteUserSecretDescriptionSuffix", {
+                defaultValue:
+                  "for the whole company. Existing member values become unreferenced and active bindings must be remapped.",
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDefinitionDeleteConfirm(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDefinitionDeleteConfirm(null)}>
+              {t("common.cancel", { defaultValue: "Cancel" })}
+            </Button>
             <Button
               variant="destructive"
               onClick={() =>
@@ -2833,7 +2902,7 @@ export function Secrets() {
               disabled={deleteDefinitionMutation.isPending}
             >
               {deleteDefinitionMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-              Delete
+              {t("common.delete", { defaultValue: "Delete" })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2959,7 +3028,7 @@ function SecretsFiltersPopover({
         >
           <Filter className="h-3.5 w-3.5" />
           {activeFilterCount > 0 ? (
-            <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-[9px] font-bold text-white">
+            <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-(length:--text-nano) font-bold text-white">
               {activeFilterCount}
             </span>
           ) : null}
@@ -2967,7 +3036,7 @@ function SecretsFiltersPopover({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-[min(520px,calc(100vw-2rem))] max-h-[min(80vh,34rem)] overflow-y-auto overscroll-contain p-0"
+        className="w-(--sz-calc-41) max-h-(--sz-calc-42) overflow-y-auto overscroll-contain p-0"
       >
         <div className="space-y-3 p-3">
           <div className="flex items-center justify-between">
@@ -3093,7 +3162,7 @@ function ProviderVaultInlineWarning({ config }: { config: CompanySecretProviderC
   }
   const warning = config.status === "warning" || config.healthStatus === "warning";
   return (
-    <p className={cn("mt-1 flex items-center gap-1 text-[11px]", warning ? "text-amber-600 dark:text-amber-400" : "text-destructive")}>
+    <p className={cn("mt-1 flex items-center gap-1 text-(length:--text-micro)", warning ? "text-amber-600 dark:text-amber-400" : "text-destructive")}>
       {warning ? <AlertTriangle className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
       {message}
     </p>
@@ -3656,7 +3725,7 @@ function AwsProviderVaultDiscoveryError({
                 {t("common.copy", { defaultValue: "Copy" })}
               </Button>
             </div>
-            <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
+            <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-(length:--text-micro) leading-relaxed">
               {detailsText}
             </pre>
           </div>
@@ -3694,7 +3763,7 @@ function AwsProviderVaultDiscoveryCandidateRow({
             {fieldSummary.length > 0 ? fieldSummary.join(" / ") : t("secrets.noStableNamespace", { defaultValue: "No stable namespace or prefix detected" })}
           </p>
           {candidate.samples[0] ? (
-            <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+            <p className="mt-1 truncate font-mono text-(length:--text-micro) text-muted-foreground">
               {candidate.samples[0].name}
             </p>
           ) : null}
@@ -3752,25 +3821,42 @@ function CoverageInline({
   definitionId: string;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const coverageQuery = useQuery({
     queryKey: queryKeys.secrets.userDefinitionCoverage(companyId, definitionId),
     queryFn: () => secretsApi.userSecretDefinitionCoverage(companyId, definitionId),
     staleTime: 30_000,
   });
   const summary = coverageQuery.data;
-  if (coverageQuery.isPending) return <span className="text-muted-foreground">Loading…</span>;
-  if (coverageQuery.isError) return <span className="text-destructive">Coverage unavailable</span>;
+  if (coverageQuery.isPending) {
+    return <span className="text-muted-foreground">{t("common.loadingEllipsis", { defaultValue: "Loading..." })}</span>;
+  }
+  if (coverageQuery.isError) {
+    return <span className="text-destructive">{t("secrets.coverageUnavailable", { defaultValue: "Coverage unavailable" })}</span>;
+  }
   return (
     <span className="inline-flex min-w-0 items-center gap-1 text-muted-foreground">
       <Users className="h-3 w-3" />
       <span className="truncate">
         {compact && summary
-          ? `${summary.configuredCount}/${summary.configuredCount + summary.missingCount + summary.inactiveCount} set`
-          : coverageSummaryLabel(summary)}
+          ? t("secrets.coverageCompact", {
+              configured: summary.configuredCount,
+              total: summary.configuredCount + summary.missingCount + summary.inactiveCount,
+              defaultValue: "{{configured}}/{{total}} set",
+            })
+          : coverageSummaryLabel(summary, t)}
       </span>
       {summary && summary.missingCount > 0 ? (
         <span className="shrink-0 text-amber-600 dark:text-amber-400">
-          · {compact ? `${summary.missingCount} miss` : `${summary.missingCount} missing`}
+          · {compact
+            ? t("secrets.coverageMissingCompact", {
+                count: summary.missingCount,
+                defaultValue: "{{count}} miss",
+              })
+            : t("secrets.coverageMissingCount", {
+                count: summary.missingCount,
+                defaultValue: "{{count}} missing",
+              })}
         </span>
       ) : null}
     </span>
@@ -3850,7 +3936,7 @@ function UserSecretCoverageTab({
     <div className="space-y-3 text-sm">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Users className="h-3.5 w-3.5" />
-        <span>{coverageSummaryLabel(summary)}</span>
+        <span>{coverageSummaryLabel(summary, t)}</span>
       </div>
       <div className="grid grid-cols-3 gap-2 text-center text-xs">
         <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
@@ -3972,8 +4058,8 @@ function SecretDetailsTab({
 
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 py-2">
-      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+    <div className="grid grid-cols-(--gtc-55) gap-3 py-2">
+      <dt className="text-(length:--text-micro) uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="min-w-0 text-foreground">{children}</dd>
     </div>
   );
@@ -4018,7 +4104,7 @@ function SecretUsageTab({ loading, bindings }: { loading: boolean; bindings: Com
               </Badge>
             ) : null}
           </div>
-          <div className="font-mono text-[11px] text-muted-foreground break-all">
+          <div className="font-mono text-(length:--text-micro) text-muted-foreground break-all">
             {binding.targetId}
           </div>
           <div className="text-[11px] text-muted-foreground">
@@ -4083,7 +4169,7 @@ function SecretEventsTab({
               {event.secretScope === "user" ? (
                 <Badge
                   variant="outline"
-                  className="border-violet-500/30 bg-violet-500/10 text-[10px] text-violet-700 dark:text-violet-300"
+                  className="border-violet-500/30 bg-violet-500/10 text-(length:--text-nano) text-violet-700 dark:text-violet-300"
                 >
                   {t("secrets.userSecret", { defaultValue: "User secret" })}
                 </Badge>
@@ -4091,7 +4177,7 @@ function SecretEventsTab({
             </span>
             <span className="text-[11px] text-muted-foreground">{formatRelative(event.createdAt, t)}</span>
           </div>
-          <div className="font-mono text-[11px] text-muted-foreground break-all">
+          <div className="font-mono text-(length:--text-micro) text-muted-foreground break-all">
             {event.consumerId}
           </div>
           {event.responsibleUserId ? (
@@ -4106,7 +4192,7 @@ function SecretEventsTab({
             </div>
           ) : null}
           {event.errorCode ? (
-            <div className="text-[11px] text-destructive">{event.errorCode}</div>
+            <div className="text-(length:--text-micro) text-destructive">{event.errorCode}</div>
           ) : null}
         </div>
       ))}

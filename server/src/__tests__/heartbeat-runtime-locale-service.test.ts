@@ -7,7 +7,9 @@ import { eq, sql } from "drizzle-orm";
 import {
   agentWakeupRequests,
   agents,
+  authUsers,
   companies,
+  companyMemberships,
   createDb,
   heartbeatRuns,
 } from "@penclipai/db";
@@ -91,6 +93,7 @@ describeEmbeddedPostgres("heartbeat runtime locale service integration", () => {
         "agent_runtime_state",
         "agents",
         "companies",
+        "user",
         "instance_settings"
       RESTART IDENTITY CASCADE
     `));
@@ -109,11 +112,29 @@ describeEmbeddedPostgres("heartbeat runtime locale service integration", () => {
   async function seedAgent() {
     const companyId = randomUUID();
     const agentId = randomUUID();
+    const responsibleUserId = `responsible-${randomUUID()}`;
+    const now = new Date();
+    await db.insert(authUsers).values({
+      id: responsibleUserId,
+      name: "Runtime Locale Owner",
+      email: `${responsibleUserId}@example.com`,
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
     await db.insert(companies).values({
       id: companyId,
       name: "Paperclip",
       issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
       requireBoardApprovalForNewAgents: false,
+      defaultResponsibleUserId: responsibleUserId,
+    });
+    await db.insert(companyMemberships).values({
+      companyId,
+      principalType: "user",
+      principalId: responsibleUserId,
+      membershipRole: "owner",
+      status: "active",
     });
     await db.insert(agents).values({
       id: agentId,
@@ -126,7 +147,7 @@ describeEmbeddedPostgres("heartbeat runtime locale service integration", () => {
       runtimeConfig: { maxConcurrentRuns: 1 },
       permissions: {},
     });
-    return { companyId, agentId };
+    return { companyId, agentId, responsibleUserId };
   }
 
   it("uses the instance runtime default locale when the wakeup has no explicit locale", async () => {
@@ -172,7 +193,7 @@ describeEmbeddedPostgres("heartbeat runtime locale service integration", () => {
   });
 
   it("does not coalesce an incoming wakeup into a running run with a different runtime locale", async () => {
-    const { companyId, agentId } = await seedAgent();
+    const { companyId, agentId, responsibleUserId } = await seedAgent();
     const heartbeat = heartbeatService(db);
     const wakeupRequestId = randomUUID();
     const runningRunId = randomUUID();
@@ -194,6 +215,7 @@ describeEmbeddedPostgres("heartbeat runtime locale service integration", () => {
       triggerDetail: "manual",
       status: "running",
       wakeupRequestId,
+      responsibleUserId,
       startedAt: new Date(),
       contextSnapshot: {
         taskKey: "same-task",

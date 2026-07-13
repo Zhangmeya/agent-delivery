@@ -1,3 +1,7 @@
+// token-extraction: allowlisted — intentional one-off decoration (DECISION-SHEET.md B1
+// user ruling). The bg-[...gradient...] / shadow-[...] literals in this demo/UX-lab page
+// are deliberate one-off decoration, reverted from --gradient-extract-*/--shadow-extract-*
+// tokens; the file is on the check-token-gates allowlist in ui/src/index.css.
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TranscriptEntry } from "../adapters";
@@ -237,9 +241,9 @@ function LiveWidgetPreview({
           <div className="min-w-0">
             <Identity name={runTranscriptFixtureMeta.agentName} size="sm" />
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-full border border-border/70 bg-background/70 px-2 py-1 font-mono">
+              <Badge variant="outline" className="border-border/70 bg-background/70 py-1 font-mono">
                 {runTranscriptFixtureMeta.sourceRunId.slice(0, 8)}
-              </span>
+              </Badge>
               <StatusBadge status={streaming ? "running" : "succeeded"} />
               <span>{formatDateTime(runTranscriptFixtureMeta.startedAt)}</span>
             </div>
@@ -275,7 +279,7 @@ function DashboardPreview({
   return (
     <div className="max-w-md">
       <div className={cn(
-        "flex h-[320px] flex-col overflow-hidden rounded-xl border shadow-[0_20px_40px_rgba(15,23,42,0.10)]",
+        "flex h-(--sz-320px) flex-col overflow-hidden rounded-xl border shadow-[0_20px_40px_rgba(15,23,42,0.10)]",
         streaming
           ? "border-cyan-500/25 bg-cyan-500/[0.04]"
           : "border-border bg-background/75",
@@ -296,9 +300,9 @@ function DashboardPreview({
                   : t("Finished 2m ago", { defaultValue: "Finished 2m ago" })}
               </div>
             </div>
-            <span className="rounded-full border border-border/70 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground">
+            <Badge variant="outline" className="[&>svg]:size-2.5 border-border/70 bg-background/70 py-1 text-(length:--text-nano) text-muted-foreground">
               <ExternalLink className="h-2.5 w-2.5" />
-            </span>
+            </Badge>
           </div>
           <div
             className="mt-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2 text-xs text-cyan-700 dark:text-cyan-300"
@@ -332,10 +336,10 @@ export function RunTranscriptUxLab() {
   return (
     <div className="space-y-6">
       <div className="overflow-hidden rounded-2xl border border-border/70 bg-[linear-gradient(135deg,rgba(8,145,178,0.08),transparent_28%),linear-gradient(180deg,rgba(245,158,11,0.08),transparent_40%),var(--background)] shadow-[0_28px_70px_rgba(15,23,42,0.10)]">
-        <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="grid gap-6 lg:grid-cols-(--gtc-19)">
           <aside className="border-b border-border/60 bg-background/75 p-5 lg:border-b-0 lg:border-r">
             <div className="mb-5">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/[0.08] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-700 dark:text-cyan-300">
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/[0.08] px-3 py-1 text-(length:--text-nano) font-semibold uppercase tracking-(--tracking-caps) text-cyan-700 dark:text-cyan-300">
                 <FlaskConical className="h-3.5 w-3.5" />
                 {t("UX Lab", { defaultValue: "UX Lab" })}
               </div>
@@ -371,7 +375,7 @@ export function RunTranscriptUxLab() {
                         <Icon className="h-4 w-4" />
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        <span className="block text-(length:--text-nano) font-semibold uppercase tracking-(--tracking-caps) text-muted-foreground">
                           {option.eyebrow}
                         </span>
                         <span className="mt-1 block text-sm font-medium">{option.label}</span>
@@ -389,7 +393,7 @@ export function RunTranscriptUxLab() {
           <main className="min-w-0 p-5">
             <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                <div className="text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-caps) text-muted-foreground">
                   {selected.eyebrow}
                 </div>
                 <h2 className="mt-1 text-2xl font-semibold">{selected.label}</h2>
@@ -405,7 +409,7 @@ export function RunTranscriptUxLab() {
                     defaultValue: "Source run {{value}}",
                   })}
                 </Badge>
-                <Badge variant="outline" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
+                <Badge variant="outline" className="rounded-full px-3 py-1 text-(length:--text-nano) uppercase tracking-(--tracking-caps)">
                   {runTranscriptFixtureMeta.issueIdentifier}
                 </Badge>
               </div>

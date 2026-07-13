@@ -33,7 +33,7 @@ cd /path/to/paperclip
 export PAPERCLIP_HOME=/tmp/paperclip-smoke
 export PAPERCLIP_INSTANCE_ID=smoke
 export PAPERCLIP_DEPLOYMENT_MODE=local_trusted
-pnpm --filter @paperclipai/server dev
+pnpm --filter @penclipai/server dev
 ```
 
 Wait for `Server listening on 127.0.0.1:3100`.

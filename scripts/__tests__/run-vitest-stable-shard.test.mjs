@@ -68,3 +68,14 @@ test("general-server shard runner uses the fork server package scope", () => {
   assert.match(source, /"--project",\s*"@penclipai\/server"/);
   assert.doesNotMatch(source, /"--project",\s*"@paperclipai\/server"/);
 });
+
+test("workspace groups use fork project names without duplicating the CLI", () => {
+  const groupA = dryRunJson(["--mode", "general", "--group", "general-workspaces-a"]);
+  const groupB = dryRunJson(["--mode", "general", "--group", "general-workspaces-b"]);
+
+  assert.deepEqual(groupA.selectedGeneralWorkspaceProjects, ["@penclipai/ui", "penclip"]);
+  assert.ok(groupB.selectedGeneralWorkspaceProjects.includes("@penclipai/plugin-sdk"));
+  assert.ok(!groupB.selectedGeneralWorkspaceProjects.includes("@paperclipai/plugin-sdk"));
+  assert.ok(!groupB.selectedGeneralWorkspaceProjects.includes("paperclipai"));
+  assert.ok(!groupB.selectedGeneralWorkspaceProjects.includes("penclip"));
+});

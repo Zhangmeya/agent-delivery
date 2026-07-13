@@ -81,7 +81,7 @@ export function RoutineSaveBar({
         )}
       >
         {saveConflict ? (
-          <div className="flex items-center gap-2 text-sm text-amber-200">
+          <div className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
             <AlertTriangle className="h-4 w-4" />
             <span>{t("routineDetail.changedElsewhereReload", { defaultValue: "Routine changed elsewhere. Reload to merge." })}</span>
           </div>

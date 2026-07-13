@@ -6,6 +6,7 @@ import { accessApi } from "../api/access";
 import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export function BoardClaimPage() {
   const { t } = useTranslation();
@@ -53,12 +54,12 @@ export function BoardClaimPage() {
   if (statusQuery.error) {
     return (
       <div className="mx-auto max-w-xl py-10">
-        <div className="rounded-lg border border-border bg-card p-6">
+        <Card className="block p-6">
           <h1 className="text-lg font-semibold">{t("boardClaim.unavailableTitle")}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {statusQuery.error instanceof Error ? statusQuery.error.message : t("boardClaim.unavailableBody")}
           </p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -71,7 +72,7 @@ export function BoardClaimPage() {
   if (status.status === "claimed") {
     return (
       <div className="mx-auto max-w-xl py-10">
-        <div className="rounded-lg border border-border bg-card p-6">
+        <Card className="block p-6">
           <h1 className="text-lg font-semibold">{t("boardClaim.claimedTitle")}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("boardClaim.claimedBody")}
@@ -79,7 +80,7 @@ export function BoardClaimPage() {
           <Button asChild className="mt-4">
             <Link to="/">{t("boardClaim.openBoard")}</Link>
           </Button>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -87,7 +88,7 @@ export function BoardClaimPage() {
   if (!sessionQuery.data) {
     return (
       <div className="mx-auto max-w-xl py-10">
-        <div className="rounded-lg border border-border bg-card p-6">
+        <Card className="block p-6">
           <h1 className="text-lg font-semibold">{t("boardClaim.signInRequired")}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("boardClaim.signInRequiredBody")}
@@ -95,14 +96,14 @@ export function BoardClaimPage() {
           <Button asChild className="mt-4">
             <Link to={`/auth?next=${encodeURIComponent(currentPath)}`}>{t("boardClaim.signInButton")}</Link>
           </Button>
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-xl py-10">
-      <div className="rounded-lg border border-border bg-card p-6">
+      <Card className="block p-6">
         <h1 className="text-xl font-semibold">{t("boardClaim.claimTitle")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {t("boardClaim.claimBody")}
@@ -121,7 +122,7 @@ export function BoardClaimPage() {
         >
           {claimMutation.isPending ? t("boardClaim.claiming") : t("boardClaim.claimButton")}
         </Button>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import {
+  Component,
   type ClipboardEvent,
+  type ErrorInfo,
   forwardRef,
   useCallback,
   useEffect,
@@ -11,6 +13,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -94,6 +97,30 @@ export interface MarkdownEditorRef {
   insertMarkdown: (markdown: string) => void;
 }
 
+class MarkdownEditorRichErrorBoundary extends Component<
+  { children: ReactNode; onError: (error: unknown) => void },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    console.error("Markdown rich editor failed; falling back to raw textarea", {
+      error,
+      componentStack: info.componentStack,
+    });
+    this.props.onError(error);
+  }
+
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
 function readHtmlAttribute(attrs: string, name: string): string | null {
   const match = new RegExp(`${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(attrs);
   return match?.[2] ?? match?.[3] ?? match?.[4] ?? null;
@@ -175,6 +202,12 @@ function isSafeMarkdownLinkUrl(url: string): boolean {
   const trimmed = url.trim();
   if (!trimmed) return true;
   return !/^(javascript|data|vbscript):/i.test(trimmed);
+}
+
+function richEditorErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "Rich editor failed to render";
 }
 
 /* ---- Mention detection helpers ---- */
@@ -1094,6 +1127,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
     ref.current.insertMarkdown(normalizeMarkdown(rawText));
   }, []);
 
+  const handleRichEditorError = useCallback((error: unknown) => {
+    setRichEditorError(richEditorErrorMessage(error));
+  }, []);
+
   const mentionMenuPosition = mentionState
     ? computeMentionMenuPosition(
         mentionState,
@@ -1142,7 +1179,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
             }
           }}
           className={cn(
-            "min-h-[12rem] w-full resize-none bg-transparent px-3 pb-3 pt-2 font-mono text-sm leading-6 outline-none",
+            "min-h-(--sz-12rem) w-full resize-none bg-transparent px-3 pb-3 pt-2 font-mono text-sm leading-6 outline-none",
             contentClassName,
           )}
         />
@@ -1260,47 +1297,49 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
       }}
       onPasteCapture={handlePasteCapture}
     >
-      <MDXEditor
-        ref={setEditorRef}
-        markdown={editorValue}
-        suppressHtmlProcessing
-        placeholder={placeholder}
-        readOnly={readOnly}
-        onChange={(next) => {
-          if (readOnly) return;
-          const echo = echoIgnoreMarkdownRef.current;
-          if (echo !== null && next === echo) {
-            echoIgnoreMarkdownRef.current = null;
-            latestValueRef.current = next;
-            return;
-          }
-          if (echo !== null) {
-            echoIgnoreMarkdownRef.current = null;
-          }
-
-          if (initialChildOnChangeRef.current) {
-            initialChildOnChangeRef.current = false;
-            if (next === "" && editorValue !== "") {
-              echoIgnoreMarkdownRef.current = editorValue;
-              ref.current?.setMarkdown(editorValue);
+      <MarkdownEditorRichErrorBoundary onError={handleRichEditorError}>
+        <MDXEditor
+          ref={setEditorRef}
+          markdown={editorValue}
+          suppressHtmlProcessing
+          placeholder={placeholder}
+          readOnly={readOnly}
+          onChange={(next) => {
+            if (readOnly) return;
+            const echo = echoIgnoreMarkdownRef.current;
+            if (echo !== null && next === echo) {
+              echoIgnoreMarkdownRef.current = null;
+              latestValueRef.current = next;
               return;
             }
-          }
-          latestValueRef.current = next;
-          onChange(next);
-        }}
-        onBlur={() => onBlur?.()}
-        onError={(payload) => {
-          setRichEditorError(payload.error);
-        }}
-        className={cn("paperclip-mdxeditor", !bordered && "paperclip-mdxeditor--borderless")}
-        contentEditableClassName={cn(
-          "paperclip-mdxeditor-content focus:outline-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:list-item",
-          contentClassName,
-        )}
-        additionalLexicalNodes={[MentionAwareLinkNode, mentionAwareLinkNodeReplacement]}
-        plugins={plugins}
-      />
+            if (echo !== null) {
+              echoIgnoreMarkdownRef.current = null;
+            }
+
+            if (initialChildOnChangeRef.current) {
+              initialChildOnChangeRef.current = false;
+              if (next === "" && editorValue !== "") {
+                echoIgnoreMarkdownRef.current = editorValue;
+                ref.current?.setMarkdown(editorValue);
+                return;
+              }
+            }
+            latestValueRef.current = next;
+            onChange(next);
+          }}
+          onBlur={() => onBlur?.()}
+          onError={(payload) => {
+            handleRichEditorError(payload.error);
+          }}
+          className={cn("paperclip-mdxeditor", !bordered && "paperclip-mdxeditor--borderless")}
+          contentEditableClassName={cn(
+            "paperclip-mdxeditor-content focus:outline-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:list-item",
+            contentClassName,
+          )}
+          additionalLexicalNodes={[MentionAwareLinkNode, mentionAwareLinkNodeReplacement]}
+          plugins={plugins}
+        />
+      </MarkdownEditorRichErrorBoundary>
 
       {/* Mention dropdown — rendered via portal so it isn't clipped by overflow containers */}
       {mentionActive && filteredMentions.length > 0 && mentionMenuPosition &&
@@ -1308,7 +1347,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
           <div
             data-paperclip-floating-ui=""
             data-testid="mention-autocomplete-menu"
-            className="pointer-events-auto fixed z-[9999] min-w-[180px] max-w-[calc(100vw-16px)] max-h-[208px] overflow-y-auto rounded-md border border-border bg-popover shadow-md"
+            className="pointer-events-auto fixed z-(--z-9999) min-w-(--sz-180px) max-w-(--sz-calc-15) max-h-(--sz-208px) overflow-y-auto rounded-md border border-border bg-popover shadow-md"
             style={{
               top: mentionMenuPosition.top,
               left: mentionMenuPosition.left,
@@ -1354,7 +1393,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
                 ) : option.kind === "project" && option.projectId ? (
                   <span
                     className="inline-flex h-2 w-2 rounded-full border border-border/50"
-                    style={{ backgroundColor: option.projectColor ?? "#64748b" }}
+                    style={{ backgroundColor: option.projectColor ?? "var(--project-none)" }}
                   />
                 ) : option.kind === "user" ? (
                   <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -1366,7 +1405,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
                 )}
                 {option.kind === "issue" && option.issueIdentifier ? (
                   <span className="flex min-w-0 items-baseline gap-1.5">
-                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                    <span className="shrink-0 font-mono text-(length:--text-micro) text-muted-foreground">
                       {option.issueIdentifier}
                     </span>
                     <span className="truncate">{issueMentionTitle(option)}</span>
@@ -1379,27 +1418,27 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
                   </span>
                 )}
                 {option.kind === "issue" && (
-                  <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <span className="ml-auto text-(length:--text-nano) uppercase tracking-wide text-muted-foreground">
                     Task
                   </span>
                 )}
                 {option.kind === "project" && option.projectId && (
-                  <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <span className="ml-auto text-(length:--text-nano) uppercase tracking-wide text-muted-foreground">
                     Project
                   </span>
                 )}
                 {option.kind === "user" && (
-                  <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <span className="ml-auto text-(length:--text-nano) uppercase tracking-wide text-muted-foreground">
                     User
                   </span>
                 )}
                 {option.kind === "skill" && (
-                  <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <span className="ml-auto text-(length:--text-nano) uppercase tracking-wide text-muted-foreground">
                     Skill
                   </span>
                 )}
                 {option.kind === "routine" && (
-                  <span className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <span className="ml-auto text-(length:--text-nano) uppercase tracking-wide text-muted-foreground">
                     Routine
                   </span>
                 )}

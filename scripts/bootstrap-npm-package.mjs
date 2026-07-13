@@ -22,8 +22,8 @@ function usage() {
       "  node scripts/bootstrap-npm-package.mjs <package-name-or-dir> [--publish --otp <code>] [--skip-build]",
       "",
       "Examples:",
-      "  node scripts/bootstrap-npm-package.mjs @penclipai/adapter-acpx-local",
-      "  node scripts/bootstrap-npm-package.mjs packages/adapters/acpx-local --publish",
+      "  node scripts/bootstrap-npm-package.mjs @paperclipai/plugin-workspace-diff",
+      "  node scripts/bootstrap-npm-package.mjs packages/plugins/plugin-workspace-diff --publish",
       "",
     ].join("\n"),
   );
@@ -270,7 +270,7 @@ function isWorkspaceDependency(name, value) {
 
 const compatibilityAliasTargets = new Map([
   ["@paperclipai/plugin-sdk", "@penclipai/plugin-sdk"],
-  ["@paperclipai/shared", "@penclipai/shared"],
+  ["@penclipai/shared", "@penclipai/shared"],
 ]);
 
 function isLocalCompatibilityDependency(name, value) {

@@ -12,9 +12,9 @@ function windowLabel(windowKind: BudgetPolicySummary["windowKind"]) {
 }
 
 function statusTone(status: BudgetPolicySummary["status"]) {
-  if (status === "hard_stop") return "text-red-300 border-red-500/30 bg-red-500/10";
-  if (status === "warning") return "text-amber-200 border-amber-500/30 bg-amber-500/10";
-  return "text-emerald-200 border-emerald-500/30 bg-emerald-500/10";
+  if (status === "hard_stop") return "text-red-700 dark:text-red-300 border-red-500/30 bg-red-500/10";
+  if (status === "warning") return "text-amber-700 dark:text-amber-200 border-amber-500/30 bg-amber-500/10";
+  return "text-emerald-700 dark:text-emerald-200 border-emerald-500/30 bg-emerald-500/10";
 }
 
 export function BudgetPolicyCard({
@@ -99,12 +99,12 @@ export function BudgetPolicyCard({
       <div className={cn("h-2 overflow-hidden rounded-full", isPlain ? "bg-border/70" : "bg-muted/70")}>
         <div
           className={cn(
-            "h-full rounded-full transition-[width,background-color] duration-200",
+            "h-full rounded-full transition-(--tp-width-background-color) duration-200",
             summary.status === "hard_stop"
-              ? "bg-red-400"
+              ? "bg-(--status-task-blocked)"
               : summary.status === "warning"
-                ? "bg-amber-300"
-                : "bg-emerald-300",
+                ? "bg-(--status-task-todo)"
+                : "bg-(--status-task-done)",
           )}
           style={{ width: `${progress}%` }}
         />
@@ -113,7 +113,7 @@ export function BudgetPolicyCard({
   );
 
   const pausedPane = summary.paused ? (
-    <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+    <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-900 dark:text-red-100">
       <PauseCircle className="mt-0.5 h-4 w-4 shrink-0" />
       <div>
         {summary.scopeType === "project"
@@ -171,11 +171,11 @@ export function BudgetPolicyCard({
           </div>
           <div
             className={cn(
-              "inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em]",
+              "inline-flex items-center gap-2 text-(length:--text-micro) uppercase tracking-(--tracking-caps)",
               summary.status === "hard_stop"
-                ? "text-red-300"
+                ? "text-red-700 dark:text-red-300"
                 : summary.status === "warning"
-                  ? "text-amber-200"
+                  ? "text-amber-800 dark:text-amber-200"
                   : "text-muted-foreground",
             )}
           >
@@ -206,7 +206,7 @@ export function BudgetPolicyCard({
   }
 
   return (
-    <Card className={cn("overflow-hidden border-border/70 bg-card/80", compact ? "" : "shadow-[0_20px_80px_-40px_rgba(0,0,0,0.55)]")}>
+    <Card className={cn("overflow-hidden border-border/70 bg-card/80", compact ? "" : "shadow-(--shadow-extract-2)")}>
       <CardHeader className={cn("gap-3", compact ? "px-4 pt-4 pb-2" : "px-5 pt-5 pb-3")}>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -218,7 +218,7 @@ export function BudgetPolicyCard({
             <CardTitle className="mt-1 text-base">{summary.scopeName}</CardTitle>
             <CardDescription className="mt-1">{t(windowLabel(summary.windowKind), { defaultValue: windowLabel(summary.windowKind) })}</CardDescription>
           </div>
-          <div className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.18em]", statusTone(summary.status))}>
+          <div className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1 text-(length:--text-micro) uppercase tracking-(--tracking-caps)", statusTone(summary.status))}>
             <StatusIcon className="h-3.5 w-3.5" />
             {summary.paused
               ? t("Paused", { defaultValue: "Paused" })

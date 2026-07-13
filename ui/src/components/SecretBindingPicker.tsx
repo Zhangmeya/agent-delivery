@@ -142,7 +142,7 @@ export function SecretBindingPicker({
           {value ? (
             <button
               type="button"
-              className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+              className="text-(length:--text-micro) text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
               onClick={() => onChange(null)}
               disabled={disabled}
             >
@@ -244,7 +244,7 @@ export function SecretBindingPicker({
           })}
         </p>
       ) : selectedMissing ? (
-        <p className="text-[11px] text-destructive flex items-center gap-1">
+        <p className="text-(length:--text-micro) text-destructive flex items-center gap-1">
           <AlertCircle className="h-3 w-3" />
           {t("secretBindingPicker.selectedSecretMissing", {
             defaultValue: "The previously selected secret is no longer available. Pick another or remove the binding.",

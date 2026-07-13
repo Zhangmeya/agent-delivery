@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "packageName": "@penclipai/skills-catalog",
   "packageVersion": "0.3.1",
-  "generatedAt": "2026-06-29T14:35:50.046Z",
+  "generatedAt": "2026-07-12T19:39:49.002Z",
   "skills": [
     {
       "id": "paperclipai:bundled:docs:doc-maintenance",
@@ -74,6 +74,41 @@
       "contentHash": "sha256:3325f9ecf004298caea90a0ce500b71e21b5c7a231a1057c886ab3ddb024cada"
     },
     {
+      "id": "paperclipai:bundled:paperclip-operations:reflection-coach",
+      "key": "paperclipai/bundled/paperclip-operations/reflection-coach",
+      "kind": "bundled",
+      "category": "paperclip-operations",
+      "slug": "reflection-coach",
+      "name": "reflection-coach",
+      "description": "Reflect on another agent's recent execution record and propose the smallest durable instruction, skill, or tool-description change. Use for evidence-backed coaching proposals, never hot-swaps.",
+      "path": "catalog/bundled/paperclip-operations/reflection-coach",
+      "entrypoint": "SKILL.md",
+      "trustLevel": "markdown_only",
+      "compatibility": "compatible",
+      "defaultInstall": false,
+      "recommendedForRoles": [
+        "manager",
+        "general"
+      ],
+      "requires": [],
+      "tags": [
+        "paperclip",
+        "reflection",
+        "coaching",
+        "agents",
+        "skills"
+      ],
+      "files": [
+        {
+          "path": "SKILL.md",
+          "kind": "skill",
+          "sizeBytes": 12039,
+          "sha256": "313e037ccf8c304920a0bafa695f71f8cb07ae441d625314105dafd668dbdd26"
+        }
+      ],
+      "contentHash": "sha256:5c489e9517a303cbeb25b7eb15c47e5f9d3e41e797d591432c88fb4fceccb4c0"
+    },
+    {
       "id": "paperclipai:bundled:paperclip-operations:task-planning",
       "key": "paperclipai/bundled/paperclip-operations/task-planning",
       "kind": "bundled",
@@ -115,7 +150,7 @@
       "category": "product",
       "slug": "paperclip-capsules",
       "name": "paperclip-capsules",
-      "description": "Generate, implement, or review Paperclip capsule visuals. Use when the user asks for Paperclip capsule art, capsule banks, agent capsule visuals, heartbeat status capsules, capsule identicons, capsule graphic-generator output, or validation of Paperclip capsule brand usage.",
+      "description": "Generate, implement, or review Paperclip capsule visuals. Use for capsule art, agent capsules, heartbeat status capsules, identicons, capsule banks, or brand-usage validation.",
       "path": "catalog/bundled/product/paperclip-capsules",
       "entrypoint": "SKILL.md",
       "trustLevel": "markdown_only",
@@ -140,8 +175,8 @@
         {
           "path": "SKILL.md",
           "kind": "skill",
-          "sizeBytes": 6029,
-          "sha256": "e187ef606205ce81311d1e1aa21ab657da2589985de4533b620330b2d757b49f"
+          "sizeBytes": 5930,
+          "sha256": "11627a3fe84a97ec839f308b84d58c3552085fab378dabb1881c729b5d462511"
         },
         {
           "path": "references/generator-workflows.md",
@@ -168,7 +203,7 @@
           "sha256": "532e1b1b3385041ec03e14c7ac88f75294f197d9634fdce4b2a84f08afa3baff"
         }
       ],
-      "contentHash": "sha256:0b85701a5bc00cb22399653f3c9341f00918d5afe563eab7eee5720c3949741e"
+      "contentHash": "sha256:d692e17867de66e701e757cb12312ffd87d09214098c903c7e940e511639d6e6"
     },
     {
       "id": "paperclipai:bundled:product:wireframe",
@@ -177,7 +212,7 @@
       "category": "product",
       "slug": "wireframe",
       "name": "wireframe",
-      "description": "Produce low-fidelity black-and-white UI wireframes as standalone SVG files, optionally bundled into a single-page HTML viewer and published via the here-now skill. Use when the user asks to \"wireframe X\", \"sketch a screen for\", \"draft a layout\", \"low-fi mockup\", \"rough mock\", \"make a page to view the wireframes\", \"build a viewer for these screens\", or to \"deploy / publish / host the wireframes\". Do NOT use when the user wants production UI code, branded designs, hi-fi mockups, or animated/interactive prototypes — use frontend-design or similar instead.",
+      "description": "Produce low-fidelity black-and-white UI wireframes as SVGs or viewer pages. Use when asked to wireframe, sketch a screen, draft a layout, make a low-fi mockup, or publish wireframes.",
       "path": "catalog/bundled/product/wireframe",
       "entrypoint": "SKILL.md",
       "trustLevel": "assets",
@@ -200,8 +235,8 @@
         {
           "path": "SKILL.md",
           "kind": "skill",
-          "sizeBytes": 12080,
-          "sha256": "da00df9350033859d0c3fb2357af43738f8a0853b0c6c3424debace3e130a78d"
+          "sizeBytes": 11702,
+          "sha256": "aef4aa71ac5b1cc5e911daf5e0bd5157bc61eb2693b3d39c96bc061c0939de7c"
         },
         {
           "path": "assets/site-template.html",
@@ -240,7 +275,7 @@
           "sha256": "fcb8010755fc443e6ab1a1de4fdaa5954908d7923db554677fadd71194a6cc19"
         }
       ],
-      "contentHash": "sha256:2c50e3d00ca3f1b096f41fd440057435a7714fb962e3129c8de932ef8464420e"
+      "contentHash": "sha256:8662f0aea696f150d57a9d49aa3865e990bc213e2386bc872ba1368a2c331094"
     },
     {
       "id": "paperclipai:bundled:quality:qa-acceptance",
@@ -374,11 +409,48 @@
         {
           "path": "SKILL.md",
           "kind": "skill",
-          "sizeBytes": 4544,
-          "sha256": "8b71e7806f90679cf7ab107fd5c66d53de89c9fef837a5c1ed47cebd5c160f9d"
+          "sizeBytes": 7163,
+          "sha256": "d943494a9ca5afe93429f11a1fea62935a5f33eaa17fbc339691e483c3451993"
         }
       ],
-      "contentHash": "sha256:d9d34ded65870c1a0e72313d4eb5f610049b4248a7154203ac5a7fd5a14b8923"
+      "contentHash": "sha256:2015db96bc7f480908b34dbca1ea983a1e7da5ad850966528b9d8e4ca216b087"
+    },
+    {
+      "id": "paperclipai:optional:finance:ramp",
+      "key": "paperclipai/optional/finance/ramp",
+      "kind": "optional",
+      "category": "finance",
+      "slug": "ramp",
+      "name": "ramp",
+      "description": "Fetch and follow Ramp's published agent playbooks inside Paperclip, with mandatory approval gates for spend, incorporation, cards, account setup, and other financial actions.",
+      "path": "catalog/optional/finance/ramp",
+      "entrypoint": "SKILL.md",
+      "trustLevel": "markdown_only",
+      "compatibility": "compatible",
+      "defaultInstall": false,
+      "recommendedForRoles": [
+        "finance",
+        "operations",
+        "founder",
+        "engineer"
+      ],
+      "requires": [],
+      "tags": [
+        "ramp",
+        "finance",
+        "spend",
+        "approvals",
+        "agent-cards"
+      ],
+      "files": [
+        {
+          "path": "SKILL.md",
+          "kind": "skill",
+          "sizeBytes": 7114,
+          "sha256": "3d6a18c4b968a463778d63552e76e65d5d9784d1328a742b9c462dae7f8fed2f"
+        }
+      ],
+      "contentHash": "sha256:d7fa293de65b3e62460bd598331d81975f4900cc87cffe83dba8a4b8de711c6e"
     },
     {
       "id": "paperclipai:optional:product:design-critique",

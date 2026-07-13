@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, RotateCcw, TimerReset } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { healthApi, type DevServerHealthStatus } from "../api/health";
+import { Badge } from "@/components/ui/badge";
 
 const RESTART_PENDING_RESET_MS = 30_000;
 
@@ -70,7 +71,7 @@ export function DevRestartBanner({ devServer }: { devServer?: DevServerHealthSta
     <div className="border-b border-amber-300/60 bg-amber-50 text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
       <div className="flex flex-col gap-3 px-3 py-2.5 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em]">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-(--tracking-caps)">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span>{t("devRestart.required", { defaultValue: "Restart Required" })}</span>
             {devServer.autoRestartEnabled ? (

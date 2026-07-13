@@ -77,34 +77,39 @@ describe("StatusBadge", () => {
 });
 
 describe("StatusGlyph", () => {
-  it("gives in_progress a half-filled ring", () => {
+  it("maps in_progress to the Lucide rotate-cw glyph", () => {
     const html = renderToStaticMarkup(<StatusGlyph status="in_progress" />);
-    expect(html).toContain('d="M12 3.5 A8.5 8.5 0 0 1 12 20.5 Z"');
+    expect(html).toContain("lucide-rotate-cw");
+    expect(html).toContain('d="M21 3v5h-5"');
   });
 
-  it("gives in_review a ring + centre dot", () => {
+  it("maps in_review to the Lucide circle-dot glyph", () => {
     const html = renderToStaticMarkup(<StatusGlyph status="in_review" />);
-    expect(html).toContain('r="3.6"');
+    expect(html).toContain("lucide-circle-dot");
+    expect(html).toContain('r="1"');
   });
 
-  it("gives done a filled circle with a knocked-out check", () => {
+  it("maps done to the Lucide circle-check glyph", () => {
     const html = renderToStaticMarkup(<StatusGlyph status="done" />);
-    expect(html).toContain('d="M7.5 12.2 10.6 15.2 16.5 8.8"');
-    expect(html).toContain("stroke-background");
+    expect(html).toContain("lucide-circle-check");
+    expect(html).toContain('d="m9 12 2 2 4-4"');
   });
 
-  it("gives blocked a ring + bar", () => {
+  it("maps blocked to the Lucide circle-minus glyph", () => {
     const html = renderToStaticMarkup(<StatusGlyph status="blocked" />);
-    expect(html).toContain("<rect");
+    expect(html).toContain("lucide-circle-minus");
+    expect(html).toContain('d="M8 12h8"');
   });
 
-  it("gives backlog a dashed ring", () => {
+  it("maps backlog to the Lucide circle-dashed glyph", () => {
     const html = renderToStaticMarkup(<StatusGlyph status="backlog" />);
-    expect(html).toContain('stroke-dasharray="6.25 6.25"');
+    expect(html).toContain("lucide-circle-dashed");
+    expect(html).toContain('d="M10.1 2.182a10 10 0 0 1 3.8 0"');
   });
 
-  it("gives cancelled a ring + slash", () => {
+  it("maps cancelled to the Lucide ban glyph", () => {
     const html = renderToStaticMarkup(<StatusGlyph status="cancelled" />);
-    expect(html).toContain('d="M6.5 17.5 17.5 6.5"');
+    expect(html).toContain("lucide-ban");
+    expect(html).toContain('d="M4.929 4.929 19.07 19.071"');
   });
 });

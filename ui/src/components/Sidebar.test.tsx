@@ -20,6 +20,10 @@ const mockHeartbeatsApi = vi.hoisted(() => ({
   liveRunsForCompany: vi.fn(),
 }));
 
+const mockAttentionApi = vi.hoisted(() => ({
+  list: vi.fn(),
+}));
+
 const mockInstanceSettingsApi = vi.hoisted(() => ({
   getExperimental: vi.fn(),
 }));
@@ -74,6 +78,10 @@ vi.mock("../api/heartbeats", () => ({
   heartbeatsApi: mockHeartbeatsApi,
 }));
 
+vi.mock("../api/attention", () => ({
+  attentionApi: mockAttentionApi,
+}));
+
 vi.mock("../api/instanceSettings", () => ({
   instanceSettingsApi: mockInstanceSettingsApi,
 }));
@@ -106,6 +114,10 @@ vi.mock("./SidebarAgents", () => ({
 
 vi.mock("./SidebarProjects", () => ({
   SidebarProjects: () => <div data-testid="sidebar-projects">Projects collapsible</div>,
+}));
+
+vi.mock("./SidebarStarredProjects", () => ({
+  SidebarStarredProjects: () => <div data-testid="sidebar-starred-projects" />,
 }));
 
 async function flushReact() {
@@ -143,6 +155,7 @@ describe("Sidebar", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     mockHeartbeatsApi.liveRunsForCompany.mockResolvedValue([]);
+    mockAttentionApi.list.mockResolvedValue({ items: [] });
     mockSidebar.isMobile = false;
     mockSidebar.collapsed = false;
     mockSidebar.peeking = false;
@@ -178,10 +191,15 @@ describe("Sidebar", () => {
     const workSection = [...container.querySelectorAll("nav [data-plugin-launcher-zone]")]
       .find((node) => node.getAttribute("data-plugin-launcher-zone") === "sidebar");
     expect(workSection?.textContent).toContain("Plugin launcher outlet");
-    const workSectionContainer = workSection?.parentElement?.parentElement;
+    // The Work section is a Collapsible now (one extra wrapper level), so
+    // resolve the section root by walking up until the header label appears.
+    let workSectionContainer = workSection?.parentElement ?? null;
+    while (workSectionContainer && !workSectionContainer.textContent?.includes("Work")) {
+      workSectionContainer = workSectionContainer.parentElement;
+    }
     expect(workSectionContainer?.textContent).toContain("Work");
     expect(workSectionContainer?.textContent).toContain("Tasks");
-    expect(workSectionContainer?.textContent).toContain("Goals");
+    expect(workSectionContainer?.textContent).not.toContain("Goals");
 
     flushSync(() => {
       root.unmount();
@@ -231,7 +249,7 @@ describe("Sidebar", () => {
     });
   });
 
-  it("classic (flag OFF): New Issue button, Tasks label, per-project collapsible, no top-level Projects link", async () => {
+  it("streamlined is now standard: a stale enableStreamlinedLeftNavigation=false opt-out is ignored", async () => {
     mockInstanceSettingsApi.getExperimental.mockResolvedValue({
       enableIsolatedWorkspaces: false,
       enableStreamlinedLeftNavigation: false,
@@ -243,15 +261,13 @@ describe("Sidebar", () => {
 
     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
     expect(navLabels).toContain("Tasks");
-    expect(navLabels).not.toContain("Issues");
-    // No top-level Projects nav link in classic mode (D5 option A).
-    expect(navLabels).not.toContain("Projects");
-
-    // Per-project collapsible restored below Work.
-    expect(container.querySelector('[data-testid="sidebar-projects"]')).not.toBeNull();
+    // Top-level Projects link + starred children stay, per-project collapsible gone.
+    expect(navLabels).toContain("Projects");
+    expect(container.querySelector('[data-testid="sidebar-projects"]')).toBeNull();
+    expect(container.querySelector('[data-testid="sidebar-starred-projects"]')).not.toBeNull();
     expect(
       container.querySelector('[data-testid="sidebar-agents"]')?.getAttribute("data-streamlined"),
-    ).toBe("false");
+    ).toBe("true");
 
     flushSync(() => {
       root.unmount();
@@ -291,6 +307,17 @@ describe("Sidebar", () => {
     });
   });
 
+  it("does not poll attention until Decisions is enabled", async () => {
+    mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableDecisions: false });
+    const root = await renderSidebar();
+
+    expect(mockAttentionApi.list).not.toHaveBeenCalled();
+
+    flushSync(() => {
+      root.unmount();
+    });
+  });
+
   it("shows Skills directly below Artifacts in Work", async () => {
     mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableIsolatedWorkspaces: false });
     const root = await renderSidebar();
@@ -301,10 +328,8 @@ describe("Sidebar", () => {
     expect(artifactsLink?.getAttribute("href")).toBe("/artifacts");
 
     const navText = container.querySelector("nav")?.textContent ?? "";
-    expect(navText).toContain("Goals");
     expect(navText).toContain("Artifacts");
     expect(navText).toContain("Skills");
-    expect(navText.indexOf("Goals")).toBeLessThan(navText.indexOf("Artifacts"));
     expect(navText.indexOf("Artifacts")).toBeLessThan(navText.indexOf("Skills"));
 
     const sections = [...container.querySelectorAll("nav > div")];
@@ -312,6 +337,50 @@ describe("Sidebar", () => {
     const companySection = sections.find((section) => section.textContent?.startsWith("Company"));
     expect(workSection?.textContent).toContain("Skills");
     expect(companySection?.textContent).not.toContain("Skills");
+
+    flushSync(() => {
+      root.unmount();
+    });
+  });
+
+  it("hides the Goals nav item by default", async () => {
+    mockInstanceSettingsApi.getExperimental.mockResolvedValue({
+      enableIsolatedWorkspaces: false,
+      enableGoalsSidebarLink: false,
+    });
+    const root = await renderSidebar();
+
+    expect([...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim())).not.toContain("Goals");
+
+    flushSync(() => {
+      root.unmount();
+    });
+  });
+
+  it("reserves the Goals nav slot while experimental settings are loading", async () => {
+    mockInstanceSettingsApi.getExperimental.mockImplementation(() => new Promise(() => {}));
+    const root = await renderSidebar();
+
+    expect([...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim())).not.toContain("Goals");
+    expect(container.querySelector('[data-testid="sidebar-goals-placeholder"]')).not.toBeNull();
+
+    flushSync(() => {
+      root.unmount();
+    });
+  });
+
+  it("shows the Goals nav item when the experimental setting is enabled", async () => {
+    mockInstanceSettingsApi.getExperimental.mockResolvedValue({
+      enableIsolatedWorkspaces: false,
+      enableGoalsSidebarLink: true,
+    });
+    const root = await renderSidebar();
+
+    const link = [...container.querySelectorAll("a")].find((anchor) => anchor.textContent === "Goals");
+    expect(link?.getAttribute("href")).toBe("/goals");
+
+    const navText = container.querySelector("nav")?.textContent ?? "";
+    expect(navText.indexOf("Goals")).toBeLessThan(navText.indexOf("Artifacts"));
 
     flushSync(() => {
       root.unmount();

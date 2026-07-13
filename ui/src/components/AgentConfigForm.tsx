@@ -56,9 +56,8 @@ import { shouldShowLegacyWorkingDirectoryField } from "../lib/legacy-agent-confi
 import { listAdapterOptions, listVisibleAdapterTypes } from "../adapters/metadata";
 import { getAdapterDisplay, getAdapterLabel } from "../adapters/adapter-display-registry";
 import { useDisabledAdaptersSync } from "../adapters/use-disabled-adapters";
-import { buildAgentUpdatePatch, type AgentConfigOverlay } from "../lib/agent-config-patch";
+import { buildAgentUpdatePatch, omitUndefinedEntries, type AgentConfigOverlay } from "../lib/agent-config-patch";
 import { useAdapterCapabilities } from "../adapters/use-adapter-capabilities";
-import { filterAcpxModelsByAgent } from "../lib/acpx-model-filter";
 import { resolveForcedKubernetesEnvironment } from "../lib/forced-kubernetes-environment";
 
 /* ---- Create mode values ---- */
@@ -117,7 +116,7 @@ const emptyOverlay: AgentConfigOverlay = {
 const EMPTY_ENV: Record<string, EnvBinding> = {};
 
 export function supportsAdapterModelRefresh(adapterType: string): boolean {
-  return adapterType === "claude_local" || adapterType === "codex_local" || adapterType === "acpx_local";
+  return adapterType === "claude_local" || adapterType === "codex_local";
 }
 
 function isOverlayDirty(o: AgentConfigOverlay): boolean {
@@ -480,20 +479,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   });
   const [refreshModelsError, setRefreshModelsError] = useState<string | null>(null);
   const [refreshingModels, setRefreshingModels] = useState(false);
-  const rawModels = fetchedModels ?? externalModels ?? [];
+  const models = fetchedModels ?? externalModels ?? [];
   const adapterCommandField = "command";
-  const acpxAgent =
-    adapterType === "acpx_local"
-      ? isCreate
-        ? String(val!.adapterSchemaValues?.agent ?? "claude")
-        : eff("adapterConfig", "agent", String(config.agent ?? "claude"))
-      : "";
-  const models = useMemo(
-    () => adapterType === "acpx_local"
-      ? filterAcpxModelsByAgent(rawModels, acpxAgent)
-      : rawModels,
-    [adapterType, rawModels, acpxAgent],
-  );
   const {
     data: detectedModelData,
     refetch: refetchDetectedModel,
@@ -566,14 +553,14 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
       if (adapterConfigPatch) {
         Object.assign(next, adapterConfigPatch);
       }
-      return next;
+      return omitUndefinedEntries(next);
     }
     const base = config as Record<string, unknown>;
     const next = { ...base, ...overlay.adapterConfig };
     if (adapterConfigPatch) {
       Object.assign(next, adapterConfigPatch);
     }
-    return next;
+    return omitUndefinedEntries(next);
   }
 
   function buildCheapAdapterConfigForTest(adapterConfigPatch?: Record<string, unknown>): Record<string, unknown> {
@@ -775,9 +762,10 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   }, [props.onTestFeedbackChange, t, testActionError, testEnvironment.data, testEnvironment.error]);
 
   // Current model for display
-  const currentModelId = isCreate
-    ? val!.model
+  const currentModelValue = isCreate
+    ? val!.model ?? ""
     : eff("adapterConfig", "model", String(config.model ?? ""));
+  const currentModelId = typeof currentModelValue === "string" ? currentModelValue : "";
 
   async function handleRefreshModels() {
     if (!selectedCompanyId) return;
@@ -796,23 +784,19 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   const thinkingEffortKey =
     adapterType === "codex_local"
       ? "modelReasoningEffort"
-      : adapterType === "acpx_local" && acpxAgent === "codex"
-        ? "modelReasoningEffort"
-        : adapterType === "cursor"
-          ? "mode"
-          : adapterType === "opencode_local"
-            ? "variant"
-            : "effort";
+      : adapterType === "cursor"
+        ? "mode"
+        : adapterType === "opencode_local"
+          ? "variant"
+          : "effort";
   const thinkingEffortOptions =
     adapterType === "codex_local"
       ? codexThinkingEffortOptions
-      : adapterType === "acpx_local" && acpxAgent === "codex"
-        ? codexThinkingEffortOptions
-        : adapterType === "cursor"
-          ? cursorModeOptions
-          : adapterType === "opencode_local"
-            ? openCodeThinkingEffortOptions
-            : claudeThinkingEffortOptions;
+      : adapterType === "cursor"
+        ? cursorModeOptions
+        : adapterType === "opencode_local"
+          ? openCodeThinkingEffortOptions
+          : claudeThinkingEffortOptions;
   const currentThinkingEffort = isCreate
     ? val!.thinkingEffort
     : adapterType === "codex_local"
@@ -821,17 +805,11 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
           "modelReasoningEffort",
           String(config.modelReasoningEffort ?? config.reasoningEffort ?? ""),
         )
-      : adapterType === "acpx_local" && acpxAgent === "codex"
-        ? eff(
-            "adapterConfig",
-            "modelReasoningEffort",
-            String(config.modelReasoningEffort ?? config.reasoningEffort ?? config.effort ?? ""),
-          )
-        : adapterType === "cursor"
-          ? eff("adapterConfig", "mode", String(config.mode ?? ""))
-          : adapterType === "opencode_local"
-            ? eff("adapterConfig", "variant", String(config.variant ?? ""))
-            : eff("adapterConfig", "effort", String(config.effort ?? ""));
+      : adapterType === "cursor"
+        ? eff("adapterConfig", "mode", String(config.mode ?? ""))
+        : adapterType === "opencode_local"
+          ? eff("adapterConfig", "variant", String(config.variant ?? ""))
+          : eff("adapterConfig", "effort", String(config.effort ?? ""));
   const showThinkingEffort = adapterType !== "gemini_local" && adapterType !== "cursor_cloud";
   const codexSearchEnabled = adapterType === "codex_local"
     ? (isCreate ? Boolean(val!.search) : eff("adapterConfig", "search", Boolean(config.search)))
@@ -1631,13 +1609,13 @@ export function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmen
     <div className={`rounded-md border px-3 py-2 text-xs ${statusClass}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium">{statusLabel}</span>
-        <span className="text-[11px] opacity-80">
+        <span className="text-(length:--text-micro) opacity-80">
           {new Date(result.testedAt).toLocaleTimeString()}
         </span>
       </div>
       <div className="mt-2 space-y-1.5">
         {result.checks.map((check, idx) => (
-          <div key={`${check.code}-${idx}`} className="text-[11px] leading-relaxed break-words">
+          <div key={`${check.code}-${idx}`} className="text-(length:--text-micro) leading-relaxed break-words">
             <span className="font-medium uppercase tracking-wide opacity-80">
               {check.level}
             </span>
@@ -1658,7 +1636,7 @@ export function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmen
 
 /* ---- Internal sub-components ---- */
 
-function AdapterTypeDropdown({
+export function AdapterTypeDropdown({
   value,
   onChange,
   disabledTypes,
@@ -1690,7 +1668,7 @@ function AdapterTypeDropdown({
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1" align="start">
+      <PopoverContent className="w-(--radix-popover-trigger-width) p-1" align="start">
         {adapterList.map((item) => (
           <button
             key={item.value}
@@ -1735,7 +1713,7 @@ function ExperimentalBadge() {
   );
 }
 
-function ModelDropdown({
+export function ModelDropdown({
   models,
   value,
   onChange,
@@ -1868,7 +1846,7 @@ function ModelDropdown({
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1" align="start">
+        <PopoverContent className="w-(--radix-popover-trigger-width) p-1" align="start">
           <div className="relative mb-1">
             <input
               className="w-full px-2 py-1.5 pr-6 text-xs bg-transparent outline-none border-b border-border placeholder:text-muted-foreground/50"
@@ -1994,7 +1972,7 @@ function ModelDropdown({
                 </button>
               );
             })}
-          <div className="max-h-[240px] overflow-y-auto">
+          <div className="max-h-(--sz-240px) overflow-y-auto">
             {allowDefault && (
               <button
                 type="button"
@@ -2027,7 +2005,7 @@ function ModelDropdown({
             {groupedModels.map((group) => (
               <div key={group.provider} className="mb-1 last:mb-0">
                 {groupByProvider && (
-                  <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <div className="px-2 py-1 text-(length:--text-nano) uppercase tracking-wide text-muted-foreground">
                     {group.provider} ({group.entries.length})
                   </div>
                 )}
@@ -2164,7 +2142,7 @@ function ThinkingEffortDropdown({
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-1" align="start">
+        <PopoverContent className="w-(--radix-popover-trigger-width) p-1" align="start">
           {options.map((option) => (
             <button
               key={option.id || "auto"}

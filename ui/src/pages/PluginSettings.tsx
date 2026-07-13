@@ -289,7 +289,7 @@ export function PluginSettings() {
         </TabsContent>
 
         <TabsContent value="status" className="space-y-6">
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
+          <div className="grid gap-6 xl:grid-cols-(--gtc-39)">
             <div className="space-y-6">
               <Card>
                 <CardHeader>
@@ -379,7 +379,7 @@ export function PluginSettings() {
                                   <span className="truncate font-mono text-xs" title={run.jobKey ?? run.jobId}>
                                     {run.jobKey ?? run.jobId.slice(0, 8)}
                                   </span>
-                                  <Badge variant="outline" className="px-1 py-0 text-[10px]">
+                                  <Badge variant="outline" className="px-1 py-0 text-(length:--text-nano)">
                                     {run.trigger}
                                   </Badge>
                                 </div>
@@ -733,7 +733,7 @@ function PluginLocalFolderRow({ pluginId, companyId, declaration, status }: Plug
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="text-sm font-medium">{declaration.displayName}</h4>
-            <Badge variant="outline" className="font-mono text-[10px]">
+            <Badge variant="outline" className="font-mono text-(length:--text-nano)">
               {declaration.folderKey}
             </Badge>
             <Badge variant={status?.healthy ? "default" : "secondary"}>
@@ -942,7 +942,7 @@ function RequirementList({
             return (
               <span
                 key={item}
-                className={`rounded border px-1.5 py-0.5 font-mono text-[11px] ${
+                className={`rounded border px-1.5 py-0.5 font-mono text-(length:--text-micro) ${
                   inspectionUnavailable
                     ? "border-amber-300/60 bg-amber-50 text-amber-700 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-300"
                     : missing

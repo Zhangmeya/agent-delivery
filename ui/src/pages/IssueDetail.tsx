@@ -3,6 +3,8 @@ import { pickTextColorForPillBg } from "@/lib/color-contrast";
 import { Link, useLocation, useNavigate, useNavigationType, useParams } from "@/lib/router";
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useVisibilityRefetchInterval } from "@/lib/polling";
+import { usePublishSharedQueryData, useSharedPollingQuery } from "@/hooks/useSharedPolling";
 import { ApiError } from "../api/client";
 import { issuesApi } from "../api/issues";
 import { approvalsApi } from "../api/approvals";
@@ -10,9 +12,14 @@ import { activityApi, type RunForIssue } from "../api/activity";
 import { heartbeatsApi, type ActiveRunForIssue, type LiveRunForIssue } from "../api/heartbeats";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { accessApi, type CurrentBoardAccess } from "../api/access";
+import {
+  canBoardManageRuntime,
+  readRecoveryReconcileWorkspaceId,
+} from "../lib/recovery-reconcile";
 import { agentsApi } from "../api/agents";
 import { authApi } from "../api/auth";
 import { projectsApi } from "../api/projects";
+import { executionWorkspacesApi } from "../api/execution-workspaces";
 import { useCompany } from "../context/CompanyContext";
 import { useDialogActions } from "../context/DialogContext";
 import { usePanel } from "../context/PanelContext";
@@ -35,6 +42,14 @@ import {
 } from "../lib/issueDetailBreadcrumb";
 import { resolveIssueActiveRun, shouldTrackIssueActiveRun } from "../lib/issueActiveRun";
 import { getIssueDetailQueryOptions } from "../lib/issueDetailCache";
+import {
+  cancelInboxIssueQueries,
+  invalidateInboxIssueQueries,
+  removeIssueFromInboxCaches,
+  restoreIssueToInboxCaches,
+  snapshotInboxIssueCaches,
+  type InboxIssueCacheSnapshot,
+} from "../lib/inboxArchiveCache";
 import {
   hasBlockingShortcutDialog,
   resolveIssueDetailGoKeyAction,
@@ -164,6 +179,7 @@ import {
   SlidersHorizontal,
   XCircle,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   deriveOriginatingActor,
   getClosedIsolatedExecutionWorkspaceMessage,
@@ -175,6 +191,7 @@ import {
   type Agent,
   type FeedbackVote,
   type Issue,
+  type IssueRecoveryAction,
   type IssueAttachment,
   type IssueComment,
   type IssueWorkProduct,
@@ -182,6 +199,8 @@ import {
   type IssueThreadInteraction,
   type RequestCheckboxConfirmationInteraction,
   type RequestConfirmationInteraction,
+  type RequestItemVerdictsInteraction,
+  type RequestItemVerdictValue,
   type SuggestTasksInteraction,
   type IssueTreeControlMode,
   type WorkspaceFileRef,
@@ -282,6 +301,12 @@ export function canBoardResolveRecoveryAction(
   if (!membership) return false;
   return membership.membershipRole !== "viewer" && membership.membershipRole !== null;
 }
+
+// `canBoardManageRuntime` and `readRecoveryReconcileWorkspaceId` moved to `@/lib/recovery-reconcile`
+// so the run-page recovery surface can reuse them without importing this page module. Re-exported
+// here (from the top-of-file import) to keep existing import sites — and their tests — stable, while
+// the imported bindings stay usable within this module.
+export { canBoardManageRuntime, readRecoveryReconcileWorkspaceId };
 
 export function shouldScrollIssueDetailToTopOnNavigation(input: {
   previousIssueId: string | undefined;
@@ -515,10 +540,10 @@ function AttributionAvatar({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <div className="text-[10px] font-medium uppercase leading-none text-background/70">{label}</div>
+            <div className="text-(length:--text-nano) font-medium uppercase leading-none text-background/70">{label}</div>
             <div className="max-w-48 truncate text-xs font-medium leading-4 text-background">{actor.name}</div>
             {via ? (
-              <div className="max-w-48 truncate text-[10px] leading-3 text-background/60">via {via}</div>
+              <div className="max-w-48 truncate text-(length:--text-nano) leading-3 text-background/60">via {via}</div>
             ) : null}
           </div>
         </div>
@@ -627,7 +652,7 @@ function IssueChatSkeleton() {
           </div>
           <Skeleton className="h-8 w-8 rounded-full" />
         </div>
-        <Skeleton className="ml-auto h-16 w-[85%] rounded-xl" />
+        <Skeleton className="ml-auto h-16 w-(--pct-85) rounded-xl" />
       </div>
       <div className="space-y-2 border-t border-border pt-3">
         <Skeleton className="h-3 w-28" />
@@ -658,13 +683,13 @@ function IssueDetailLoadingState({
                 <span className="text-sm font-mono text-muted-foreground shrink-0">{identifier}</span>
               ) : null}
               {headerSeed.originKind === "routine_execution" && headerSeed.originId ? (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0"
+                <Badge variant="outline"
+                  className="border-violet-500/30 bg-violet-500/10 text-(length:--text-nano) text-violet-600 dark:text-violet-400"
                   title={`Routine execution from routine ${headerSeed.originId}`}
                 >
                   <Repeat className="h-3 w-3" />
                   Routine
-                </span>
+                </Badge>
               ) : null}
               {headerSeed.projectId ? (
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground rounded px-1 -mx-1 py-0.5 min-w-0">
@@ -695,12 +720,12 @@ function IssueDetailLoadingState({
             <h2 className="text-xl font-bold leading-tight">{headerSeed.title}</h2>
             <div className="space-y-2">
               <Skeleton className="h-4 w-full max-w-xl" />
-              <Skeleton className="h-4 w-[72%]" />
+              <Skeleton className="h-4 w-(--pct-72)" />
             </div>
           </>
         ) : (
           <>
-            <Skeleton className="h-8 w-[min(100%,22rem)]" />
+            <Skeleton className="h-8 w-(--sz-calc-37)" />
             <Skeleton className="h-16 w-full" />
           </>
         )}
@@ -824,11 +849,20 @@ type IssueDetailChatTabProps = {
   issueWorkMode: IssueWorkMode;
   executionRunId: string | null;
   blockedBy: Issue["blockedBy"];
+  liveIssueIds: ReadonlySet<string>;
   blockerAttention: Issue["blockerAttention"] | null;
   successfulRunHandoff: Issue["successfulRunHandoff"] | null;
   scheduledRetry: Issue["scheduledRetry"] | null;
   recoveryAction: Issue["activeRecoveryAction"];
   onResolveRecoveryAction?: (outcome: import("../components/IssueRecoveryActionCard").RecoveryResolveOutcome) => void;
+  onReissueIsolatedRecoveryAction?: (request: import("../components/IssueRecoveryActionCard").RecoveryReissueRequest) => void;
+  reissueIsolatedRecoveryActionPending?: boolean;
+  onReconcileForwardRecoveryAction?: () => void;
+  onBreakGlassOverrideRecoveryAction?: (reason: string) => void;
+  onQuarantineRestoreRecoveryAction?: () => void;
+  quarantineRestoreRecoveryActionPending?: boolean;
+  canBreakGlassRecoveryAction?: boolean;
+  reconcileRecoveryActionPending?: boolean;
   canFalsePositiveRecoveryAction?: boolean;
   legacyRecoverySourceIssue?: {
     identifier: string | null;
@@ -887,10 +921,15 @@ type IssueDetailChatTabProps = {
     answers: AskUserQuestionsAnswer[],
   ) => Promise<void>;
   onCancelInteraction: (interaction: AskUserQuestionsInteraction) => Promise<void>;
+  onSubmitInteractionVerdicts: (
+    interaction: RequestItemVerdictsInteraction,
+    verdicts: { id: string; verdict: RequestItemVerdictValue; reason?: string }[],
+  ) => Promise<void>;
   assigneeUserId: string | null;
   onResumeFromBacklog?: () => Promise<void> | void;
   resumeFromBacklogPending?: boolean;
   externalReferences?: MarkdownExternalReferenceMap;
+  linkCaseReferences?: boolean;
 };
 
 const IssueDetailChatTab = memo(function IssueDetailChatTab({
@@ -901,11 +940,20 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
   issueStatus,
   executionRunId,
   blockedBy,
+  liveIssueIds,
   blockerAttention,
   successfulRunHandoff,
   scheduledRetry,
   recoveryAction,
   onResolveRecoveryAction,
+  onReissueIsolatedRecoveryAction,
+  reissueIsolatedRecoveryActionPending,
+  onReconcileForwardRecoveryAction,
+  onBreakGlassOverrideRecoveryAction,
+  onQuarantineRestoreRecoveryAction,
+  quarantineRestoreRecoveryActionPending,
+  canBreakGlassRecoveryAction,
+  reconcileRecoveryActionPending,
   canFalsePositiveRecoveryAction,
   legacyRecoverySourceIssue,
   comments,
@@ -949,10 +997,12 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
   onRejectInteraction,
   onSubmitInteractionAnswers,
   onCancelInteraction,
+  onSubmitInteractionVerdicts,
   assigneeUserId,
   onResumeFromBacklog,
   resumeFromBacklogPending,
   externalReferences,
+  linkCaseReferences,
 }: IssueDetailChatTabProps) {
   const ThreadComponent = IssueChatThread;
   const { data: activity } = useQuery({
@@ -1118,11 +1168,20 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
         activeRun={resolvedActiveRun}
         issueId={issueId}
         blockedBy={blockedBy ?? []}
+        liveIssueIds={liveIssueIds}
         blockerAttention={blockerAttention}
         successfulRunHandoff={successfulRunHandoff}
         scheduledRetry={scheduledRetry}
         recoveryAction={recoveryAction ?? null}
         onResolveRecoveryAction={onResolveRecoveryAction}
+        onReissueIsolatedRecoveryAction={onReissueIsolatedRecoveryAction}
+        reissueIsolatedRecoveryActionPending={reissueIsolatedRecoveryActionPending}
+        onReconcileForwardRecoveryAction={onReconcileForwardRecoveryAction}
+        onBreakGlassOverrideRecoveryAction={onBreakGlassOverrideRecoveryAction}
+        onQuarantineRestoreRecoveryAction={onQuarantineRestoreRecoveryAction}
+        quarantineRestoreRecoveryActionPending={quarantineRestoreRecoveryActionPending}
+        canBreakGlassRecoveryAction={canBreakGlassRecoveryAction}
+        reconcileRecoveryActionPending={reconcileRecoveryActionPending}
         canFalsePositiveRecoveryAction={canFalsePositiveRecoveryAction}
         legacyRecoverySourceIssue={legacyRecoverySourceIssue ?? null}
         companyId={companyId}
@@ -1160,6 +1219,7 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
           onSubmitInteractionAnswers(interaction, answers)
         }
         onCancelInteraction={onCancelInteraction}
+        onSubmitInteractionVerdicts={onSubmitInteractionVerdicts}
         issueWorkMode={issueWorkMode}
         onWorkModeChange={onWorkModeChange}
         onCancelRun={runningIssueRun && onPauseWorkRun
@@ -1174,6 +1234,7 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
         resumeFromBacklogPending={resumeFromBacklogPending}
         footer={footer}
         externalReferences={externalReferences}
+        linkCaseReferences={linkCaseReferences}
       />
     </div>
   );
@@ -1626,13 +1687,24 @@ export function IssueDetail() {
     queryFn: () => issuesApi.list(resolvedCompanyId!, { parentId: issue!.parentId!, includeBlockedBy: true }),
     enabled: !!resolvedCompanyId && !!issue?.parentId,
   });
-  const { data: companyLiveRuns } = useQuery({
-    queryKey: resolvedCompanyId ? queryKeys.liveRuns(resolvedCompanyId) : ["live-runs", "pending"],
-    queryFn: () => heartbeatsApi.liveRunsForCompany(resolvedCompanyId!),
+  const companyLiveRunsRefetchInterval = useVisibilityRefetchInterval({ visibleMs: 5000 });
+  const companyLiveRunsQueryKey = resolvedCompanyId ? queryKeys.liveRuns(resolvedCompanyId) : ["live-runs", "pending"] as const;
+  const sharedCompanyLiveRuns = useSharedPollingQuery<LiveRunForIssue[]>({
+    companyId: resolvedCompanyId,
+    resourceKey: "live-runs",
+    queryKey: companyLiveRunsQueryKey,
     enabled: !!resolvedCompanyId,
-    refetchInterval: 5000,
+    refetchInterval: companyLiveRunsRefetchInterval,
+    leaderOnly: true,
+  });
+  const { data: companyLiveRuns, dataUpdatedAt: companyLiveRunsUpdatedAt } = useQuery({
+    queryKey: companyLiveRunsQueryKey,
+    queryFn: () => heartbeatsApi.liveRunsForCompany(resolvedCompanyId!),
+    enabled: sharedCompanyLiveRuns.enabled,
+    refetchInterval: sharedCompanyLiveRuns.refetchInterval,
     placeholderData: keepPreviousDataForSameQueryTail<LiveRunForIssue[]>(resolvedCompanyId ?? "pending"),
   });
+  usePublishSharedQueryData(sharedCompanyLiveRuns, companyLiveRuns, companyLiveRunsUpdatedAt);
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -1676,6 +1748,9 @@ export function IssueDetail() {
     && boardAccess?.companyIds?.includes(selectedCompanyId),
   );
   const canResolveBoardRecoveryAction = canBoardResolveRecoveryAction(selectedCompanyId, boardAccess);
+  // The break-glass override reconcile is `runtime:manage`-gated server-side, not gated on the
+  // recovery-resolution permission — so hide its affordance behind the matching client check.
+  const canManageBoardRuntime = canBoardManageRuntime(selectedCompanyId, boardAccess);
   const { data: feedbackVotes } = useQuery({
     queryKey: queryKeys.issues.feedbackVotes(issueId!),
     queryFn: () => issuesApi.listFeedbackVotes(issueId!),
@@ -1694,6 +1769,8 @@ export function IssueDetail() {
     retry: false,
   });
   const keyboardShortcutsEnabled = instanceGeneralSettings?.keyboardShortcuts === true;
+  // Experimental Cases: linkify `PAP-C7` chips in this issue's comment bodies.
+  const casesChipsEnabled = instanceExperimentalSettings?.enableCases === true;
   const feedbackDataSharingPreference = instanceGeneralSettings?.feedbackDataSharingPreference ?? "prompt";
   const showPlanDecompositionsSection =
     instanceExperimentalSettings?.enableIssuePlanDecompositions === true;
@@ -2523,6 +2600,38 @@ export function IssueDetail() {
     },
   });
 
+  const submitInteractionVerdicts = useMutation({
+    mutationFn: ({
+      interaction,
+      verdicts,
+    }: {
+      interaction: RequestItemVerdictsInteraction;
+      verdicts: { id: string; verdict: RequestItemVerdictValue; reason?: string }[];
+    }) => issuesApi.submitInteractionVerdicts(issueId!, interaction.id, verdicts),
+    onSuccess: (interaction, variables) => {
+      upsertInteractionInCache(interaction);
+      invalidateIssueDetail();
+      invalidateIssueCollections();
+      const applied = variables.verdicts.length;
+      const complete = interaction.kind === "request_item_verdicts"
+        ? interaction.result?.complete ?? false
+        : false;
+      pushToast({
+        title: complete
+          ? "All verdicts applied"
+          : `Applied ${applied} decision${applied === 1 ? "" : "s"}`,
+        tone: "success",
+      });
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Apply failed",
+        body: err instanceof Error ? err.message : "Unable to apply the verdicts",
+        tone: "error",
+      });
+    },
+  });
+
   const cancelInteraction = useMutation({
     mutationFn: ({ interaction }: { interaction: AskUserQuestionsInteraction }) =>
       issuesApi.cancelInteraction(issueId!, interaction.id),
@@ -2952,17 +3061,33 @@ export function IssueDetail() {
 
   const archiveFromInbox = useMutation({
     mutationFn: (id: string) => issuesApi.archiveFromInbox(id),
-    onSuccess: () => {
+    onMutate: async (id) => {
+      if (!selectedCompanyId) return { previousData: [] as InboxIssueCacheSnapshot };
+      await cancelInboxIssueQueries(queryClient, selectedCompanyId);
+      const previousData = snapshotInboxIssueCaches(queryClient, selectedCompanyId);
+      removeIssueFromInboxCaches(queryClient, selectedCompanyId, id);
+      return { previousData };
+    },
+    onSuccess: (_data, id) => {
+      if (selectedCompanyId) {
+        removeIssueFromInboxCaches(queryClient, selectedCompanyId, id);
+      }
       invalidateIssueCollections();
       navigate(sourceBreadcrumb.href.startsWith("/inbox") ? sourceBreadcrumb.href : "/inbox", { replace: true });
       pushToast({ title: t("issueDetail.taskArchivedFromInbox"), tone: "success" });
     },
-    onError: (err) => {
+    onError: (err, id, context) => {
+      if (context?.previousData) {
+        restoreIssueToInboxCaches(queryClient, context.previousData, id);
+      }
       pushToast({
         title: t("issueDetail.archiveFailed"),
         body: err instanceof Error ? err.message : t("issueDetail.unableToArchiveFromInbox"),
         tone: "error",
       });
+    },
+    onSettled: () => {
+      if (selectedCompanyId) invalidateInboxIssueQueries(queryClient, selectedCompanyId);
     },
   });
 
@@ -2970,9 +3095,9 @@ export function IssueDetail() {
     setBreadcrumbs([
       sourceBreadcrumb,
       {
-        label: hasLiveRuns ? `🔵 ${breadcrumbTitle}` : breadcrumbTitle,
-        // Prepend the task's status glyph (lg/20px) to the breadcrumb so the
-        // current task's state reads at a glance.
+        // The status glyph (leading) already conveys in-progress/live state;
+        // no redundant 🔵 emoji prefix on the title.
+        label: breadcrumbTitle,
         leading: breadcrumbStatusLeading,
         leadingKey: breadcrumbStatusKey,
       },
@@ -3510,6 +3635,12 @@ export function IssueDetail() {
   const handleCancelInteraction = useCallback(async (interaction: AskUserQuestionsInteraction) => {
     await cancelInteraction.mutateAsync({ interaction });
   }, [cancelInteraction]);
+  const handleSubmitInteractionVerdicts = useCallback(async (
+    interaction: RequestItemVerdictsInteraction,
+    verdicts: { id: string; verdict: RequestItemVerdictValue; reason?: string }[],
+  ) => {
+    await submitInteractionVerdicts.mutateAsync({ interaction, verdicts });
+  }, [submitInteractionVerdicts]);
   const canResumeFromBacklog = issue?.status === "backlog" && Boolean(issue.assigneeAgentId || issue.assigneeUserId);
   const handleResumeFromBacklog = useCallback(async () => {
     await updateIssue.mutateAsync({ status: "todo" });
@@ -3539,6 +3670,173 @@ export function IssueDetail() {
     },
     [activeRecoveryActionId, resolveRecoveryAction.mutateAsync],
   );
+
+  // Action 3 (workspace_validation): one-click re-issue of the stalled task on a fresh isolated
+  // git worktree based on the live (diverged) branch. Composes the existing safe issue-creation
+  // endpoint — it never mutates the current workspace, so the operator's commits are preserved.
+  const reissueIsolatedRecoveryAction = useMutation({
+    mutationFn: async (
+      request: import("../components/IssueRecoveryActionCard").RecoveryReissueRequest,
+    ) => {
+      if (!issue) throw new Error("Task is not loaded yet.");
+      const sourceLabel = issue.identifier ?? "the stalled task";
+      const descriptionLines = [
+        `Re-issued from ${sourceLabel} on an isolated git worktree after a workspace branch divergence.`,
+        "",
+        `- Base ref (live branch): \`${request.baseRef}\``,
+        ...(request.expectedBranch ? [`- Recorded branch: \`${request.expectedBranch}\``] : []),
+        "",
+        "---",
+        "",
+        issue.description ?? "",
+      ];
+      return issuesApi.create(issue.companyId, {
+        title: `Re-issue (isolated): ${issue.title ?? sourceLabel}`,
+        description: descriptionLines.join("\n"),
+        priority: issue.priority,
+        projectId: issue.projectId ?? null,
+        parentId: issue.parentId ?? null,
+        assigneeAgentId:
+          issue.activeRecoveryAction?.returnOwnerAgentId ??
+          issue.activeRecoveryAction?.previousOwnerAgentId ??
+          issue.assigneeAgentId ??
+          null,
+        executionWorkspacePreference: "isolated_workspace",
+        executionWorkspaceSettings: {
+          mode: "isolated_workspace",
+          workspaceStrategy: { type: "git_worktree", baseRef: request.baseRef },
+        },
+      });
+    },
+    onSuccess: (created) => {
+      invalidateIssueCollections();
+      pushToast({
+        title: "Isolated re-issue created",
+        body: created.identifier
+          ? `${created.identifier} will run on a fresh isolated workspace.`
+          : "A fresh isolated re-issue was created.",
+        tone: "success",
+      });
+      if (created.identifier) {
+        navigate(createIssueDetailPath(created.identifier));
+      }
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Re-issue failed",
+        body: err instanceof Error ? err.message : "Unable to create an isolated re-issue.",
+        tone: "error",
+      });
+    },
+  });
+  const handleReissueIsolatedRecoveryAction = useCallback(
+    (request: import("../components/IssueRecoveryActionCard").RecoveryReissueRequest) => {
+      void reissueIsolatedRecoveryAction.mutateAsync(request);
+    },
+    [reissueIsolatedRecoveryAction.mutateAsync],
+  );
+
+  // Actions 1 & 2 (workspace_validation): reconcile the recorded workspace branch to the live one
+  // via the S4 (PAP-1586) op. `forward` is the ancestry-proven safe path (server re-verifies);
+  // `override` is the audited, permission-gated break-glass carrying the operator's reason. Both
+  // resolve the matching recovery action server-side, so the task resumes via the existing flow.
+  const reconcileRecoveryAction = useMutation({
+    // The target workspace id is captured at click time (see the handlers below) and threaded
+    // through as an explicit argument, so the in-flight mutation always reconciles the workspace
+    // the operator saw on the card — never a value re-read from a `issue` snapshot that may have
+    // been refetched to a different `executionWorkspaceId` while the request was pending.
+    mutationFn: async (
+      input:
+        | { workspaceId: string; mode: "forward" }
+        | { workspaceId: string; mode: "override"; reason: string }
+        | { workspaceId: string; mode: "quarantine_restore" },
+    ) => {
+      const { workspaceId, ...body } = input;
+      return executionWorkspacesApi.reconcile(workspaceId, body);
+    },
+    onSuccess: (_result, variables) => {
+      // Refresh the detail card itself (not just the list collections): a successful reconcile
+      // clears the active recovery action, so the card must re-fetch to stop showing stale actions.
+      invalidateIssueDetail();
+      invalidateIssueCollections();
+      pushToast(
+        variables.mode === "quarantine_restore"
+          ? {
+              title: "Workspace repaired",
+              body: "Dirty changes were quarantined onto a rescue branch and the recorded branch restored; the task will resume.",
+              tone: "success",
+            }
+          : {
+              title: "Workspace branch reconciled",
+              body: "The recorded branch now matches the live branch; the task will resume.",
+              tone: "success",
+            },
+      );
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Reconcile failed",
+        body: err instanceof Error ? err.message : "Unable to reconcile the workspace branch.",
+        tone: "error",
+      });
+    },
+  });
+  // Bind the workspace id at the moment the operator clicks, from the same render that produced the
+  // visible recovery card, rather than re-reading it inside the async mutation body. The target is
+  // the workspace pinned by the recovery action's evidence — the workspace that actually diverged —
+  // not the page-level `issue.executionWorkspaceId`, which can drift (e.g. a re-issue rebinds the
+  // issue to a new workspace) while the card still shows the older action. Fall back to the
+  // page-level id only when the action carries no workspace reference.
+  const reconcileExecutionWorkspaceId =
+    readRecoveryReconcileWorkspaceId(issue?.activeRecoveryAction) ?? issue?.executionWorkspaceId ?? null;
+  const handleReconcileForwardRecoveryAction = useCallback(() => {
+    if (!reconcileExecutionWorkspaceId) {
+      pushToast({
+        title: "Reconcile failed",
+        body: "This task has no execution workspace to reconcile.",
+        tone: "error",
+      });
+      return;
+    }
+    void reconcileRecoveryAction.mutateAsync({
+      workspaceId: reconcileExecutionWorkspaceId,
+      mode: "forward",
+    });
+  }, [reconcileExecutionWorkspaceId, reconcileRecoveryAction.mutateAsync, pushToast]);
+  const handleBreakGlassOverrideRecoveryAction = useCallback(
+    (reason: string) => {
+      if (!reconcileExecutionWorkspaceId) {
+        pushToast({
+          title: "Reconcile failed",
+          body: "This task has no execution workspace to reconcile.",
+          tone: "error",
+        });
+        return;
+      }
+      void reconcileRecoveryAction.mutateAsync({
+        workspaceId: reconcileExecutionWorkspaceId,
+        mode: "override",
+        reason,
+      });
+    },
+    [reconcileExecutionWorkspaceId, reconcileRecoveryAction.mutateAsync, pushToast],
+  );
+  // Repair action (workspace_validation, dirty divergence): quarantine the dirty worktree onto a
+  // rescue branch and restore the recorded branch. Lossless — no reason required.
+  const handleQuarantineRestoreRecoveryAction = useCallback(() => {
+    if (!reconcileExecutionWorkspaceId) {
+      pushToast({
+        title: "Repair failed",
+        body: "This task has no execution workspace to repair.",
+        tone: "error",
+      });
+      return;
+    }
+    void reconcileRecoveryAction.mutateAsync({
+      workspaceId: reconcileExecutionWorkspaceId,
+      mode: "quarantine_restore",
+    });
+  }, [reconcileExecutionWorkspaceId, reconcileRecoveryAction.mutateAsync, pushToast]);
 
   const treePreviewAffectedIssues = useMemo(
     () => (treeControlPreview?.issues ?? []).filter((candidate) => !candidate.skipped),
@@ -3757,7 +4055,7 @@ export function IssueDetail() {
                     resolvedIssueDetailState ?? location.state,
                     location.search,
                   )}
-                className="hover:text-foreground transition-colors truncate max-w-[200px]"
+                className="hover:text-foreground transition-colors truncate max-w-(--sz-200px)"
                 title={ancestor.title}
               >
                 {ancestor.title}
@@ -3765,7 +4063,7 @@ export function IssueDetail() {
             </span>
           ))}
           <ChevronRight className="h-3 w-3 shrink-0" />
-          <span className="text-foreground/60 truncate max-w-[200px]">{issue.title}</span>
+          <span className="text-foreground/60 truncate max-w-(--sz-200px)">{issue.title}</span>
         </nav>
       )}
 
@@ -3870,19 +4168,19 @@ export function IssueDetail() {
           <span className="text-sm font-mono text-muted-foreground shrink-0">{issue.identifier ?? issue.id.slice(0, 8)}</span>
 
           {hasLiveRuns && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 px-2 py-0.5 text-[10px] font-medium text-cyan-600 dark:text-cyan-400 shrink-0">
+            <Badge variant="outline" className="gap-1.5 bg-blue-500/10 border-blue-500/30 text-(length:--text-nano) text-blue-600 dark:text-blue-400">
               <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-400" />
+                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500" />
               </span>
               {t("issueDetail.live")}
-            </span>
+            </Badge>
           )}
 
           {issue.originKind === "routine_execution" && issue.originId && (
             <Link
               to={`/routines/${issue.originId}`}
-              className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400 shrink-0 hover:bg-violet-500/20 transition-colors"
+              className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 text-(length:--text-nano) font-medium text-violet-600 dark:text-violet-400 shrink-0 hover:bg-violet-500/20 transition-colors"
               title={`Routine execution from routine ${issue.originId}`}
             >
               <Repeat className="h-3 w-3" />
@@ -3929,14 +4227,14 @@ export function IssueDetail() {
           })() : null}
 
           {hasAssignedBacklogBlocker(issue.blockedBy) ? (
-            <span
+            <Badge variant="outline"
               data-testid="issue-detail-parked-blocker"
               className="inline-flex items-center gap-1 rounded-full border border-amber-500/60 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300 shrink-0"
               title={t("issueDetail.blockedByParkedWorkTitle")}
             >
               <Flag className="h-3 w-3" />
               {t("issueDetail.blockedByParkedWork")}
-            </span>
+            </Badge>
           ) : null}
 
           {issue.projectId ? (
@@ -3964,9 +4262,9 @@ export function IssueDetail() {
           {(issue.labels ?? []).length > 0 && (
             <div className="hidden sm:flex items-center gap-1">
               {(issue.labels ?? []).slice(0, 4).map((label) => (
-                <span
+                <Badge variant="outline"
                   key={label.id}
-                  className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                  className="text-(length:--text-nano)"
                   style={{
                     borderColor: label.color,
                     color: pickTextColorForPillBg(label.color, 0.12),
@@ -3974,10 +4272,10 @@ export function IssueDetail() {
                   }}
                 >
                   {label.name}
-                </span>
+                </Badge>
               ))}
               {(issue.labels ?? []).length > 4 && (
-                <span className="text-[10px] text-muted-foreground">+{(issue.labels ?? []).length - 4}</span>
+                <span className="text-(length:--text-nano) text-muted-foreground">+{(issue.labels ?? []).length - 4}</span>
               )}
             </div>
           )}
@@ -4430,11 +4728,20 @@ export function IssueDetail() {
               issueWorkMode={issue.workMode ?? "standard"}
               executionRunId={issue.executionRunId ?? null}
               blockedBy={issue.blockedBy ?? []}
+              liveIssueIds={liveIssueIds}
               blockerAttention={issue.blockerAttention ?? null}
               successfulRunHandoff={issue.successfulRunHandoff ?? null}
               scheduledRetry={issue.scheduledRetry ?? null}
               recoveryAction={issue.activeRecoveryAction ?? null}
               onResolveRecoveryAction={handleResolveRecoveryAction}
+              onReissueIsolatedRecoveryAction={handleReissueIsolatedRecoveryAction}
+              reissueIsolatedRecoveryActionPending={reissueIsolatedRecoveryAction.isPending}
+              onReconcileForwardRecoveryAction={handleReconcileForwardRecoveryAction}
+              onBreakGlassOverrideRecoveryAction={handleBreakGlassOverrideRecoveryAction}
+              onQuarantineRestoreRecoveryAction={handleQuarantineRestoreRecoveryAction}
+              quarantineRestoreRecoveryActionPending={reconcileRecoveryAction.isPending}
+              canBreakGlassRecoveryAction={canManageBoardRuntime}
+              reconcileRecoveryActionPending={reconcileRecoveryAction.isPending}
               canFalsePositiveRecoveryAction={canResolveBoardRecoveryAction}
               legacyRecoverySourceIssue={legacyRecoverySourceIssue}
               comments={threadComments}
@@ -4491,12 +4798,14 @@ export function IssueDetail() {
               onRejectInteraction={handleRejectInteraction}
               onSubmitInteractionAnswers={handleSubmitInteractionAnswers}
               onCancelInteraction={handleCancelInteraction}
+              onSubmitInteractionVerdicts={handleSubmitInteractionVerdicts}
               assigneeUserId={issue.assigneeUserId ?? null}
               onResumeFromBacklog={canResumeFromBacklog ? handleResumeFromBacklog : undefined}
               resumeFromBacklogPending={
                 updateIssue.isPending && updateIssue.variables?.status === "todo"
               }
               externalReferences={externalObjectsState.isEnabled ? externalObjectsState.markdownReferences : undefined}
+              linkCaseReferences={casesChipsEnabled}
             />
           ) : null}
         </TabsContent>
@@ -4553,7 +4862,7 @@ export function IssueDetail() {
       </Tabs>
 
       <Dialog open={treeControlOpen} onOpenChange={setTreeControlOpen}>
-        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[560px]">
+        <DialogContent className="flex max-h-(--sz-calc-18) flex-col gap-0 overflow-hidden p-0 sm:max-w-(--sz-560px)">
           <DialogHeader className="border-b border-border/60 px-6 pb-4 pr-12 pt-6">
             <DialogTitle>{t(`issueDetail.treeControl.${treeControlScope}.${treeControlMode}.label`)}</DialogTitle>
             <DialogDescription>
@@ -4712,7 +5021,7 @@ export function IssueDetail() {
 
       {/* Mobile properties drawer */}
       <Sheet open={mobilePropsOpen} onOpenChange={setMobilePropsOpen}>
-        <SheetContent side="bottom" className="max-h-[85dvh] pb-[env(safe-area-inset-bottom)]">
+        <SheetContent side="bottom" className="max-h-(--sz-85dvh) pb-(--sz-safe-bottom)">
           <SheetHeader>
             <SheetTitle className="text-sm">{t("Properties")}</SheetTitle>
           </SheetHeader>

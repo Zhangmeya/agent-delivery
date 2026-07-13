@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useQuery } from "@tanstack/react-query";
+import type { QueryKey } from "@tanstack/react-query";
 import type { DocumentRevision } from "@penclipai/shared";
 import { issuesApi } from "../api/issues";
 import { queryKeys } from "../lib/queryKeys";
@@ -13,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -36,17 +38,21 @@ export function DocumentDiffModal({
   latestRevisionNumber,
   open,
   onOpenChange,
+  revisionsQueryKey,
+  revisionsQueryFn,
 }: {
-  issueId: string;
+  issueId?: string;
   documentKey: string;
   latestRevisionNumber: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  revisionsQueryKey?: QueryKey;
+  revisionsQueryFn?: () => Promise<DocumentRevision[]>;
 }) {
   const { t } = useTranslation();
   const { data: revisions } = useQuery({
-    queryKey: queryKeys.issues.documentRevisions(issueId, documentKey),
-    queryFn: () => issuesApi.listDocumentRevisions(issueId, documentKey),
+    queryKey: revisionsQueryKey ?? queryKeys.issues.documentRevisions(issueId ?? "", documentKey),
+    queryFn: () => revisionsQueryFn ? revisionsQueryFn() : issuesApi.listDocumentRevisions(issueId ?? "", documentKey),
     enabled: open,
   });
 
@@ -76,8 +82,8 @@ export function DocumentDiffModal({
 
   const lineClassesByKind: Record<DiffRow["kind"], string> = {
     context: "bg-transparent",
-    removed: "bg-red-500/10 text-red-100",
-    added: "bg-green-500/10 text-green-100",
+    removed: "bg-red-500/10 text-red-900 dark:text-red-100",
+    added: "bg-green-500/10 text-green-900 dark:text-green-100",
   };
 
   const markerByKind: Record<DiffRow["kind"], string> = {
@@ -88,7 +94,7 @@ export function DocumentDiffModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[90%] w-full max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="!max-w-(--pct-90) w-full max-h-(--sz-85vh) overflow-hidden flex flex-col">
         <div className="flex items-center justify-between gap-4">
           <DialogHeader className="shrink-0">
             <DialogTitle>
@@ -154,7 +160,7 @@ export function DocumentDiffModal({
               {diffRows.map((row, index) => (
                 <div
                   key={`${row.kind}-${index}-${row.oldLineNumber ?? "x"}-${row.newLineNumber ?? "x"}`}
-                  className={`grid grid-cols-[56px_56px_24px_minmax(0,1fr)] gap-0 border-b border-border/30 px-3 ${lineClassesByKind[row.kind]}`}
+                  className={`grid grid-cols-(--gtc-1) gap-0 border-b border-border/30 px-3 ${lineClassesByKind[row.kind]}`}
                 >
                   <span className="select-none border-r border-border/30 pr-3 text-right text-muted-foreground">
                     {row.oldLineNumber ?? ""}

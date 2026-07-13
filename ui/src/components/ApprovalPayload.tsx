@@ -77,7 +77,7 @@ function SkillList({ values }: { values: unknown }) {
         {items.map((item) => (
           <span
             key={item}
-            className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+            className="rounded bg-muted px-1.5 py-0.5 font-mono text-(length:--text-micro) text-muted-foreground"
           >
             {item}
           </span>

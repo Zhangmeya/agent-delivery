@@ -42,7 +42,7 @@ Before removing `server/src/onboarding-assets/ceo/` or the `skills/paperclip-cre
 
 1. **Onboarding parity test** — a server-level integration test that runs the current onboarding flow on a fresh company and verifies the resulting agent/project/task tree is byte-equivalent (modulo timestamps and ids) to a `paperclipai/bundled/company-defaults/core-exec-team` install via the catalog service.
 2. **Slug stability test** — covers that the agent slugs `ceo`, `cto`, `qa` keep stable values when reparenting under an existing target manager, so downstream UI links don't churn.
-3. **Skill resolution drift test** — fails if a bundled team's `requiredSkills` references a catalog skill key that no longer exists in the latest `@paperclipai/skills-catalog` manifest.
+3. **Skill resolution drift test** — fails if a bundled team's `requiredSkills` references a catalog skill key that no longer exists in the latest `@penclipai/skills-catalog` manifest.
 4. **Adapter default fallback test** — confirms that imported agents with no explicit `adapterType` pick up the same adapter the legacy onboarding path used.
 5. **Routine import compatibility test** — recurring `TASK.md` entries (`first-heartbeat`, `weekly-engineering-sync`, `weekly-design-review`, `weekly-content-review`) must still be imported with timer heartbeats disabled, matching current portability behavior.
 

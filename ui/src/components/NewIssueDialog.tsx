@@ -117,6 +117,7 @@ type StagedIssueFile = {
   title?: string | null;
 };
 
+import { Badge } from "@/components/ui/badge";
 import {
   buildAssigneeAdapterOverrides,
   ISSUE_OVERRIDE_ADAPTER_TYPES,
@@ -319,6 +320,15 @@ function defaultExecutionWorkspaceModeForIssueDefaults(
     : defaultExecutionWorkspaceModeForProject(project);
 }
 
+function isWorkModePeriodShortcut(e: Pick<React.KeyboardEvent, "code" | "ctrlKey" | "key" | "metaKey">) {
+  const isPeriod = e.code === "Period" || e.key === ".";
+  return (e.metaKey || e.ctrlKey) && isPeriod;
+}
+
+function isWorkModeEscapeShortcut(e: Pick<KeyboardEvent, "key" | "metaKey">) {
+  return e.metaKey && e.key === "Escape";
+}
+
 const IssueTitleTextarea = memo(function IssueTitleTextarea({
   value,
   pending,
@@ -420,7 +430,7 @@ const IssueDescriptionEditor = memo(function IssueDescriptionEditor({
       placeholder={t("newIssue.descriptionPlaceholder", { defaultValue: "Add description..." })}
       bordered={false}
       mentions={mentions}
-      contentClassName={cn("text-sm text-muted-foreground pb-12", expanded ? "min-h-[220px]" : "min-h-[120px]")}
+      contentClassName={cn("text-sm text-muted-foreground pb-12", expanded ? "min-h-(--sz-220px)" : "min-h-(--sz-120px)")}
       imageUploadHandler={imageUploadHandler}
     />
   );
@@ -1069,7 +1079,7 @@ export function NewIssueDialog() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.code === "Period") {
+    if (isWorkModePeriodShortcut(e)) {
       e.preventDefault();
       setWorkMode((current) => nextWorkMode(current));
       return;
@@ -1303,13 +1313,22 @@ export function NewIssueDialog() {
         aria-describedby={undefined}
         style={{ "--new-issue-dialog-height": MOBILE_DIALOG_HEIGHT } as CSSProperties}
         className={cn(
-          "flex h-[var(--new-issue-dialog-height)] max-h-[var(--new-issue-dialog-height)] flex-col gap-0 overflow-hidden p-0 sm:h-auto",
+          "flex h-(--new-issue-dialog-height) max-h-(--new-issue-dialog-height) flex-col gap-0 overflow-hidden p-0 sm:h-auto",
           expanded
-            ? "sm:max-w-2xl sm:h-[var(--new-issue-dialog-height)]"
+            ? "sm:max-w-2xl sm:h-(--new-issue-dialog-height)"
             : "sm:max-w-lg"
         )}
         onKeyDown={handleKeyDown}
         onEscapeKeyDown={(event) => {
+          if (event.defaultPrevented) return;
+          // iOS Safari maps command-period to Escape for hardware keyboards.
+          // Treat modifier-Escape as the same mode-cycle shortcut so the
+          // dialog does not dismiss before the shortcut can run.
+          if (isWorkModeEscapeShortcut(event)) {
+            event.preventDefault();
+            setWorkMode((current) => nextWorkMode(current));
+            return;
+          }
           if (createIssue.isPending) {
             event.preventDefault();
           }
@@ -1369,7 +1388,7 @@ export function NewIssueDialog() {
                   >
                     <span
                       className={cn(
-                        "px-1 py-0.5 rounded text-[10px] font-semibold leading-none",
+                        "px-1 py-0.5 rounded text-(length:--text-nano) font-semibold leading-none",
                         !c.brandColor && "bg-muted",
                       )}
                       style={
@@ -1525,7 +1544,7 @@ export function NewIssueDialog() {
                     <>
                       <span
                         className="h-3.5 w-3.5 shrink-0 rounded-sm"
-                        style={{ backgroundColor: currentProject.color ?? "#6366f1" }}
+                        style={{ backgroundColor: currentProject.color ?? "var(--project-seed)" }}
                       />
                       <span className="truncate">{option.label}</span>
                     </>
@@ -1540,7 +1559,7 @@ export function NewIssueDialog() {
                     <>
                       <span
                         className="h-3.5 w-3.5 shrink-0 rounded-sm"
-                        style={{ backgroundColor: project?.color ?? "#6366f1" }}
+                        style={{ backgroundColor: project?.color ?? "var(--project-seed)" }}
                       />
                       <span className="truncate">{option.label}</span>
                     </>
@@ -2006,12 +2025,12 @@ export function NewIssueDialog() {
                       <div key={file.id} className="flex items-start justify-between gap-3 rounded-md border border-border/70 px-3 py-2">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                            <Badge variant="outline" className="border-border font-mono text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
                               {file.documentKey}
-                            </span>
+                            </Badge>
                             <span className="truncate text-sm">{file.file.name}</span>
                           </div>
-                          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                          <div className="mt-1 flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
                             <FileText className="h-3.5 w-3.5" />
                             <span>{file.title || file.file.name}</span>
                             <span>•</span>
@@ -2045,7 +2064,7 @@ export function NewIssueDialog() {
                             <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                             <span className="truncate text-sm">{file.file.name}</span>
                           </div>
-                          <div className="mt-1 text-[11px] text-muted-foreground">
+                          <div className="mt-1 text-(length:--text-micro) text-muted-foreground">
                             {file.file.type || "application/octet-stream"} • {formatFileSize(file.file)}
                           </div>
                         </div>
@@ -2093,7 +2112,7 @@ export function NewIssueDialog() {
                   <span className="flex flex-col text-left leading-tight">
                     <span>{s.label}</span>
                     {s.description ? (
-                      <span className="text-[10px] text-muted-foreground">{s.description}</span>
+                      <span className="text-(length:--text-nano) text-muted-foreground">{s.description}</span>
                     ) : null}
                   </span>
                 </button>
@@ -2300,7 +2319,7 @@ export function NewIssueDialog() {
             </div>
             <Button
               size="sm"
-              className="min-w-[8.5rem] disabled:opacity-100"
+              className="min-w-(--sz-8_5rem) disabled:opacity-100"
               disabled={!titleHasText || createIssue.isPending}
               onClick={handleSubmit}
               aria-busy={createIssue.isPending}

@@ -13,7 +13,6 @@ const nonServerProjects = [
   "@penclipai/skills-catalog",
   "@penclipai/db",
   "@penclipai/adapter-utils",
-  "@penclipai/adapter-acpx-local",
   "@penclipai/adapter-codex-local",
   "@penclipai/adapter-opencode-local",
   "@penclipai/plugin-sdk",
@@ -421,6 +420,14 @@ if (options.dryRun) {
                 (_, index) => index % options.shardCount === options.shardIndex,
               )
             : null,
+        selectedGeneralWorkspaceProjects:
+          options.mode !== generalModeName
+            ? null
+            : options.group === generalWorkspacesAGroupName
+              ? generalWorkspacesAProjects
+              : options.group === generalWorkspacesBGroupName
+                ? generalWorkspacesBProjects
+                : null,
       },
       null,
       2,

@@ -41,11 +41,22 @@ const mockAuthApi = vi.hoisted(() => ({
   updateProfile: vi.fn(),
   signOut: vi.fn(),
 }));
+const mockInstanceSettingsApi = vi.hoisted(() => ({
+  getExperimental: vi.fn(),
+}));
 const mockToggleTheme = vi.hoisted(() => vi.fn());
 const mockSetSidebarOpen = vi.hoisted(() => vi.fn());
 
 vi.mock("@/api/auth", () => ({
   authApi: mockAuthApi,
+}));
+
+vi.mock("@/api/instanceSettings", () => ({
+  instanceSettingsApi: mockInstanceSettingsApi,
+}));
+
+vi.mock("../api/instanceSettings", () => ({
+  instanceSettingsApi: mockInstanceSettingsApi,
 }));
 
 vi.mock("@/lib/router", () => ({
@@ -98,6 +109,9 @@ describe("SidebarAccountMenu", () => {
         email: "jane@example.com",
         image: "https://example.com/jane.png",
       },
+    });
+    mockInstanceSettingsApi.getExperimental.mockResolvedValue({
+      enableIsolatedWorkspaces: false,
     });
   });
 
@@ -163,7 +177,7 @@ describe("SidebarAccountMenu", () => {
     expect(document.body.textContent).toContain("中文");
     expect(document.body.textContent).toContain("English");
     expect(document.body.querySelector('[data-slot="popover-content"]')?.className)
-      .toContain("w-[277px]");
+      .toContain("w-(--sz-277px)");
     expect(document.body.querySelector('a[href="/company/settings/instance/profile"]')).not.toBeNull();
     expect(document.body.querySelector('a[href="/company/settings/instance/general"]')).not.toBeNull();
 

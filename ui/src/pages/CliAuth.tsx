@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useParams, useSearchParams } from "@/lib/router";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { accessApi } from "../api/access";
 import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
@@ -57,12 +58,12 @@ export function CliAuthPage() {
   if (challengeQuery.error) {
     return (
       <div className="mx-auto max-w-xl py-10">
-        <div className="rounded-lg border border-border bg-card p-6">
+        <Card className="block p-6">
           <h1 className="text-lg font-semibold">{t("cliAuth.unavailableTitle")}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {challengeQuery.error instanceof Error ? challengeQuery.error.message : t("cliAuth.unavailableBody")}
           </p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -75,7 +76,7 @@ export function CliAuthPage() {
   if (challenge.status === "approved") {
     return (
       <div className="mx-auto max-w-xl py-10">
-        <div className="rounded-lg border border-border bg-card p-6">
+        <Card className="block p-6">
           <h1 className="text-xl font-semibold">{t("cliAuth.accessApprovedTitle")}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("cliAuth.accessApprovedBody")}
@@ -83,7 +84,7 @@ export function CliAuthPage() {
           <p className="mt-4 text-sm text-muted-foreground">
             {t("cliAuth.command")}: <span className="font-mono text-foreground">{challenge.command}</span>
           </p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -91,14 +92,14 @@ export function CliAuthPage() {
   if (challenge.status === "cancelled" || challenge.status === "expired") {
     return (
       <div className="mx-auto max-w-xl py-10">
-        <div className="rounded-lg border border-border bg-card p-6">
+        <Card className="block p-6">
           <h1 className="text-xl font-semibold">
             {challenge.status === "expired" ? t("cliAuth.expiredTitle") : t("cliAuth.cancelledTitle")}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("cliAuth.retryBody")}
           </p>
-        </div>
+        </Card>
       </div>
     );
   }
@@ -106,7 +107,7 @@ export function CliAuthPage() {
   if (challenge.requiresSignIn || !sessionQuery.data) {
     return (
       <div className="mx-auto max-w-xl py-10">
-        <div className="rounded-lg border border-border bg-card p-6">
+        <Card className="block p-6">
           <h1 className="text-xl font-semibold">{t("cliAuth.signInRequiredTitle")}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("cliAuth.signInRequiredBody")}
@@ -114,14 +115,14 @@ export function CliAuthPage() {
           <Button asChild className="mt-4">
             <Link to={`/auth?next=${encodeURIComponent(currentPath)}`}>{t("cliAuth.signInButton")}</Link>
           </Button>
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-xl py-10">
-      <div className="rounded-lg border border-border bg-card p-6">
+      <Card className="block p-6">
         <h1 className="text-xl font-semibold">{t("cliAuth.approveTitle")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {t("cliAuth.approveBody")}
@@ -180,7 +181,7 @@ export function CliAuthPage() {
             {cancelMutation.isPending ? t("cliAuth.cancelling") : t("common.cancel")}
           </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

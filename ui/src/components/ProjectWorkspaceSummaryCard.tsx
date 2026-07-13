@@ -8,6 +8,7 @@ import type { ProjectWorkspaceLinkedIssue, ProjectWorkspaceSummary } from "../li
 import { cn, projectWorkspaceUrl } from "../lib/utils";
 import { timeAgo } from "../lib/timeAgo";
 import { Copy, ExternalLink, FolderOpen, GitBranch, Loader2, Play, Square } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 function truncatePath(path: string) {
   const parts = path.split("/").filter(Boolean);
@@ -66,9 +67,9 @@ export function ProjectWorkspaceSummaryCard({
                 {t("projectWorkspace.updatedRelative", { defaultValue: "Updated {{time}}", time: timeAgo(summary.lastUpdatedAt) })}
               </span>
               {summary.serviceCount > 0 ? (
-                <span
+                <Badge variant="outline"
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
+                    "gap-1.5 px-2.5 py-1",
                     hasRunningServices
                       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                       : "border-border/70 bg-background text-muted-foreground",
@@ -85,12 +86,12 @@ export function ProjectWorkspaceSummaryCard({
                     running: summary.runningServiceCount,
                     total: summary.serviceCount,
                   })}
-                </span>
+                </Badge>
               ) : null}
               {summary.executionWorkspaceStatus ? (
-                <span className="inline-flex items-center rounded-full border border-border/70 bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                <Badge variant="outline" className="border-border/70 bg-background px-2.5 py-1 text-muted-foreground">
                   {summary.executionWorkspaceStatus.replace(/_/g, " ")}
-                </span>
+                </Badge>
               ) : null}
             </div>
             <Link

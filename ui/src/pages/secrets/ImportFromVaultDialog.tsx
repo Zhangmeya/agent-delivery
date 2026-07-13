@@ -674,7 +674,7 @@ export function ImportFromVaultDialog({
     >
       <DialogContent
         showCloseButton={false}
-        className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+        className="flex max-h-(--sz-85vh) flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
         data-testid="import-from-vault-dialog"
       >
         <header className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
@@ -822,7 +822,7 @@ function Stepper({ step }: { step: Step }) {
         <span key={s.id} className="flex items-center gap-2">
           <span
             className={cn(
-              "inline-flex h-4 w-4 items-center justify-center rounded-full border text-[10px]",
+              "inline-flex h-4 w-4 items-center justify-center rounded-full border text-(length:--text-nano)",
               index === activeIndex
                 ? "border-primary bg-primary text-primary-foreground"
                 : index < activeIndex
@@ -1106,7 +1106,7 @@ function SelectStep(props: SelectStepProps) {
                           )}
                       </div>
                       {candidate.status === "conflict" && candidate.conflicts.length > 0 && (
-                        <div className="mt-0.5 text-[11px] text-amber-600 dark:text-amber-400">
+                        <div className="mt-0.5 text-(length:--text-micro) text-amber-600 dark:text-amber-400">
                           {candidate.conflicts[0].message}
                         </div>
                       )}
@@ -1471,7 +1471,7 @@ function ResultGroup({
                 {row.reason && (
                   <span
                     className={cn(
-                      "max-w-[24rem] truncate",
+                      "max-w-(--sz-24rem) truncate",
                       row.status === "error"
                         ? "text-destructive"
                         : "text-muted-foreground",

@@ -36,6 +36,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -126,6 +127,7 @@ import { resolveIssueActiveRun, shouldTrackIssueActiveRun } from "../lib/issueAc
 import { extractIssueTimelineEvents } from "../lib/issue-timeline-events";
 import { applyLocalQueuedIssueCommentState, isQueuedIssueComment } from "../lib/optimistic-issue-comments";
 import type { IssueChatComment } from "../lib/issue-chat-messages";
+import { Badge } from "@/components/ui/badge";
 
 type PipelineConversationActionableInteraction =
   | SuggestTasksInteraction
@@ -591,16 +593,16 @@ function formatPipelineActivity(value: string | Date | null) {
 function PipelineStatusChip({ archivedAt }: { archivedAt: Date | string | null }) {
   const paused = Boolean(archivedAt);
   return (
-    <span
+    <Badge variant="outline"
       className={cn(
-        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
+        "font-semibold",
         paused
           ? "border-muted-foreground/20 bg-muted text-muted-foreground"
           : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300",
       )}
     >
       {paused ? "Paused" : "Active"}
-    </span>
+    </Badge>
   );
 }
 
@@ -740,7 +742,7 @@ export function PipelinesIndexTable({
         <EmptyState icon={Hexagon} message={t("pipelines.noSearchMatches", { defaultValue: "No pipelines match your search." })} />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[780px] border-collapse text-sm">
+          <table className="w-full min-w-(--sz-780px) border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 <th className="py-2 pl-3 pr-4">{t("pipelines.name", { defaultValue: "Name" })}</th>
@@ -1249,12 +1251,12 @@ function PipelineCaseCard({
   };
 
   return (
-    <div
+    <Card
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      className={`rounded-md border bg-card px-3 py-2 text-sm ${
+      className={`block px-3 py-2 text-sm ${
         isDragging && !isOverlay ? "opacity-40" : ""
       } ${isOverlay ? "shadow-lg ring-1 ring-primary/20" : "hover:shadow-sm"}`}
     >
@@ -1268,26 +1270,26 @@ function PipelineCaseCard({
         <p className="font-medium leading-snug text-foreground">{title}</p>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {isWorking ? (
-            <span className="relative inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-300/30 dark:bg-emerald-900/30 dark:text-emerald-300">
+            <Badge variant="outline" className="relative border-emerald-400/40 bg-emerald-50 text-(length:--text-nano) text-emerald-700 dark:border-emerald-300/30 dark:bg-emerald-900/30 dark:text-emerald-300">
               <span className="absolute -left-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-emerald-500"></span>
               Working
-            </span>
+            </Badge>
           ) : null}
           {hasNeedsAttention ? (
-            <span className="inline-flex items-center rounded-full border border-amber-400/40 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-300/30 dark:bg-amber-900/25 dark:text-amber-300">
+            <Badge variant="outline" className="border-amber-400/40 bg-amber-50 text-(length:--text-nano) text-amber-700 dark:border-amber-300/30 dark:bg-amber-900/25 dark:text-amber-300">
               Needs attention
-            </span>
+            </Badge>
           ) : null}
           {hasChangedNotice ? (
-            <span className="inline-flex items-center rounded-full border border-indigo-400/40 bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-700 dark:border-indigo-300/30 dark:bg-indigo-900/25 dark:text-indigo-300">
+            <Badge variant="outline" className="border-indigo-400/40 bg-indigo-50 text-(length:--text-nano) text-indigo-700 dark:border-indigo-300/30 dark:bg-indigo-900/25 dark:text-indigo-300">
               This changed
-            </span>
+            </Badge>
           ) : null}
           {liveDownstreamCount > 0 ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-300/30 dark:bg-emerald-900/25 dark:text-emerald-300">
+            <Badge variant="outline" className="border-emerald-400/35 bg-emerald-50 text-(length:--text-nano) text-emerald-700 dark:border-emerald-300/30 dark:bg-emerald-900/25 dark:text-emerald-300">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
               {formatLiveDownstream(liveDownstreamCount)}
-            </span>
+            </Badge>
           ) : null}
         </div>
         {childrenSummary != null ? (
@@ -1296,7 +1298,7 @@ function PipelineCaseCard({
           </p>
         ) : null}
       </Link>
-    </div>
+    </Card>
   );
 }
 
@@ -1339,7 +1341,7 @@ function PipelineBoardColumn({
       key={stage.id}
       aria-label={`${stage.name} column`}
       className={cn(
-        "flex min-w-[260px] max-w-[320px] shrink-0 flex-col rounded-md border",
+        "flex min-w-(--sz-260px) max-w-(--sz-320px) shrink-0 flex-col rounded-md border",
         tone.outer,
         isBlockedDropTarget && "ring-1 ring-red-500/45",
       )}
@@ -1395,12 +1397,12 @@ function PipelineBoardColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "min-h-[160px] flex-1 space-y-2 rounded-b-md px-2 py-2 transition-colors",
+          "min-h-(--sz-160px) flex-1 space-y-2 rounded-b-md px-2 py-2 transition-colors",
           isBlockedDropTarget ? "bg-red-50 dark:bg-red-950/30" : isOver ? tone.bodyOver : tone.body,
         )}
       >
         {isBlockedDropTarget ? (
-          <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-(length:--text-micro) text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
             This move skips the normal flow
           </p>
         ) : null}
@@ -1409,7 +1411,7 @@ function PipelineBoardColumn({
             caseGroups.map((group) => (
               <div key={group.key} className="space-y-2">
                 {groupBy === "builtFor" ? (
-                  <div className="flex items-center justify-between gap-2 px-1 pt-1 text-[11px] font-medium text-muted-foreground">
+                  <div className="flex items-center justify-between gap-2 px-1 pt-1 text-(length:--text-micro) font-medium text-muted-foreground">
                     {group.href ? (
                       <Link to={group.href} className="min-w-0 truncate hover:text-foreground hover:underline">
                         {group.label}
@@ -2809,7 +2811,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-8">
+      <div className="mb-6 grid gap-5 lg:grid-cols-(--gtc-45) lg:items-start lg:gap-8">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <Link to="/pipelines" className="hover:text-foreground"><PipelineText k="pipelines.title" defaultValue="Pipelines" /></Link>
@@ -3109,7 +3111,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                         <label
                           key={option.id}
                           className={cn(
-                            "grid grid-cols-[18px_minmax(0,1fr)] gap-3 py-1.5 text-sm",
+                            "grid grid-cols-(--gtc-46) gap-3 py-1.5 text-sm",
                             option.disabled && !option.required ? "text-muted-foreground" : "text-foreground",
                           )}
                         >
@@ -3273,7 +3275,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
         </section>
       ) : null}
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-8 lg:grid-cols-(--gtc-45)">
         <main className="min-w-0 space-y-8">
           <PipelineItemBodyDocument
             caseId={caseId}
@@ -3309,7 +3311,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
                     <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       {field.label}
                     </h3>
-                    <MarkdownBody className="text-[15px] leading-7 text-foreground">
+                    <MarkdownBody className="text-sm leading-7 text-foreground">
                       {field.value}
                     </MarkdownBody>
                   </div>
@@ -3458,7 +3460,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
             {itemFields.length > 0 ? (
               <dl className="divide-y divide-border">
                 {itemFields.map((field) => (
-                  <div key={field.key} className="grid grid-cols-[120px_1fr] gap-3 py-2 text-sm">
+                  <div key={field.key} className="grid grid-cols-(--gtc-47) gap-3 py-2 text-sm">
                     <dt className="text-muted-foreground">{field.label}</dt>
                     <dd className="min-w-0 text-foreground [overflow-wrap:anywhere]">{field.value}</dd>
                   </div>
@@ -3581,7 +3583,7 @@ function WaitingChildRow({
     <li>
       <Link
         to={`/pipelines/${row.case.pipelineId}/items/${row.case.id}`}
-        className="grid grid-cols-[18px_minmax(0,1fr)_auto] items-start gap-3 py-2 text-sm"
+        className="grid grid-cols-(--gtc-48) items-start gap-3 py-2 text-sm"
       >
         <GitBranch className="h-4 w-4 text-muted-foreground" />
         <span className="min-w-0">
@@ -3846,7 +3848,7 @@ function DetailSection({
 }) {
   return (
     <section>
-      <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+      <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
         <span>{title}</span>
         {trailing}
       </h2>
@@ -3923,22 +3925,22 @@ function OutputLink({
 }
 
 function OutputMetaDot() {
-  return <span className="inline-block h-[3px] w-[3px] shrink-0 rounded-full bg-muted-foreground/60" aria-hidden />;
+  return <span className="inline-block h-(--sz-3px) w-(--sz-3px) shrink-0 rounded-full bg-muted-foreground/60" aria-hidden />;
 }
 
 function OutputDeliverableTag({ label }: { label: string }) {
   return (
-    <span className="shrink-0 rounded-full border border-green-600 px-1.5 text-[10px] font-semibold uppercase text-green-600 dark:border-green-400 dark:text-green-400">
+    <Badge variant="outline" className="border-green-600 px-1.5 text-(length:--text-nano) font-semibold uppercase text-green-600 dark:border-green-400 dark:text-green-400">
       {label}
-    </span>
+    </Badge>
   );
 }
 
 function OutputUnverifiedTag() {
   return (
-    <span className="shrink-0 rounded-full border border-border px-1.5 text-[10px] font-semibold uppercase text-muted-foreground">
+    <Badge variant="outline" className="border-border px-1.5 text-(length:--text-nano) font-semibold uppercase text-muted-foreground">
       Unverified
-    </span>
+    </Badge>
   );
 }
 
@@ -3954,10 +3956,10 @@ function ItemOutputMeta({ item, children }: { item: PipelineCaseOutputItem; chil
   const statusClass = issueStatusText[item.sourceIssueStatus] ?? issueStatusTextDefault;
   const roleLabel = OUTPUT_SOURCE_ROLE_LABELS[item.sourceRole] ?? humanizeOutputStatus(item.sourceRole);
   return (
-    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-(length:--text-micro) text-muted-foreground">
       <Link
         to={issueDetailPath({ id: item.sourceIssueId, identifier: item.sourceIssueIdentifier })}
-        className="font-mono text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+        className="font-mono text-(length:--text-micro) text-muted-foreground hover:text-foreground hover:underline"
         title={item.sourceIssueTitle}
       >
         {item.sourceIssueIdentifier ?? "Source task"}
@@ -3982,13 +3984,13 @@ function ItemOutputDocumentRow({ item }: { item: PipelineCaseDocumentOutputItem 
   const lowTrust = isLowTrustOutput(item);
   const href = documentAnchorPath(item);
   return (
-    <div className="group flex items-start gap-[11px] py-2.5 hover:bg-accent/50">
+    <div className="group flex items-start gap-(--sz-11px) py-2.5 hover:bg-accent/50">
       <FileText
         className={cn("mt-0.5 h-4 w-4 shrink-0", deliverable ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <Link to={href} className="truncate text-[13px] font-medium text-foreground hover:underline" title={item.title}>
+          <Link to={href} className="truncate text-(length:--text-compact) font-medium text-foreground hover:underline" title={item.title}>
             {item.title}
           </Link>
           {deliverable ? <OutputDeliverableTag label={deliverable} /> : null}
@@ -4014,11 +4016,11 @@ function ItemOutputWorkProductRow({ item }: { item: PipelineCaseWorkProductOutpu
   const lowTrust = isLowTrustOutput(item);
   const href = item.url ?? issueDetailPath({ id: item.sourceIssueId, identifier: item.sourceIssueIdentifier });
   return (
-    <div className="group flex items-start gap-[11px] py-2.5 hover:bg-accent/50">
+    <div className="group flex items-start gap-(--sz-11px) py-2.5 hover:bg-accent/50">
       <Package className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <OutputLink to={href} className="truncate text-[13px] font-medium text-foreground hover:underline" title={item.title}>
+          <OutputLink to={href} className="truncate text-(length:--text-compact) font-medium text-foreground hover:underline" title={item.title}>
             {item.title}
           </OutputLink>
           {lowTrust ? <OutputUnverifiedTag /> : null}
@@ -4045,7 +4047,7 @@ function ItemOutputAttachmentRow({ item }: { item: PipelineCaseAttachmentOutputI
   return (
     <div
       id={`linked-attachment-${item.attachmentId}`}
-      className="group flex items-start gap-[11px] py-2.5 hover:bg-accent/50"
+      className="group flex items-start gap-(--sz-11px) py-2.5 hover:bg-accent/50"
     >
       {isImage ? (
         <a
@@ -4066,7 +4068,7 @@ function ItemOutputAttachmentRow({ item }: { item: PipelineCaseAttachmentOutputI
             href={item.openPath}
             target="_blank"
             rel="noreferrer"
-            className="truncate text-[13px] font-medium text-foreground hover:underline"
+            className="truncate text-(length:--text-compact) font-medium text-foreground hover:underline"
             title={filename}
           >
             {filename}
@@ -4150,9 +4152,9 @@ function ItemOutputsSection({
       title={t("pipelines.itemOutputs", { defaultValue: "Item outputs" })}
       trailing={
         loading ? null : (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium normal-case tracking-normal text-muted-foreground">
+          <Badge variant="ghost" className="bg-muted text-(length:--text-micro) normal-case tracking-normal text-muted-foreground">
             {items.length}
-          </span>
+          </Badge>
         )
       }
     >
@@ -4160,8 +4162,8 @@ function ItemOutputsSection({
         <div className="divide-y divide-border">
           {[0, 1, 2].map((index) => (
             <div key={index} className="py-2.5">
-              <div className="h-[11px] w-1/2 rounded bg-muted" />
-              <div className="mt-1.5 h-[9px] w-1/4 rounded bg-muted opacity-70" />
+              <div className="h-(--sz-11px) w-1/2 rounded bg-muted" />
+              <div className="mt-1.5 h-(--sz-9px) w-1/4 rounded bg-muted opacity-70" />
             </div>
           ))}
         </div>
@@ -4181,7 +4183,7 @@ function ItemOutputsSection({
         <div>
           {groups.map((group, index) => (
             <div key={group.key} className={index > 0 ? "border-t border-border" : undefined}>
-              <div className="flex items-center gap-1.5 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="flex items-center gap-1.5 pb-1.5 pt-2 text-(length:--text-micro) font-semibold uppercase tracking-wide text-muted-foreground">
                 {group.icon}
                 <span>{group.label}</span>
                 <span>· {group.rows.length}</span>
@@ -4209,7 +4211,7 @@ function BuiltFromTree({
         <li key={row.case.id}>
           <Link
             to={`/pipelines/${row.case.pipelineId}/items/${row.case.id}`}
-            className="grid grid-cols-[18px_1fr_auto] items-center gap-3 py-3 text-sm hover:bg-muted/40"
+            className="grid grid-cols-(--gtc-49) items-center gap-3 py-3 text-sm hover:bg-muted/40"
           >
             <GitBranch className="h-4 w-4 text-muted-foreground" />
             <span className="min-w-0">
@@ -4303,7 +4305,7 @@ function PipelineAddItems({ pipelineId }: { pipelineId: string }) {
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
           Add to {pipeline.data.name}
         </p>
         <h1 className="text-2xl font-semibold text-foreground"><PipelineText k="pipelines.addItemsTitle" defaultValue="Build your list, then submit it all at once" /></h1>
@@ -4402,7 +4404,7 @@ function DraftItemRow({
 
   return (
     <section className={cn("border border-border bg-background", row.expanded && "border-primary")}>
-      <div className="grid grid-cols-[1fr_auto] items-center gap-3 px-4 py-3">
+      <div className="grid grid-cols-(--gtc-17) items-center gap-3 px-4 py-3">
         <button type="button" className="min-w-0 text-left" onClick={onToggle}>
           <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             {itemNumberLabel}
@@ -4429,7 +4431,7 @@ function DraftItemRow({
       </div>
 
       {row.expanded ? (
-        <div className="grid gap-5 border-t border-border px-4 py-4 lg:grid-cols-[1fr_280px]">
+        <div className="grid gap-5 border-t border-border px-4 py-4 lg:grid-cols-(--gtc-50)">
           <div className="grid gap-4 md:grid-cols-2">
             {fields.map((field) => (
               <GeneratedField
@@ -4650,10 +4652,10 @@ export function buildReviewQueueRows({
 function ReviewQueueStatusChip({ failed }: { failed: boolean }) {
   if (!failed) return null;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-300">
+    <Badge variant="outline" className="border-amber-200 bg-amber-50 font-semibold text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-300">
       <AlertTriangle className="h-3 w-3" />
       Needs attention
-    </span>
+    </Badge>
   );
 }
 
@@ -4711,7 +4713,7 @@ function ReviewQueueDetailDialog({
             {fields.length > 0 ? (
               <div className="divide-y divide-border rounded-md border border-border">
                 {fields.map(([key, value]) => (
-                  <div key={key} className="grid grid-cols-[160px_1fr] gap-3 px-3 py-2 text-sm">
+                  <div key={key} className="grid grid-cols-(--gtc-51) gap-3 px-3 py-2 text-sm">
                     <span className="text-muted-foreground">{humanizeFieldLabel(key)}</span>
                     <span className="text-foreground">{String(value)}</span>
                   </div>
@@ -4825,7 +4827,7 @@ function ReviewQueueSection({
               tabIndex={0}
               aria-current={active ? "true" : undefined}
               className={cn(
-                "grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 py-2 text-sm outline-none transition-colors",
+                "grid min-h-10 grid-cols-(--gtc-13) items-center gap-3 px-2 py-2 text-sm outline-none transition-colors",
                 active ? "bg-accent/60" : "hover:bg-accent/40",
               )}
               onMouseEnter={() => onActivate(row.id)}
@@ -4855,9 +4857,9 @@ function ReviewQueueSection({
                 <div className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2">
                     <p className="truncate font-semibold text-foreground">{row.title}</p>
-                    <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                    <Badge variant="outline" className="border-border text-(length:--text-micro) font-semibold text-muted-foreground">
                       {row.pipelineName}
-                    </span>
+                    </Badge>
                     <ReviewQueueStatusChip failed={failed} />
                   </div>
                   <p className="truncate text-muted-foreground">{row.prompt}</p>
@@ -5310,7 +5312,7 @@ export function Learnings() {
                     <div
                       key={event.id}
                       className={cn(
-                        "grid min-h-11 grid-cols-[6rem_1fr] items-center gap-3 border-b border-border/70 px-3 py-2 text-sm last:border-b-0",
+                        "grid min-h-11 grid-cols-(--gtc-15) items-center gap-3 border-b border-border/70 px-3 py-2 text-sm last:border-b-0",
                         forcedMove && "border-l-2 border-l-amber-400 bg-amber-50/50 dark:bg-amber-400/10",
                       )}
                     >

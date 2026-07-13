@@ -244,7 +244,7 @@ function runStatusClass(status: string) {
     case "timed_out":
       return "text-orange-700 dark:text-orange-300";
     case "running":
-      return "text-cyan-700 dark:text-cyan-300";
+      return "text-blue-700 dark:text-blue-300";
     case "queued":
     case "pending":
       return "text-amber-700 dark:text-amber-300";
@@ -469,12 +469,12 @@ function CommentCard({
             comment.runAgentId ? (
               <Link
                 to={`/agents/${comment.runAgentId}/runs/${comment.runId}`}
-                className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-(length:--text-nano) font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
               >
                 run {comment.runId.slice(0, 8)}
               </Link>
             ) : (
-              <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+              <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-(length:--text-nano) font-mono text-muted-foreground">
                 run {comment.runId.slice(0, 8)}
               </span>
             )
@@ -486,12 +486,12 @@ function CommentCard({
           {comment.runAgentId ? (
             <Link
               to={`/agents/${comment.runAgentId}/runs/${comment.runId}`}
-              className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+              className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-(length:--text-nano) font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
             >
               run {comment.runId.slice(0, 8)}
             </Link>
           ) : (
-            <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+            <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-(length:--text-nano) font-mono text-muted-foreground">
               run {comment.runId.slice(0, 8)}
             </span>
           )}
@@ -703,7 +703,7 @@ const TimelineList = memo(function TimelineList({
                 </div>
               </div>
               {run.environment || run.environmentLease ? (
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-(length:--text-micro) text-muted-foreground">
                   {run.environment ? (
                     <span>
                       {t("commentThread.environment", { defaultValue: "Environment" })} <span className="text-foreground">{run.environment.name}</span>
@@ -1080,7 +1080,7 @@ export function CommentThread({
             mentions={mentions}
             onSubmit={handleSubmit}
             imageUploadHandler={imageUploadHandler}
-            contentClassName="min-h-[60px] text-sm"
+            contentClassName="min-h-(--sz-60px) text-sm"
           />
           <div className="flex items-center justify-end gap-3">
             {(imageUploadHandler || onAttachImage) && (

@@ -14,6 +14,7 @@ import { healthApi } from "@/api/health";
 import { instanceSettingsApi } from "@/api/instanceSettings";
 import { ModeBadge } from "@/components/access/ModeBadge";
 import { Button } from "../components/ui/button";
+import { Card } from "@/components/ui/card";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
@@ -134,7 +135,7 @@ export function InstanceGeneralSettings() {
         </div>
       )}
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <Card className="block p-5">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold">
@@ -182,9 +183,9 @@ export function InstanceGeneralSettings() {
             />
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <Card className="block p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
             <h2 className="text-sm font-semibold">{t("Censor username in logs", { defaultValue: "Censor username in logs" })}</h2>
@@ -205,9 +206,9 @@ export function InstanceGeneralSettings() {
             aria-label={t("Toggle username log censoring", { defaultValue: "Toggle username log censoring" })}
           />
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <Card className="block p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
             <h2 className="text-sm font-semibold">
@@ -224,9 +225,9 @@ export function InstanceGeneralSettings() {
             aria-label={t("instanceGeneralSettings.keyboardShortcutsToggle", { defaultValue: "Toggle keyboard shortcuts" })}
           />
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <Card className="block p-5">
         <div className="space-y-5">
           <div className="space-y-1.5">
             <h2 className="text-sm font-semibold">{t("instanceGeneralSettings.backupRetentionTitle")}</h2>
@@ -341,9 +342,9 @@ export function InstanceGeneralSettings() {
             </div>
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <Card className="block p-5">
         <div className="space-y-4">
           <div className="space-y-1.5">
             <h2 className="text-sm font-semibold">{t("instanceGeneralSettings.runtimeDefaultLocaleTitle")}</h2>
@@ -380,7 +381,7 @@ export function InstanceGeneralSettings() {
             })}
           </div>
         </div>
-      </section>
+      </Card>
 
       <section className="rounded-xl border border-border bg-card p-5">
         <div className="space-y-4">
@@ -457,7 +458,7 @@ export function InstanceGeneralSettings() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <Card className="block p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
             <h2 className="text-sm font-semibold">
@@ -485,7 +486,7 @@ export function InstanceGeneralSettings() {
               : t("Sign out", { defaultValue: "Sign out" })}
           </Button>
         </div>
-      </section>
+      </Card>
     </div>
   );
 }

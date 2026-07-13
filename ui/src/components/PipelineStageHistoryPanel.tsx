@@ -10,6 +10,7 @@ import { timeAgo } from "../lib/timeAgo";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "../lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 /**
  * Compact revisions panel for a per-stage instructions document. Mirrors the

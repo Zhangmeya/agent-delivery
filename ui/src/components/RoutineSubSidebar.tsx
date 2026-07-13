@@ -144,10 +144,12 @@ export function RoutineSubSidebar({
                 onKeyDown={(event) => handleKeyDown(event, index)}
                 onClick={() => onNavigate(item.key)}
                 className={cn(
-                  "flex h-9 items-center gap-2 rounded-md px-3 text-sm transition-colors motion-safe:duration-150",
+                  // Match the primary nav rows (SidebarNavItem): same rhythm,
+                  // inset pill, type scale, and icon size.
+                  "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:py-1 text-(length:--text-compact) font-medium transition-colors motion-safe:duration-150",
                   isActive
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                    ? "bg-accent text-foreground"
+                    : "text-foreground/80 hover:bg-accent/50 hover:text-foreground",
                 )}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />

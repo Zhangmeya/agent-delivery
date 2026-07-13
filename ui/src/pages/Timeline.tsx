@@ -5,9 +5,12 @@
  * (`GET /companies/:companyId/timeline`). Rendering is the board-locked
  * Direction C (PAP-12422): dense rows, mini-map brush, custom inline SVG.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { GanttChartSquare, Minus, Plus, RotateCcw } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { Bot, Clock3, Coins, GanttChartSquare, Minus, Plus, RotateCcw, type LucideIcon } from "lucide-react";
+import type { WorkTimelineResult } from "@penclipai/shared";
 import { workTimelineApi, type WorkTimelineParams } from "@/api/workTimeline";
 import { queryKeys } from "@/lib/queryKeys";
 import { useCompany } from "@/context/CompanyContext";
@@ -16,16 +19,18 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { RequestCollapsedSidebar } from "@/components/RequestCollapsedSidebar";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   WorkTimelineChart,
   clampZoomScale,
   defaultZoomForWindow,
   nearestZoomForScale,
+  type VisibleTimelineWindow,
   type ZoomLevel,
   zoomScaleForLevel,
 } from "@/components/timeline/WorkTimelineChart";
-import { TIMELINE_COLORS } from "@/lib/timeline/layout";
+import { formatDuration, TIMELINE_COLORS } from "@/lib/timeline/layout";
 import { cn } from "@/lib/utils";
 
 type RangePreset = "today" | "7d" | "30d" | "custom";
@@ -60,10 +65,90 @@ function rangeWindow(range: DateRangeState): Pick<WorkTimelineParams, "from" | "
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
-function rangeError(range: DateRangeState): string | null {
-  if (!range.fromDate || !range.toDate) return "Choose a start and end date.";
-  if (!rangeWindow(range)) return "Start date must be before end date.";
+function rangeError(range: DateRangeState, t: TFunction): string | null {
+  if (!range.fromDate || !range.toDate) {
+    return t("timeline.chooseDateRange", { defaultValue: "Choose a start and end date." });
+  }
+  if (!rangeWindow(range)) {
+    return t("timeline.invalidDateRange", { defaultValue: "Start date must be before end date." });
+  }
   return null;
+}
+
+function formatInteger(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale).format(value);
+}
+
+function formatCompactInteger(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function spanStartMs(span: WorkTimelineResult["spans"][number]) {
+  return new Date(span.start).getTime();
+}
+
+function spanEndMs(span: WorkTimelineResult["spans"][number], fallbackEndMs: number) {
+  return span.end ? new Date(span.end).getTime() : fallbackEndMs;
+}
+
+function spanWindowOverlap(
+  span: WorkTimelineResult["spans"][number],
+  rawFallbackEndMs: number,
+  windowFromMs: number,
+  windowToMs: number,
+) {
+  const rawStartMs = spanStartMs(span);
+  const rawEndMs = spanEndMs(span, rawFallbackEndMs);
+  const startMs = Math.max(rawStartMs, windowFromMs);
+  const endMs = Math.min(rawEndMs, windowToMs);
+  return {
+    clippedMs: Math.max(0, endMs - startMs),
+    rawMs: Math.max(0, rawEndMs - rawStartMs),
+  };
+}
+
+function spanWindowTokens(span: WorkTimelineResult["spans"][number], rawMs: number, clippedMs: number) {
+  const totalTokens = span.usage?.totalTokens ?? 0;
+  if (totalTokens <= 0 || clippedMs <= 0) return 0;
+  if (rawMs <= 0 || clippedMs >= rawMs) return totalTokens;
+  return Math.round(totalTokens * (clippedMs / rawMs));
+}
+
+function dataWindow(data: WorkTimelineResult): VisibleTimelineWindow {
+  return {
+    fromMs: new Date(data.window.from).getTime(),
+    toMs: new Date(data.window.to).getTime(),
+  };
+}
+
+export function timelineSummary(data: WorkTimelineResult, visibleWindow: VisibleTimelineWindow = dataWindow(data)) {
+  const actorById = new Map(data.actors.map((actor) => [actor.id, actor]));
+  const activeAgentIds = new Set<string>();
+  const fullWindow = dataWindow(data);
+  const windowFromMs = Math.max(fullWindow.fromMs, Math.min(fullWindow.toMs, visibleWindow.fromMs));
+  const windowToMs = Math.max(windowFromMs, Math.min(fullWindow.toMs, visibleWindow.toMs));
+  let activeMs = 0;
+  let totalTokens = 0;
+  let runs = 0;
+
+  for (const span of data.spans) {
+    const overlap = spanWindowOverlap(span, fullWindow.toMs, windowFromMs, windowToMs);
+    if (overlap.clippedMs <= 0) continue;
+    runs += 1;
+    if (actorById.get(span.actorId)?.type === "agent") activeAgentIds.add(span.actorId);
+    activeMs += overlap.clippedMs;
+    totalTokens += spanWindowTokens(span, overlap.rawMs, overlap.clippedMs);
+  }
+
+  return {
+    runs,
+    agents: activeAgentIds.size,
+    activeMs,
+    totalTokens,
+  };
 }
 
 function Segmented<T extends string>({
@@ -100,32 +185,72 @@ function Segmented<T extends string>({
 
 /** Encoding key for the "Signal" timeline: colour = how each run started. */
 function TimelineLegend() {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-3.5 py-2 text-xs text-muted-foreground">
       <span className="flex items-center gap-1.5">
         <span className="h-2.5 w-4 rounded-sm" style={{ backgroundColor: TIMELINE_COLORS.delegated }} />
-        Delegated
+        {t("timeline.legend.delegated", { defaultValue: "Delegated" })}
       </span>
       <span className="flex items-center gap-1.5">
         <span className="h-2.5 w-4 rounded-sm" style={{ backgroundColor: TIMELINE_COLORS.automation }} />
-        Automation
+        {t("timeline.legend.automation", { defaultValue: "Automation" })}
       </span>
       <span className="flex items-center gap-1.5">
         <span
           className="h-2.5 w-4 rounded-sm border border-dashed bg-transparent"
           style={{ borderColor: TIMELINE_COLORS.cancelled }}
         />
-        Cancelled
+        {t("timeline.legend.cancelled", { defaultValue: "Cancelled" })}
       </span>
       <span className="flex items-center gap-1.5">
         <span className="h-3.5 w-0.5" style={{ backgroundColor: TIMELINE_COLORS.now }} />
-        Now
+        {t("timeline.legend.now", { defaultValue: "Now" })}
       </span>
     </div>
   );
 }
 
+function TimelineSummaryStats({
+  summary,
+}: {
+  summary: ReturnType<typeof timelineSummary>;
+}) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const stats: { label: string; value: string; icon: LucideIcon }[] = [
+    { label: t("timeline.stats.runs", { defaultValue: "Runs" }), value: formatInteger(summary.runs, locale), icon: GanttChartSquare },
+    { label: t("timeline.stats.agents", { defaultValue: "Agents" }), value: formatInteger(summary.agents, locale), icon: Bot },
+    { label: t("timeline.stats.runTime", { defaultValue: "Run time" }), value: formatDuration(0, summary.activeMs), icon: Clock3 },
+    {
+      label: t("timeline.stats.tokensUsed", { defaultValue: "Tokens used" }),
+      value: summary.totalTokens > 0
+        ? formatCompactInteger(summary.totalTokens, locale)
+        : t("timeline.stats.notTracked", { defaultValue: "Not tracked" }),
+      icon: Coins,
+    },
+  ];
+
+  return (
+    <dl className="grid flex-1 grid-cols-2 gap-3 border-y border-border py-3 md:grid-cols-4">
+      {stats.map((stat) => {
+        const Icon = stat.icon;
+        return (
+          <div key={stat.label} className="min-w-0">
+            <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              <span>{stat.label}</span>
+            </dt>
+            <dd className="mt-1 truncate text-lg font-semibold tabular-nums text-foreground">{stat.value}</dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
 export function Timeline() {
+  const { t, i18n } = useTranslation();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const [zoom, setZoom] = useState<ZoomLevel>("day");
@@ -133,12 +258,13 @@ export function Timeline() {
   const zoomTouched = useRef(false);
   const [rangePreset, setRangePreset] = useState<RangePreset>("7d");
   const [dateRange, setDateRange] = useState<DateRangeState>(() => presetRange("7d"));
+  const [visibleWindow, setVisibleWindow] = useState<VisibleTimelineWindow | null>(null);
 
   useEffect(() => {
-    setBreadcrumbs([{ label: "Timeline" }]);
-  }, [setBreadcrumbs]);
+    setBreadcrumbs([{ label: t("timeline.breadcrumb", { defaultValue: "Timeline" }) }]);
+  }, [setBreadcrumbs, t]);
 
-  const dateRangeError = rangeError(dateRange);
+  const dateRangeError = rangeError(dateRange, t);
   const params: WorkTimelineParams | null = useMemo(() => {
     const window = rangeWindow(dateRange);
     if (!window) return null;
@@ -158,11 +284,26 @@ export function Timeline() {
     setZoomScale(undefined);
   }, [data]);
 
+  useEffect(() => {
+    setVisibleWindow(null);
+  }, [data?.window.from, data?.window.to]);
+
+  const handleVisibleWindowChange = useCallback((nextWindow: VisibleTimelineWindow) => {
+    setVisibleWindow((current) => (
+      current?.fromMs === nextWindow.fromMs && current.toMs === nextWindow.toMs
+        ? current
+        : nextWindow
+    ));
+  }, []);
+
   if (!selectedCompanyId) {
     return (
       <>
         <RequestCollapsedSidebar />
-        <EmptyState icon={GanttChartSquare} message="Select a company to view its work timeline." />
+        <EmptyState
+          icon={GanttChartSquare}
+          message={t("timeline.selectCompany", { defaultValue: "Select a company to view its work timeline." })}
+        />
       </>
     );
   }
@@ -170,7 +311,9 @@ export function Timeline() {
   const header = (
     <div className="flex items-center gap-2">
       <GanttChartSquare className="h-6 w-6 text-muted-foreground" />
-      <h1 className="text-3xl font-semibold tracking-tight">Work Timeline</h1>
+      <h1 className="text-3xl font-semibold tracking-tight">
+        {t("timeline.title", { defaultValue: "Work Timeline" })}
+      </h1>
     </div>
   );
 
@@ -191,53 +334,62 @@ export function Timeline() {
     setZoomScale(undefined);
   };
 
+  const summary = data ? timelineSummary(data, visibleWindow ?? dataWindow(data)) : null;
+
+  const rangeControls = (
+    <label className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      {t("timeline.range", { defaultValue: "Range" })}
+      <Segmented
+        value={rangePreset}
+        onChange={(preset) => {
+          if (preset === "custom") return;
+          setRangePreset(preset);
+          setDateRange(presetRange(preset));
+        }}
+        options={[
+          { value: "today", label: t("timeline.range.today", { defaultValue: "Today" }) },
+          { value: "7d", label: t("timeline.range.sevenDays", { defaultValue: "7 days" }) },
+          { value: "30d", label: t("timeline.range.thirtyDays", { defaultValue: "30 days" }) },
+        ]}
+      />
+      <Input
+        type="date"
+        value={dateRange.fromDate}
+        onChange={(event) => {
+          setRangePreset("custom");
+          setDateRange((prev) => ({ ...prev, fromDate: event.target.value }));
+        }}
+        className="h-8 w-(--sz-150px) text-xs"
+        aria-label={t("timeline.startDate", { defaultValue: "Timeline start date" })}
+      />
+      <span>{t("timeline.to", { defaultValue: "to" })}</span>
+      <Input
+        type="date"
+        value={dateRange.toDate}
+        onChange={(event) => {
+          setRangePreset("custom");
+          setDateRange((prev) => ({ ...prev, toDate: event.target.value }));
+        }}
+        className="h-8 w-(--sz-150px) text-xs"
+        aria-label={t("timeline.endDate", { defaultValue: "Timeline end date" })}
+      />
+    </label>
+  );
+
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-      <label className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        Range
-        <Segmented
-          value={rangePreset}
-          onChange={(preset) => {
-            if (preset === "custom") return;
-            setRangePreset(preset);
-            setDateRange(presetRange(preset));
-          }}
-          options={[
-            { value: "today", label: "Today" },
-            { value: "7d", label: "7 days" },
-            { value: "30d", label: "30 days" },
-          ]}
-        />
-        <Input
-          type="date"
-          value={dateRange.fromDate}
-          onChange={(event) => {
-            setRangePreset("custom");
-            setDateRange((prev) => ({ ...prev, fromDate: event.target.value }));
-          }}
-          className="h-8 w-[150px] text-xs"
-          aria-label="Timeline start date"
-        />
-        <span>to</span>
-        <Input
-          type="date"
-          value={dateRange.toDate}
-          onChange={(event) => {
-            setRangePreset("custom");
-            setDateRange((prev) => ({ ...prev, toDate: event.target.value }));
-          }}
-          className="h-8 w-[150px] text-xs"
-          aria-label="Timeline end date"
-        />
-      </label>
-      <div className="ml-auto flex items-center gap-1" aria-label="Timeline zoom controls">
+    <div className="flex flex-wrap items-start gap-3">
+      {summary && <TimelineSummaryStats summary={summary} />}
+      <div
+        className="ml-auto flex items-center gap-1 pt-3"
+        aria-label={t("timeline.zoomControls", { defaultValue: "Timeline zoom controls" })}
+      >
         <Button
           type="button"
           variant="outline"
           size="icon-xs"
           onClick={() => adjustZoom(0.8)}
-          aria-label="Zoom out"
-          title="Zoom out"
+          aria-label={t("timeline.zoomOut", { defaultValue: "Zoom out" })}
+          title={t("timeline.zoomOut", { defaultValue: "Zoom out" })}
         >
           <Minus className="h-3 w-3" />
         </Button>
@@ -246,8 +398,8 @@ export function Timeline() {
           variant="outline"
           size="icon-xs"
           onClick={() => adjustZoom(1.25)}
-          aria-label="Zoom in"
-          title="Zoom in"
+          aria-label={t("timeline.zoomIn", { defaultValue: "Zoom in" })}
+          title={t("timeline.zoomIn", { defaultValue: "Zoom in" })}
         >
           <Plus className="h-3 w-3" />
         </Button>
@@ -256,8 +408,8 @@ export function Timeline() {
           variant="outline"
           size="icon-xs"
           onClick={resetZoom}
-          aria-label="Reset zoom"
-          title="Reset zoom"
+          aria-label={t("timeline.resetZoom", { defaultValue: "Reset zoom" })}
+          title={t("timeline.resetZoom", { defaultValue: "Reset zoom" })}
         >
           <RotateCcw className="h-3 w-3" />
         </Button>
@@ -274,42 +426,67 @@ export function Timeline() {
       {isLoading && <PageSkeleton />}
 
       {dateRangeError && (
-        <EmptyState
-          icon={GanttChartSquare}
-          message={dateRangeError}
-        />
+        <div className="space-y-3">
+          <EmptyState
+            icon={GanttChartSquare}
+            message={dateRangeError}
+          />
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {rangeControls}
+          </div>
+        </div>
       )}
 
       {error && (
         <EmptyState
           icon={GanttChartSquare}
-          message="Couldn't load the timeline. The aggregation endpoint may be unavailable."
+          message={t("timeline.loadFailed", {
+            defaultValue: "Couldn't load the timeline. The aggregation endpoint may be unavailable.",
+          })}
         />
       )}
 
       {data && !isLoading && !dateRangeError && (
         data.spans.length === 0 ? (
-          <EmptyState icon={GanttChartSquare} message="No activity in this window." />
+          <div className="space-y-3">
+            <EmptyState
+              icon={GanttChartSquare}
+              message={t("timeline.noActivity", { defaultValue: "No activity in this window." })}
+            />
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {rangeControls}
+            </div>
+          </div>
         ) : (
           <div className="space-y-3">
-            <div className="rounded-lg border border-border bg-card">
+            <Card className="block py-0">
               <TimelineLegend />
               <WorkTimelineChart
                 data={data}
                 zoom={zoom}
                 zoomScale={zoomScale}
+                onVisibleWindowChange={handleVisibleWindowChange}
                 onZoomScaleChange={(nextScale, nextZoom = nearestZoomForScale(nextScale)) => {
                   zoomTouched.current = true;
                   setZoomScale(nextScale);
                   setZoom(nextZoom);
                 }}
               />
+            </Card>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                {t("timeline.runCount", { count: data.spans.length, defaultValue: "{{count}} runs" })} ·{" "}
+                {t("timeline.windowRange", {
+                  from: new Date(data.window.from).toLocaleString(i18n.resolvedLanguage ?? i18n.language),
+                  to: new Date(data.window.to).toLocaleString(i18n.resolvedLanguage ?? i18n.language),
+                  defaultValue: "{{from}} to {{to}}",
+                })}
+                {data.window.capped
+                  ? t("timeline.windowCapped", { defaultValue: " · window capped" })
+                  : ""}
+              </p>
+              {rangeControls}
             </div>
-            <p className="text-xs text-muted-foreground">
-              {data.spans.length} run{data.spans.length === 1 ? "" : "s"} ·{" "}
-              {new Date(data.window.from).toLocaleString()} → {new Date(data.window.to).toLocaleString()}
-              {data.window.capped ? " · window capped" : ""}
-            </p>
           </div>
         )
       )}

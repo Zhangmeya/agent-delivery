@@ -15,7 +15,7 @@ import type { CompanyUserProfile } from "../lib/company-members";
 import { queryKeys } from "../lib/queryKeys";
 import { useToastActions } from "../context/ToastContext";
 import { DocumentAnnotationLayer, type PendingAnchor } from "./DocumentAnnotationLayer";
-import { DocumentFrameHeader } from "./DocumentFrameHeader";
+import { DocumentFrameHeader, type DocumentFrameHeaderRevisionActor } from "./DocumentFrameHeader";
 import { DocumentAnnotationsCountChip, IssueDocumentAnnotations } from "./IssueDocumentAnnotations";
 import { EmptyState } from "./EmptyState";
 import { FoldCurtain } from "./FoldCurtain";
@@ -36,6 +36,34 @@ type CaseBodyDocument = PipelineCaseDocumentPayload["document"] & {
   createdByUserId?: string | null;
 };
 
+function getPipelineRevisionActor(
+  revision: { createdByAgentId?: string | null; createdByUserId?: string | null },
+  maps: {
+    agentMap?: ReadonlyMap<string, Pick<Agent, "id" | "name"> & Partial<Pick<Agent, "icon">>>;
+    userProfileMap?: ReadonlyMap<string, CompanyUserProfile>;
+  },
+): DocumentFrameHeaderRevisionActor {
+  if (revision.createdByAgentId) {
+    const agent = maps.agentMap?.get(revision.createdByAgentId);
+    return {
+      kind: "agent",
+      name: agent?.name ?? revision.createdByAgentId.slice(0, 8),
+      agentIcon: agent?.icon ?? null,
+    };
+  }
+
+  if (revision.createdByUserId) {
+    const profile = maps.userProfileMap?.get(revision.createdByUserId);
+    return {
+      kind: "user",
+      name: profile?.label ?? (revision.createdByUserId === "local-board" ? "Board" : revision.createdByUserId.slice(0, 8)),
+      imageUrl: profile?.image ?? null,
+    };
+  }
+
+  return { kind: "system", name: "System" };
+}
+
 function isNotFound(error: unknown) {
   return error instanceof ApiError && error.status === 404;
 }
@@ -49,7 +77,7 @@ export interface PipelineItemBodyDocumentProps {
   /** Active conversation issue the body document is/should be anchored to. */
   conversationIssueId: string | null;
   conversationIssue: Issue | null;
-  agentMap?: ReadonlyMap<string, Pick<Agent, "id" | "name">>;
+  agentMap?: ReadonlyMap<string, Pick<Agent, "id" | "name"> & Partial<Pick<Agent, "icon">>>;
   userProfileMap?: ReadonlyMap<string, CompanyUserProfile>;
   mentions?: MentionOption[];
   imageUploadHandler?: (file: File) => Promise<string>;
@@ -252,7 +280,7 @@ export function PipelineItemBodyDocument({
     [conversationIssueId, doc?.latestRevisionId, latestBody, onStartConversation, pushToast, saveMutation, t],
   );
 
-  const bodyContentClassName = "paperclip-edit-in-place-content min-h-[220px] text-[15px] leading-7";
+  const bodyContentClassName = "paperclip-edit-in-place-content min-h-(--sz-220px) text-sm leading-7";
 
   const renderReadOnlyBody = (body: string) => (
     <FoldCurtain className="max-w-3xl">
@@ -278,7 +306,7 @@ export function PipelineItemBodyDocument({
             onChange={setDraftBody}
             placeholder={t("pipelineItemBody.markdownPlaceholder", { defaultValue: "Write the item body in Markdown..." })}
             bordered={false}
-            className="min-h-[220px] bg-transparent"
+            className="min-h-(--sz-220px) bg-transparent"
             contentClassName={bodyContentClassName}
             mentions={mentions}
             imageUploadHandler={imageUploadHandler}
@@ -386,7 +414,7 @@ export function PipelineItemBodyDocument({
         className="relative min-w-0"
         data-testid="pipeline-item-body-unlinked"
       >
-        <div className="relative z-[1]">{renderReadOnlyBody(displayedBody)}</div>
+        <div className="relative z-(--z-1)">{renderReadOnlyBody(displayedBody)}</div>
         <DocumentAnnotationLayer
           containerRef={containerRef}
           markdown={displayedBody}
@@ -422,7 +450,7 @@ export function PipelineItemBodyDocument({
             id: revision.id,
             revisionNumber: revision.revisionNumber,
             createdAt: revision.createdAt,
-            actorLabel: revision.createdByUserId ? "board" : revision.createdByAgentId ? "agent" : "system",
+            actor: getPipelineRevisionActor(revision, { agentMap, userProfileMap }),
           })),
           selectedRevisionId,
           currentRevisionId: doc?.latestRevisionId ?? null,

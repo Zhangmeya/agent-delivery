@@ -21,6 +21,7 @@ import { cn } from "../lib/utils";
 import { timeAgo } from "../lib/timeAgo";
 import { Identity } from "./Identity";
 import { StatusIcon } from "./StatusIcon";
+import { Badge } from "@/components/ui/badge";
 
 export const issueTrailingColumns: InboxIssueColumn[] = ["assignee", "kickedOffBy", "project", "workspace", "parent", "labels", "updated"];
 
@@ -99,7 +100,7 @@ export function IssueColumnPicker({
           {!iconOnly && t("issuesList.columns", { defaultValue: "Columns" })}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[300px] rounded-xl border-border/70 p-1.5 shadow-xl shadow-black/10">
+      <DropdownMenuContent align="end" className="w-(--sz-300px) rounded-xl border-border/70 p-1.5 shadow-xl shadow-black/10">
         <DropdownMenuLabel className="px-2 pb-1 pt-1.5">
           <div className="space-y-1">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
@@ -182,9 +183,9 @@ export function InboxIssueMetaLeading({
         </span>
       ) : null}
       {isLive && (
-        <span
+        <Badge variant="ghost"
           className={cn(
-            "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 sm:gap-1.5 sm:px-2",
+            "px-1.5 sm:gap-1.5 sm:px-2",
             "bg-blue-500/10",
           )}
         >
@@ -199,18 +200,18 @@ export function InboxIssueMetaLeading({
           </span>
           <span
             className={cn(
-              "hidden text-[11px] font-medium sm:inline",
+              "hidden text-(length:--text-micro) font-medium sm:inline",
               "text-blue-600 dark:text-blue-400",
             )}
           >
             {t("issuesList.live", { defaultValue: "Live" })}
           </span>
-        </span>
+        </Badge>
       )}
       {showSubtreeLiveChip && !isLive && subtreeLiveCount > 0 && (
-        <span
+        <Badge variant="outline"
           className={cn(
-            "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 sm:gap-1.5 sm:px-2",
+            "px-1.5 sm:gap-1.5 sm:px-2",
             "border-border bg-transparent",
           )}
           title={`${subtreeLiveCount} sub-task${subtreeLiveCount === 1 ? "" : "s"} running below`}
@@ -222,10 +223,10 @@ export function InboxIssueMetaLeading({
             )}
             aria-hidden="true"
           />
-          <span className="hidden text-[11px] font-medium text-muted-foreground sm:inline">
+          <span className="hidden text-(length:--text-micro) font-medium text-muted-foreground sm:inline">
             {subtreeLiveCount} live below
           </span>
-        </span>
+        </Badge>
       )}
     </>
   );
@@ -369,6 +370,7 @@ export function InboxIssueTrailingColumns({
 
         if (column === "project") {
           if (projectName) {
+            // token-extraction: allowlisted — accentColor also feeds pickTextColorForPillBg() contrast math; a var() string can't be parsed as a hex color there.
             const accentColor = projectColor ?? "#64748b";
             return (
               <span
@@ -397,9 +399,9 @@ export function InboxIssueTrailingColumns({
             return (
               <span key={column} className="flex min-w-0 items-center gap-1 overflow-hidden">
                 {(issue.labels ?? []).slice(0, 2).map((label) => (
-                  <span
+                  <Badge variant="outline"
                     key={label.id}
-                    className="inline-flex min-w-0 max-w-full shrink-0 items-center rounded-full border px-1.5 py-0 text-[10px] font-medium"
+                    className="min-w-0 max-w-full px-1.5 py-0 text-(length:--text-nano)"
                     style={{
                       borderColor: label.color,
                       color: pickTextColorForPillBg(label.color, 0.12),
@@ -407,10 +409,10 @@ export function InboxIssueTrailingColumns({
                     }}
                   >
                     <span className="truncate">{label.name}</span>
-                  </span>
+                  </Badge>
                 ))}
                 {(issue.labels ?? []).length > 2 ? (
-                  <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                  <span className="shrink-0 text-(length:--text-nano) font-medium text-muted-foreground">
                     +{(issue.labels ?? []).length - 2}
                   </span>
                 ) : null}
@@ -472,7 +474,7 @@ export function InboxIssueTrailingColumns({
 
         if (column === "updated") {
           return (
-            <span key={column} className="min-w-0 truncate text-right text-[11px] font-medium text-muted-foreground">
+            <span key={column} className="min-w-0 truncate text-right text-(length:--text-micro) font-medium text-muted-foreground">
               {activityText}
             </span>
           );

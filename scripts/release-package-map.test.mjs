@@ -27,7 +27,7 @@ test("release package list only contains CI-enrolled packages", () => {
 test("release surface keeps Hermes adapters external to the CN fork", () => {
   const packages = buildReleasePackagePlan();
   const hermes = packages.find((pkg) => pkg.name === "@paperclipai/hermes-paperclip-adapter");
-  const gatewayShim = packages.find((pkg) => pkg.name === "@paperclipai/adapter-hermes-gateway");
+  const gatewayShim = packages.find((pkg) => pkg.name === "@penclipai/adapter-hermes-gateway");
 
   assert.equal(hermes, undefined);
   assert.equal(gatewayShim, undefined);

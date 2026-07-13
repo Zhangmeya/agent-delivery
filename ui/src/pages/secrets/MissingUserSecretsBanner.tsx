@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { secretsApi, type MyUserSecretEntry } from "../../api/secrets";
 import { queryKeys } from "../../lib/queryKeys";
@@ -20,7 +21,7 @@ import { SetMyUserSecretDialog } from "./SetMyUserSecretDialog";
 export function MissingUserSecretsBanner({
   companyId,
   definitionKeys,
-  title = "Set your user secrets",
+  title,
   secretsPath,
   className,
 }: {
@@ -31,6 +32,7 @@ export function MissingUserSecretsBanner({
   secretsPath?: string;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const [dialogFor, setDialogFor] = useState<MyUserSecretEntry | null>(null);
 
   const mySecretsQuery = useQuery({
@@ -59,11 +61,15 @@ export function MissingUserSecretsBanner({
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0 flex-1">
-          <p className="font-medium">{title}</p>
+          <p className="font-medium">
+            {title ?? t("secrets.missing.title", { defaultValue: "Set your user secrets" })}
+          </p>
           <p className="mt-0.5 text-amber-700/90 dark:text-amber-300/90">
-            {missing.length} user secret{missing.length === 1 ? "" : "s"} you are responsible for
-            {missing.length === 1 ? " has" : " have"} no value yet. Runs that require
-            {missing.length === 1 ? " it" : " them"} will fail until you set your value.
+            {t("secrets.missing.description", {
+              count: missing.length,
+              defaultValue:
+                "{{count}} user secrets you are responsible for have no value yet. Runs that require them will fail until you set your value.",
+            })}
           </p>
           <ul className="mt-2 space-y-1.5">
             {missing.map((entry) => (
@@ -73,10 +79,10 @@ export function MissingUserSecretsBanner({
               >
                 <span className="min-w-0 truncate">
                   <span className="font-medium text-foreground">{entry.definition.name}</span>{" "}
-                  <code className="text-[11px] text-muted-foreground">{entry.definition.key}</code>
+                  <code className="text-(length:--text-micro) text-muted-foreground">{entry.definition.key}</code>
                 </span>
                 <Button size="sm" onClick={() => setDialogFor(entry)}>
-                  Set value
+                  {t("secrets.setValue", { defaultValue: "Set value" })}
                 </Button>
               </li>
             ))}
@@ -84,9 +90,9 @@ export function MissingUserSecretsBanner({
           {secretsPath ? (
             <Link
               to={secretsPath}
-              className="mt-2 inline-block text-[11px] font-medium underline underline-offset-2"
+              className="mt-2 inline-block text-(length:--text-micro) font-medium underline underline-offset-2"
             >
-              Manage all my secrets
+              {t("secrets.manageMySecrets", { defaultValue: "Manage all my secrets" })}
             </Link>
           ) : null}
         </div>

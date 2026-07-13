@@ -12,6 +12,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export type WorkspaceRuntimeAction = "start" | "stop" | "restart" | "run";
 
@@ -392,8 +393,8 @@ function CommandSection({
                 </div>
                 {item.healthStatus && item.statusLabel !== "stopped" ? (
                   <div className="flex items-center gap-2">
-                    <span className={cn(
-                      "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px]",
+                    <Badge variant="outline" className={cn(
+                      "px-2.5 py-1 text-(length:--text-micro)",
                       item.healthStatus === "healthy"
                         ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                         : item.healthStatus === "unhealthy"
@@ -401,7 +402,7 @@ function CommandSection({
                           : "border-border text-muted-foreground",
                     )}>
                       {translateWorkspaceRuntimeStatus(item.healthStatus, t)}
-                    </span>
+                    </Badge>
                   </div>
                 ) : null}
               </div>
@@ -447,9 +448,9 @@ export function WorkspaceRuntimeControls({
         <div className="space-y-1">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{t("workspaceRuntime.header", { defaultValue: "Workspace commands" })}</div>
           <div className="flex flex-wrap items-center gap-2">
-            <span
+            <Badge variant="outline"
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+                "gap-1.5 px-2.5 py-1",
                 runningCount > 0
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                   : "border-border bg-background text-muted-foreground",
@@ -459,7 +460,7 @@ export function WorkspaceRuntimeControls({
               {runningCount > 0
                 ? t("workspaceRuntime.servicesRunning", { count: runningCount, defaultValue: `${runningCount} services running` })
                 : t("workspaceRuntime.noServicesRunning", { defaultValue: "No services running" })}
-            </span>
+            </Badge>
             <span className="text-xs text-muted-foreground">
               {resolvedSections.jobs.length > 0
                 ? t("workspaceRuntime.jobsAvailable", {

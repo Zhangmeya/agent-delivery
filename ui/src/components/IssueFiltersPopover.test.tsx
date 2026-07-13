@@ -13,8 +13,8 @@ import { defaultIssueFilterState } from "../lib/issue-filters";
 const translations: Record<string, string> = {
   Status: "状态",
   Priority: "优先级",
-  Assignee: "负责人",
-  "No assignee": "无负责人",
+  "issueChat.assigneePlaceholder": "负责人",
+  "issueChat.noAssignee": "无负责人",
   Me: "我",
   Creator: "创建者",
   "Remove creator {{name}}": "移除创建者 {{name}}",
@@ -102,7 +102,7 @@ describe("IssueFiltersPopover", () => {
 
     const renderedHtml = document.body.innerHTML;
     expect(renderedHtml).toContain("overflow-y-auto");
-    expect(renderedHtml).toContain("max-h-[min(80vh,42rem)]");
+    expect(renderedHtml).toContain("max-h-(--sz-calc-9)");
     expect(renderedHtml).toContain("md:grid-cols-3");
     expect(renderedHtml).toContain("grid-cols-1");
 

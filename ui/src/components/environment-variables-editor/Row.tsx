@@ -204,8 +204,8 @@ export function EnvironmentVariableRow({
   return (
     <div
       className={cn(
-        "group/row grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1.5 gap-y-1 rounded-md px-1 py-1",
-        "@[40rem]/env:grid-cols-[minmax(160px,2fr)_minmax(240px,3fr)_32px] @[40rem]/env:items-center",
+        "group/row grid grid-cols-(--gtc-13) items-start gap-x-1.5 gap-y-1 rounded-md px-1 py-1",
+        "@[40rem]/env:grid-cols-(--gtc-14) @[40rem]/env:items-center",
         isDirty && "bg-amber-500/[0.06] ring-1 ring-amber-500/20",
       )}
     >
@@ -384,7 +384,7 @@ export function EnvironmentVariableRow({
                           }}
                           aria-label={t("agentConfig.secretVersion", { defaultValue: "Version" })}
                           className={cn(
-                            "absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded px-1.5 py-0.5 text-[10px] font-medium",
+                            "absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded px-1.5 py-0.5 text-(length:--text-nano) font-medium",
                             versionPinned
                               ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
                               : "text-muted-foreground hover:bg-accent",
@@ -442,7 +442,7 @@ export function EnvironmentVariableRow({
                   ) : null}
                 </div>
               ) : (
-                <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto]">
+                <div className="grid min-w-0 flex-1 grid-cols-(--gtc-13)">
                   {userSecretsEnabled ? (
                     <select
                       aria-label={t("envVarEditor.userSecretAria", { defaultValue: "User secret" })}
@@ -552,7 +552,7 @@ export function EnvironmentVariableRow({
             id={healthId}
             role="status"
             className={cn(
-              "mt-0.5 text-[11px]",
+              "mt-0.5 text-(length:--text-micro)",
               health.level === "error" ? "text-destructive" : "text-amber-600 dark:text-amber-400",
             )}
           >
@@ -582,7 +582,7 @@ export function EnvironmentVariableRow({
         <p
           id={nameErrorId}
           className={cn(
-            "col-span-2 col-start-1 row-start-3 min-w-0 text-[11px] @[40rem]/env:col-span-2 @[40rem]/env:row-start-2",
+            "col-span-2 col-start-1 row-start-3 min-w-0 text-(length:--text-micro) @[40rem]/env:col-span-2 @[40rem]/env:row-start-2",
             nameIssue.level === "error" ? "text-destructive" : "text-amber-600 dark:text-amber-400",
           )}
         >

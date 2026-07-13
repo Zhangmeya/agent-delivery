@@ -19,7 +19,7 @@ export function WorktreeBanner() {
 
   return (
     <div
-      className="relative overflow-hidden border-b px-3 py-1.5 text-[11px] font-medium tracking-[0.2em] uppercase"
+      className="relative overflow-hidden border-b px-3 py-1.5 text-(length:--text-micro) font-medium tracking-(--tracking-caps) uppercase"
       style={{
         backgroundColor: branding.color,
         color: branding.textColor,

@@ -13,6 +13,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { ShieldCheck } from "lucide-react";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { Badge } from "@/components/ui/badge";
 
 type StatusFilter = "pending" | "all";
 

@@ -1,6 +1,8 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useVisibilityRefetchInterval } from "@/lib/polling";
+import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
 import type { ActivityEvent, Agent } from "@penclipai/shared";
 import { activityApi } from "../api/activity";
 import { agentsApi } from "../api/agents";
@@ -265,12 +267,13 @@ function CollapsedFeedGroup({
 
   return (
     <div>
+      {/* design-allow(card-pattern): interactive <button> card; Card renders a div and would break button semantics (C5a Run 3) */}
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
         data-fc="card"
         className={cn(
-          "group ml-3 mr-3 md:ml-0 my-2 flex w-[calc(100%-1.5rem)] md:w-[calc(100%-0.75rem)] items-center gap-2 rounded-lg border bg-card p-[18px] text-left text-xs transition-[background-color,border-color] duration-150",
+          "group ml-3 mr-3 md:ml-0 my-2 flex w-(--sz-calc-1) md:w-(--sz-calc-2) items-center gap-2 rounded-lg border bg-card p-(--sz-18px) text-left text-xs transition-(--tp-background-color-border-color) duration-150",
           "cursor-pointer hover:bg-accent hover:border-muted-foreground/30",
         )}
       >
@@ -342,13 +345,25 @@ export function ActivityFeed({ className }: ActivityFeedProps) {
     document.head.appendChild(style);
   }, []);
 
-  // Fetch company-level activity, poll every 5s
-  const { data: activity } = useQuery({
-    queryKey: queryKeys.activity(selectedCompanyId ?? ""),
-    queryFn: () => activityApi.list(selectedCompanyId!),
+  // Fetch company-level activity. Poll ~5s when the tab is focused; slow/stop in the
+  // background so restored tabs don't storm the activity endpoint (PAP-12556).
+  const activityRefetchInterval = useVisibilityRefetchInterval({ visibleMs: 5000 });
+  const activityQueryKey = queryKeys.activity(selectedCompanyId ?? "");
+  const sharedActivity = useSharedPollingQuery({
+    companyId: selectedCompanyId,
+    resourceKey: "activity",
+    queryKey: activityQueryKey,
     enabled: !!selectedCompanyId,
-    refetchInterval: 5000,
+    refetchInterval: activityRefetchInterval,
+    leaderOnly: true,
   });
+  const { data: activity, dataUpdatedAt: activityUpdatedAt } = useQuery({
+    queryKey: activityQueryKey,
+    queryFn: ({ signal }) => activityApi.list(selectedCompanyId!, undefined, { signal }),
+    enabled: sharedActivity.enabled,
+    refetchInterval: sharedActivity.refetchInterval,
+  });
+  usePublishSharedQueryData(sharedActivity, activity, activityUpdatedAt);
 
   // Fetch agents for name resolution + empty state
   const { data: agents } = useQuery({
@@ -690,7 +705,7 @@ export function ActivityFeed({ className }: ActivityFeedProps) {
       >
         {isEmpty ? (
           <div className="flex min-h-0 flex-1 items-center justify-center p-6 h-full">
-            <div className="flex flex-col items-center gap-2 max-w-[16rem]">
+            <div className="flex flex-col items-center gap-2 max-w-(--sz-16rem)">
               {emptyMessage?.showPulse && (
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40" />

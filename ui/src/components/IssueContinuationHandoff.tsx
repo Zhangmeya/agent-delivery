@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn, relativeTime } from "../lib/utils";
 import { MarkdownBody, type MarkdownExternalReferenceMap } from "./MarkdownBody";
 import { Check, ChevronDown, ChevronRight, Copy, History } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 type IssueContinuationHandoffProps = {
   document: IssueDocument | null | undefined;
