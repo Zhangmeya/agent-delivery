@@ -8,9 +8,47 @@ import { defineConfig } from "@playwright/test";
 const PORT = Number(process.env.PAPERCLIP_E2E_PORT ?? 3199);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const PAPERCLIP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-e2e-home-"));
-const PAPERCLIP_CONFIG = path.join(PAPERCLIP_HOME, "instances", "playwright-e2e", "config.json");
+const PAPERCLIP_INSTANCE_ID = "playwright-e2e";
+const PAPERCLIP_CONFIG = path.join(PAPERCLIP_HOME, "instances", PAPERCLIP_INSTANCE_ID, "config.json");
 const PAPERCLIP_AGENT_JWT_SECRET = process.env.PAPERCLIP_AGENT_JWT_SECRET ?? "playwright-e2e-agent-jwt-secret";
-const PLAYWRIGHT_CHANNEL = process.env.PAPERCLIP_PLAYWRIGHT_CHANNEL;
+const PLAYWRIGHT_CHANNEL = process.env.PAPERCLIP_PLAYWRIGHT_CHANNEL?.trim();
+
+function bootstrapE2EInstanceConfig(): void {
+  const instanceRoot = path.join(PAPERCLIP_HOME, "instances", PAPERCLIP_INSTANCE_ID);
+  fs.mkdirSync(instanceRoot, { recursive: true });
+  const dataRoot = path.join(instanceRoot, "data");
+  fs.writeFileSync(
+    PAPERCLIP_CONFIG,
+    `${JSON.stringify({
+      $meta: { version: 1, updatedAt: "2026-01-01T00:00:00.000Z", source: "onboard" },
+      database: {
+        mode: "embedded-postgres",
+        embeddedPostgresDataDir: path.join(instanceRoot, "db"),
+        backup: {
+          enabled: false,
+          intervalMinutes: 60,
+          retentionDays: 7,
+          dir: path.join(dataRoot, "backups"),
+        },
+      },
+      logging: { mode: "file", logDir: path.join(instanceRoot, "logs") },
+      server: { deploymentMode: "local_trusted", host: "127.0.0.1", port: PORT },
+      auth: { baseUrlMode: "auto" },
+      storage: {
+        provider: "local_disk",
+        localDisk: { baseDir: path.join(dataRoot, "storage") },
+      },
+      secrets: {
+        provider: "local_encrypted",
+        strictMode: false,
+        localEncrypted: { keyFilePath: path.join(instanceRoot, "secrets", "master.key") },
+      },
+    }, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+bootstrapE2EInstanceConfig();
 
 process.env.PAPERCLIP_HOME = PAPERCLIP_HOME;
 process.env.PAPERCLIP_CONFIG = PAPERCLIP_CONFIG;
@@ -61,7 +99,7 @@ export default defineConfig({
       PAPERCLIP_HOME,
       PAPERCLIP_CONFIG,
       PAPERCLIP_AGENT_JWT_SECRET,
-      PAPERCLIP_INSTANCE_ID: "playwright-e2e",
+      PAPERCLIP_INSTANCE_ID,
       PAPERCLIP_BIND: "loopback",
       PAPERCLIP_DEPLOYMENT_MODE: "local_trusted",
       PAPERCLIP_DEPLOYMENT_EXPOSURE: "private",
