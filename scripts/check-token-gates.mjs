@@ -86,7 +86,7 @@ function loadAllowlist(cssPath) {
   const entries = [];
   const lineRe = /^\s*\*\s*allow\s+(\S+)\s+(?:—|-{1,2})\s*(.*)$/;
   for (const rawLine of css.split("\n")) {
-    const m = rawLine.match(lineRe);
+    const m = rawLine.replace(/\r$/, "").match(lineRe);
     if (m) {
       entries.push({ path: m[1], reason: m[2].trim() });
     }

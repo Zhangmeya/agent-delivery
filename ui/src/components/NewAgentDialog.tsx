@@ -323,7 +323,7 @@ export function NewAgentDialog() {
                     }}
                   >
                     {opt.recommended && (
-                      <span className="absolute -top-1.5 right-1.5 bg-green-500 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
+                      <span className="absolute -top-1.5 right-1.5 bg-green-500 text-white text-(length:--text-nano) font-semibold px-1.5 py-0.5 rounded-full leading-none">
                         {t("newAgent.recommended", { defaultValue: "Recommended" })}
                       </span>
                     )}

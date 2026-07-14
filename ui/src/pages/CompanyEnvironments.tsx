@@ -1818,7 +1818,7 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
                     >
                       <div className="font-medium">{probe.summary}</div>
                       {probe.details?.error && typeof probe.details.error === "string" ? (
-                        <div className="mt-1 font-mono text-[11px]">{probe.details.error}</div>
+                        <div className="mt-1 font-mono text-(length:--text-micro)">{probe.details.error}</div>
                       ) : null}
                     </div>
                   ) : null}

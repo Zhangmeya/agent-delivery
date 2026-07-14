@@ -1478,7 +1478,7 @@ function IssueChatUserMessage({
         <span className="text-sm font-medium text-foreground">{resolvedAuthorName}</span>
         <SourceTrustBadge sourceTrust={sourceTrust} artifactLabel="comment" />
         {followUpRequested ? (
-          <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
+          <Badge variant="outline" className="text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow)">
             {t("issueChat.followUp")}
           </Badge>
         ) : null}
@@ -1539,7 +1539,7 @@ function IssueChatUserMessage({
       </div>
 
       {pending ? (
-        <div className={cn("mt-1 flex px-1 text-[11px] text-muted-foreground", isCurrentUser ? "justify-end" : "justify-start")}>
+        <div className={cn("mt-1 flex px-1 text-(length:--text-micro) text-muted-foreground", isCurrentUser ? "justify-end" : "justify-start")}>
           {t("issueChat.sending")}
         </div>
       ) : (
@@ -1869,7 +1869,7 @@ function IssueChatAssistantMessage({
             <span className="text-sm font-medium text-foreground">{authorName}</span>
             <SourceTrustBadge sourceTrust={sourceTrust} artifactLabel="comment" />
             {followUpRequested ? (
-              <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
+              <Badge variant="outline" className="text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow)">
                 {t("issueChat.followUp")}
               </Badge>
             ) : null}
@@ -1939,7 +1939,7 @@ function IssueChatAssistantMessage({
               <span className="text-sm font-medium text-foreground">{authorName}</span>
               <SourceTrustBadge sourceTrust={sourceTrust} artifactLabel="comment" />
               {followUpRequested ? (
-                <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
+                <Badge variant="outline" className="text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow)">
                   {t("issueChat.followUp")}
                 </Badge>
               ) : null}
@@ -2856,7 +2856,7 @@ function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
 
         {statusChange ? (
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+            <span className="text-(length:--text-nano) font-medium uppercase tracking-wider text-muted-foreground/70">
               {t("Status", { defaultValue: "Status" })}
             </span>
             <span className="text-muted-foreground">
@@ -2872,7 +2872,7 @@ function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
         {assigneeChange ? (
           <div className="space-y-1">
             <div className={cn("flex flex-wrap items-center gap-1.5 text-xs", isCurrentUser && "justify-end")}>
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+              <span className="text-(length:--text-nano) font-medium uppercase tracking-wider text-muted-foreground/70">
                 {t("Assignee", { defaultValue: "Assignee" })}
               </span>
               <AssigneeChip assignee={assigneeChange.from} resolvers={handoffResolvers} />
@@ -2891,7 +2891,7 @@ function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
 
         {workspaceChange ? (
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+            <span className="text-(length:--text-nano) font-medium uppercase tracking-wider text-muted-foreground/70">
               {t("Workspace", { defaultValue: "Workspace" })}
             </span>
             <span className="text-muted-foreground">
@@ -4112,7 +4112,7 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
                     </button>
                   );
                 })}
-                <div className="mt-1 border-t px-2 py-1.5 text-[10px] text-muted-foreground">
+                <div className="mt-1 border-t px-2 py-1.5 text-(length:--text-nano) text-muted-foreground">
                   {t("issueChat.workModeShortcutHint")}
                 </div>
               </PopoverContent>

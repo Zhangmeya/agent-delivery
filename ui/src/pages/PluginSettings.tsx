@@ -193,7 +193,7 @@ export function PluginSettings() {
           <div className="space-y-8">
             <section className="space-y-5">
               <h2 className="text-base font-semibold">{t("About", { defaultValue: "About" })}</h2>
-              <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.8fr)]">
+              <div className="grid gap-8 lg:grid-cols-(--gtc-52)">
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium text-muted-foreground">{t("Description", { defaultValue: "Description" })}</h3>
                   <p className="text-sm leading-6 text-foreground/90">{pluginDescription}</p>
@@ -475,7 +475,7 @@ export function PluginSettings() {
                           }`}
                         >
                           <span className="shrink-0 text-muted-foreground/50">{formatTime(entry.createdAt, { hour: "numeric", minute: "2-digit" })}</span>
-                          <Badge variant="outline" className="h-4 shrink-0 px-1 text-[10px]">{entry.level}</Badge>
+                          <Badge variant="outline" className="h-4 shrink-0 px-1 text-(length:--text-nano)">{entry.level}</Badge>
                           <span className="truncate" title={entry.message}>{entry.message}</span>
                         </div>
                       ))}
@@ -560,7 +560,7 @@ export function PluginSettings() {
                   </div>
                   <div className="flex justify-between gap-3">
                     <span>{t("NPM Package", { defaultValue: "NPM Package" })}</span>
-                    <span className="max-w-[170px] truncate text-right text-xs" title={plugin.packageName}>
+                    <span className="max-w-(--sz-170px) truncate text-right text-xs" title={plugin.packageName}>
                       {plugin.packageName}
                     </span>
                   </div>
@@ -921,18 +921,18 @@ function RequirementList({
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-muted-foreground">{title}</span>
         {inspectionUnavailable ? (
-          <Badge variant="secondary" className="text-[10px]">
+          <Badge variant="secondary" className="text-(length:--text-nano)">
             {t("Not inspected", { defaultValue: "Not inspected" })}
           </Badge>
         ) : missingItems.length > 0 ? (
-          <Badge variant="destructive" className="text-[10px]">
+          <Badge variant="destructive" className="text-(length:--text-nano)">
             {t("{{count}} missing", {
               count: missingItems.length,
               defaultValue: "{{count}} missing",
             })}
           </Badge>
         ) : (
-          <Badge variant="outline" className="text-[10px]">{t("Present", { defaultValue: "Present" })}</Badge>
+          <Badge variant="outline" className="text-(length:--text-nano)">{t("Present", { defaultValue: "Present" })}</Badge>
         )}
       </div>
       {items.length > 0 ? (

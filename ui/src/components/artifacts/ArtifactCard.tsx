@@ -229,7 +229,7 @@ export function ArtifactCard({ artifact }: ArtifactCardProps) {
           </div>
         </div>
 
-        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/65">
+        <div className="mt-0.5 flex items-center gap-1.5 text-(length:--text-micro) text-muted-foreground/65">
           <span>{t("artifacts.lastEdited", { date: formatDate(artifact.updatedAt) })}</span>
           {artifact.createdByAgent ? (
             <>

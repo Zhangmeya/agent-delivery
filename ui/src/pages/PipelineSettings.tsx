@@ -1204,7 +1204,7 @@ function StageSubSidebar({
       </div>
       <nav
         aria-label={t("pipelineSettings.stageSections", { defaultValue: "Stage sections" })}
-        className="sticky top-14 hidden max-h-[calc(100dvh-3.5rem)] w-52 shrink-0 flex-col gap-4 self-start overflow-y-auto border-r border-border bg-sidebar/30 px-3 py-4 md:flex"
+        className="sticky top-14 hidden max-h-(--sz-calc-39) w-52 shrink-0 flex-col gap-4 self-start overflow-y-auto border-r border-border bg-sidebar/30 px-3 py-4 md:flex"
       >
         {groups.map((group) => (
           <div key={group.label} className="flex flex-col gap-0.5">
@@ -2887,13 +2887,13 @@ export function PipelineSettings() {
                                   </select>
                                 </div>
                               ))}
-                              <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_240px]">
+                              <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-(--gtc-42)">
                                 <span className="text-sm font-medium">{t("pipelineSettings.askNoteRequestingChanges", { defaultValue: "Ask for a note when requesting changes" })}</span>
                                 <div className="sm:justify-self-start">
                                   <ToggleSwitch checked={requireRequestChangesReason} onCheckedChange={setRequireRequestChangesReason} />
                                 </div>
                               </div>
-                              <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_240px]">
+                              <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-(--gtc-42)">
                                 <span className="text-sm font-medium">{t("pipelineSettings.askNoteDeclining", { defaultValue: "Ask for a note when declining" })}</span>
                                 <div className="sm:justify-self-start">
                                   <ToggleSwitch checked={requireRejectReason} onCheckedChange={setRequireRejectReason} />
@@ -2958,7 +2958,7 @@ export function PipelineSettings() {
                         <>
                           <div className="divide-y divide-border border-y border-border">
                             <FieldRow label={t("pipelineSettings.projectContext", { defaultValue: "Project context" })}>
-                              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                              <div className="grid gap-2 sm:grid-cols-(--gtc-43)">
                                 <InlineEntitySelector
                                   value={stageProjectId}
                                   options={projectOptions}
@@ -3024,7 +3024,7 @@ export function PipelineSettings() {
 
                             {selectedAutomationProject && selectedProjectSupportsExecutionWorkspace ? (
                               <FieldRow label={t("pipelineSettings.executionWorkspace", { defaultValue: "Execution workspace" })}>
-                                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                                <div className="grid gap-2 sm:grid-cols-(--gtc-43)">
                                   <select
                                     aria-label={t("pipelineSettings.executionWorkspaceMode", { defaultValue: "Execution workspace mode" })}
                                     value={stageExecutionWorkspacePreference || "shared_workspace"}
@@ -3249,7 +3249,7 @@ export function PipelineSettings() {
                                   {t("pipelineSettings.advanceWhenLastChildDone", { defaultValue: "Advance when the last child is done" })}
                                 </span>
                               </div>
-                              <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[5rem_240px]">
+                              <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-(--gtc-44)">
                                 <span className="text-sm font-medium text-muted-foreground">{t("pipelineSettings.moveTo", { defaultValue: "Move to" })}</span>
                                 <select
                                   aria-label={t("pipelineSettings.moveToStageWhenChildrenFinish", { defaultValue: "Move to stage when children finish" })}

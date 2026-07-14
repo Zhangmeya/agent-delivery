@@ -288,11 +288,11 @@ function CollapsedFeedGroup({
             : <Settings className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         }
         <span className="flex-1 min-w-0 truncate">
-          <span data-fc="actor" className="font-medium text-[#959596] group-hover:text-white">{actorName}</span>
-          <span data-fc="verb" className="ml-1 text-[#959596]">
+          <span data-fc="actor" className="font-medium text-(--hex-959596) group-hover:text-white">{actorName}</span>
+          <span data-fc="verb" className="ml-1 text-(--hex-959596)">
             {t("activityFeed.madeUpdatesTo", { defaultValue: "made {{count}} updates to", count: group.events.length })}
           </span>
-          <span data-fc="title" className="ml-1 text-[#959596] group-hover:text-white">{entityName ?? group.entityId}</span>
+          <span data-fc="title" className="ml-1 text-(--hex-959596) group-hover:text-white">{entityName ?? group.entityId}</span>
         </span>
         <span data-fc="time" className="text-muted-foreground shrink-0">
           {timeAgo(group.latestEvent.createdAt)}
@@ -490,7 +490,7 @@ export function ActivityFeed({ className }: ActivityFeedProps) {
         separator = (
           <div className="flex items-center gap-2 px-4 py-1.5" key={`sep-${index}`}>
             <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+            <span className="text-(length:--text-nano) font-medium text-muted-foreground uppercase tracking-wider">
               {t("Earlier", { defaultValue: "Earlier" })}
             </span>
             <div className="h-px flex-1 bg-border" />

@@ -35,7 +35,7 @@ export function WorktreeBanner() {
           type="button"
           onClick={handleCopyName}
           title={t("worktreeBanner.copyTitle", { defaultValue: "Click to copy worktree name" })}
-          className="truncate font-semibold tracking-[0.12em] cursor-pointer hover:opacity-80 transition-opacity bg-transparent border-none p-0 text-current uppercase text-[11px]"
+          className="truncate font-semibold tracking-(--tracking-eyebrow) cursor-pointer hover:opacity-80 transition-opacity bg-transparent border-none p-0 text-current uppercase text-(length:--text-micro)"
         >
           {copied ? t("Copied!", { defaultValue: "Copied!" }) : branding.name}
         </button>

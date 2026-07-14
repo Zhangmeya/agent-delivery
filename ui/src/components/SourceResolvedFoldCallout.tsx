@@ -82,7 +82,7 @@ export function SourceResolvedFoldCallout({
           <Sparkles className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-semibold uppercase tracking-[0.14em]">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-eyebrow)">
             <span className="text-emerald-900 dark:text-emerald-200">
               {t("sourceResolvedFold.heading", { defaultValue: "SOURCE-RESOLVED FOLD" })}
             </span>
@@ -99,7 +99,7 @@ export function SourceResolvedFoldCallout({
               </>
             ) : null}
           </div>
-          <p className="mt-1 text-[14px] leading-6">
+          <p className="mt-1 text-sm leading-6">
             {t("sourceResolvedFold.body", { defaultValue: "This run was folded as a source-resolved false positive." })}
           </p>
         </div>
@@ -136,7 +136,7 @@ export function SourceResolvedFoldCallout({
               {evidenceShort}
             </code>
             {evidenceAt ? (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-(length:--text-micro) text-muted-foreground">
                 {t("sourceResolvedFold.atTime", { defaultValue: "at {{time}}", time: evidenceAt })}
               </span>
             ) : null}

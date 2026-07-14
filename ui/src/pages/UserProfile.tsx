@@ -68,10 +68,10 @@ function WindowColumn({ stats, t }: { stats: UserProfileWindowStats; t: ReturnTy
   return (
     <div className="flex min-w-0 flex-col gap-4 border-l border-border pl-5 first:border-l-0 first:pl-0">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">
           {windowStatsLabel(stats.key, t)}
         </h2>
-        <span className="text-[11px] text-muted-foreground tabular-nums">
+        <span className="text-(length:--text-micro) text-muted-foreground tabular-nums">
           {completionRate(stats)} {t("status.done", { defaultValue: "done" })}
         </span>
       </div>
@@ -168,7 +168,7 @@ function UsageChart({
           <span className="h-2 w-2 bg-foreground/80" /> {t("userProfile.tokensPerDay", { defaultValue: "tokens / day" })}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-[3px] w-4 rounded-full bg-emerald-500/80" /> {t("userProfile.completions", { defaultValue: "completions" })}
+          <span className="h-(--sz-3px) w-4 rounded-full bg-emerald-500/80" /> {t("userProfile.completions", { defaultValue: "completions" })}
         </span>
       </div>
     </section>

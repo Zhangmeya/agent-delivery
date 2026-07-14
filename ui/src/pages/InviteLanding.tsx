@@ -574,7 +574,7 @@ export function InviteLandingPage() {
                 className="h-16 w-16 rounded-none border border-zinc-800"
               />
               <div className="min-w-0">
-                <p className="text-xs uppercase tracking-[0.24em] text-zinc-500">
+                <p className="text-xs uppercase tracking-(--tracking-caps) text-zinc-500">
                   {t("inviteLanding.invitedEyebrow", { defaultValue: "You've been invited to join Paperclip" })}
                 </p>
                 <h1 className="mt-2 text-2xl font-semibold">
@@ -594,15 +594,15 @@ export function InviteLandingPage() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="border border-zinc-800 p-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">{t("Company", { defaultValue: "Company" })}</div>
+                <div className="text-xs uppercase tracking-(--tracking-caps) text-zinc-500">{t("Company", { defaultValue: "Company" })}</div>
                 <div className="mt-1 text-sm text-zinc-100">{companyDisplayName}</div>
               </div>
               <div className="border border-zinc-800 p-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">{t("inviteLanding.invitedBy", { defaultValue: "Invited by" })}</div>
+                <div className="text-xs uppercase tracking-(--tracking-caps) text-zinc-500">{t("inviteLanding.invitedBy", { defaultValue: "Invited by" })}</div>
                 <div className="mt-1 text-sm text-zinc-100">{invitedByUserName ?? t("inviteLanding.paperclipBoard", { defaultValue: "Paperclip board" })}</div>
               </div>
               <div className="border border-zinc-800 p-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">{t("inviteLanding.requestedAccess", { defaultValue: "Requested access" })}</div>
+                <div className="text-xs uppercase tracking-(--tracking-caps) text-zinc-500">{t("inviteLanding.requestedAccess", { defaultValue: "Requested access" })}</div>
                 <div className="mt-1 text-sm text-zinc-100">
                   {showsAgentForm
                     ? t("inviteLanding.agentJoinRequest", { defaultValue: "Agent join request" })
@@ -610,14 +610,14 @@ export function InviteLandingPage() {
                 </div>
               </div>
               <div className="border border-zinc-800 p-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">{t("inviteLanding.inviteExpires", { defaultValue: "Invite expires" })}</div>
+                <div className="text-xs uppercase tracking-(--tracking-caps) text-zinc-500">{t("inviteLanding.inviteExpires", { defaultValue: "Invite expires" })}</div>
                 <div className="mt-1 text-sm text-zinc-100">{formatDate(invite.expiresAt)}</div>
               </div>
             </div>
 
             {inviteMessage ? (
               <div className="border border-amber-500/40 bg-amber-500/10 p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-amber-200/80">{t("inviteLanding.messageFromInviter", { defaultValue: "Message from inviter" })}</div>
+                <div className="text-xs uppercase tracking-(--tracking-caps) text-amber-200/80">{t("inviteLanding.messageFromInviter", { defaultValue: "Message from inviter" })}</div>
                 <p className="mt-2 text-sm leading-6 text-amber-50">{inviteMessage}</p>
               </div>
             ) : null}

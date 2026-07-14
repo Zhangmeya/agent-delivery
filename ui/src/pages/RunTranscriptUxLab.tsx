@@ -157,7 +157,7 @@ function FixturePreviewList({
             key={`${entry.kind}-${entry.ts}-${index}`}
             className="rounded-lg border border-border/60 bg-background/75 px-3 py-2"
           >
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <div className="text-(length:--text-nano) font-semibold uppercase tracking-(--tracking-caps) text-muted-foreground">
               {row.kind}
             </div>
             <div className="mt-1 text-sm leading-6 text-foreground/90">
@@ -185,7 +185,7 @@ function RunDetailPreview({
     <div className="overflow-hidden rounded-xl border border-border/70 bg-background/80 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
       <div className="border-b border-border/60 bg-background/90 px-5 py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="uppercase tracking-[0.18em] text-[10px]">
+          <Badge variant="outline" className="uppercase tracking-(--tracking-caps) text-(length:--text-nano)">
             {t("Run Detail", { defaultValue: "Run Detail" })}
           </Badge>
           <StatusBadge status={streaming ? "running" : "succeeded"} />
@@ -201,7 +201,7 @@ function RunDetailPreview({
         </div>
       </div>
       <div
-        className="max-h-[720px] overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,0.08),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.10),transparent_28%)] p-5"
+        className="max-h-(--sz-720px) overflow-y-auto bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,0.08),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.10),transparent_28%)] p-5"
       >
         <FixturePreviewList
           entries={runTranscriptFixtureEntries}
@@ -227,7 +227,7 @@ function LiveWidgetPreview({
   return (
     <div className="overflow-hidden rounded-xl border border-cyan-500/25 bg-background/85 shadow-[0_20px_50px_rgba(6,182,212,0.10)]">
       <div className="border-b border-border/60 bg-cyan-500/[0.05] px-5 py-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300">
+        <div className="text-xs font-semibold uppercase tracking-(--tracking-caps) text-cyan-700 dark:text-cyan-300">
           {t("Live Runs", { defaultValue: "Live Runs" })}
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
@@ -248,12 +248,12 @@ function LiveWidgetPreview({
               <span>{formatDateTime(runTranscriptFixtureMeta.startedAt)}</span>
             </div>
           </div>
-          <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-(length:--text-micro) text-muted-foreground">
             {t("Open run", { defaultValue: "Open run" })}
             <ExternalLink className="h-3 w-3" />
           </span>
         </div>
-        <div className="max-h-[460px] overflow-y-auto pr-1">
+        <div className="max-h-(--sz-460px) overflow-y-auto pr-1">
           <FixturePreviewList
             entries={previewEntries("live")}
             mode={mode}
@@ -294,7 +294,7 @@ function DashboardPreview({
                 )} />
                 <Identity name={runTranscriptFixtureMeta.agentName} size="sm" />
               </div>
-              <div className="mt-2 text-[11px] text-muted-foreground">
+              <div className="mt-2 text-(length:--text-micro) text-muted-foreground">
                 {streaming
                   ? t("Live now", { defaultValue: "Live now" })
                   : t("Finished 2m ago", { defaultValue: "Finished 2m ago" })}
@@ -403,7 +403,7 @@ export function RunTranscriptUxLab() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.18em]">
+                <Badge variant="outline" className="rounded-full px-3 py-1 text-(length:--text-nano) uppercase tracking-(--tracking-caps)">
                   {t("Source run {{value}}", {
                     value: runTranscriptFixtureMeta.sourceRunId.slice(0, 8),
                     defaultValue: "Source run {{value}}",
@@ -416,7 +416,7 @@ export function RunTranscriptUxLab() {
             </div>
 
             <div className="mb-5 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-caps) text-muted-foreground">
                 {t("Controls", { defaultValue: "Controls" })}
               </span>
               <div className="inline-flex rounded-full border border-border/70 bg-background/80 p-1">

@@ -4195,7 +4195,7 @@ export function IssueDetail() {
 
           {issue.originKind === "issue_productivity_review" ? (
             <span
-              className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300 shrink-0"
+              className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-(length:--text-nano) font-medium text-amber-700 dark:text-amber-300 shrink-0"
               title={t("issueDetail.productivityReviewTitle")}
             >
               <Eye className="h-3 w-3" />
@@ -4205,7 +4205,7 @@ export function IssueDetail() {
 
           {issue.originKind === "task_watchdog" ? (
             <span
-              className="inline-flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300 shrink-0"
+              className="inline-flex items-center gap-1 rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-(length:--text-nano) font-medium text-sky-700 dark:text-sky-300 shrink-0"
               title={t("issueDetail.watchdogTitle")}
             >
               <ScanEye className="h-3 w-3" />
@@ -4218,7 +4218,7 @@ export function IssueDetail() {
             const WorkModeIcon = workModeMeta.icon;
             return (
               <span
-                className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium shrink-0", workModeMeta.classes.badge)}
+                className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-(length:--text-nano) font-medium shrink-0", workModeMeta.classes.badge)}
                 title={t("issueDetail.workModeTitle", { mode: workModeMeta.label.toLowerCase() })}
               >
                 <WorkModeIcon className="h-3 w-3" aria-hidden />
@@ -4230,7 +4230,7 @@ export function IssueDetail() {
           {hasAssignedBacklogBlocker(issue.blockedBy) ? (
             <Badge variant="outline"
               data-testid="issue-detail-parked-blocker"
-              className="inline-flex items-center gap-1 rounded-full border border-amber-500/60 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300 shrink-0"
+              className="inline-flex items-center gap-1 rounded-full border border-amber-500/60 bg-amber-500/15 px-2 py-0.5 text-(length:--text-nano) font-medium text-amber-700 dark:text-amber-300 shrink-0"
               title={t("issueDetail.blockedByParkedWorkTitle")}
             >
               <Flag className="h-3 w-3" />
@@ -4482,7 +4482,7 @@ export function IssueDetail() {
           value={issue.description ?? ""}
           onSave={(description) => updateIssue.mutateAsync({ description })}
           as="p"
-          className="text-[15px] leading-7 text-foreground"
+          className="text-sm leading-7 text-foreground"
           placeholder={t("issueDetail.addDescriptionPlaceholder")}
           multiline
           foldable
@@ -4885,7 +4885,7 @@ export function IssueDetail() {
                 value={treeControlReason}
                 onChange={(event) => setTreeControlReason(event.target.value)}
                 placeholder={t("issueDetail.treeControlReasonPlaceholder")}
-                className="min-h-[88px]"
+                className="min-h-(--sz-88px)"
               />
             </div>
 

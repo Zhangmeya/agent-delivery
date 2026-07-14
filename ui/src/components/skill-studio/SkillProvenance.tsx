@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { FolderGit2, GitFork } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { CompanySkillDetail } from "@penclipai/shared";
 import { Link } from "@/lib/router";
 import { companySkillsApi } from "@/api/companySkills";
@@ -21,8 +22,12 @@ export function SkillLineageChip({
   companyId: string;
   forkedFromSkillId: string | null;
 }) {
+  const { t } = useTranslation();
   const originalQuery = useQuery({
-    queryKey: queryKeys.companySkills.detail(companyId, forkedFromSkillId ?? ""),
+    queryKey: queryKeys.companySkills.detail(
+      companyId,
+      forkedFromSkillId ?? "",
+    ),
     queryFn: () => companySkillsApi.detail(companyId, forkedFromSkillId!),
     enabled: Boolean(companyId && forkedFromSkillId),
     staleTime: 60_000,
@@ -31,17 +36,27 @@ export function SkillLineageChip({
   if (!forkedFromSkillId) return null;
 
   const original = originalQuery.data;
-  const label = original ? formatLineageLabel(original) : "the original skill";
+  const label = original
+    ? formatLineageLabel(original)
+    : t("skillStudio.provenance.originalSkill", {
+        defaultValue: "the original skill",
+      });
 
   return (
     <Link
       to={skillStudioRoute(forkedFromSkillId)}
       className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      title={`Forked from ${label}`}
+      title={t("skillStudio.provenance.forkedFrom", {
+        defaultValue: "Forked from {{source}}",
+        source: label,
+      })}
     >
       <GitFork className="h-3 w-3 shrink-0" />
       <span className="truncate">
-        Forked from <span className="font-medium text-foreground">{label}</span>
+        {t("skillStudio.provenance.forkedFromPrefix", {
+          defaultValue: "Forked from",
+        })}{" "}
+        <span className="font-medium text-foreground">{label}</span>
       </span>
     </Link>
   );
@@ -60,15 +75,27 @@ export function ProjectScanNotice({
   skill: CompanySkillDetail;
   onEditACopy: () => void;
 }) {
-  const location = skill.sourcePath ?? skill.sourceLabel ?? "the project working tree";
+  const { t } = useTranslation();
+  const location =
+    skill.sourcePath ??
+    skill.sourceLabel ??
+    t("skillStudio.provenance.projectWorkingTree", {
+      defaultValue: "the project working tree",
+    });
 
   return (
     <div className="flex flex-wrap items-start gap-2 border-b border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
       <FolderGit2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
         <span>
-          This skill lives in <span className="font-mono text-foreground">{location}</span>.
-          Saves write to the project working tree and are not committed.
+          {t("skillStudio.provenance.skillLivesIn", {
+            defaultValue: "This skill lives in",
+          })}{" "}
+          <span className="font-mono text-foreground">{location}</span>.{" "}
+          {t("skillStudio.provenance.uncommittedSaves", {
+            defaultValue:
+              "Saves write to the project working tree and are not committed.",
+          })}
         </span>{" "}
         <Button
           type="button"
@@ -77,7 +104,9 @@ export function ProjectScanNotice({
           className="h-auto p-0 text-xs"
           onClick={onEditACopy}
         >
-          Edit a copy instead
+          {t("skillStudio.provenance.editCopyInstead", {
+            defaultValue: "Edit a copy instead",
+          })}
         </Button>
       </div>
     </div>

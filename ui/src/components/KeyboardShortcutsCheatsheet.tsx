@@ -83,7 +83,7 @@ export function KeyboardShortcutsCheatsheetContent() {
       <div className="divide-y divide-border border-t border-border">
         {sections.map((section) => (
           <div key={section.titleKey} className="px-5 py-3">
-            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <h3 className="mb-2 text-(length:--text-micro) font-semibold uppercase tracking-wider text-muted-foreground">
               {t(section.titleKey, { defaultValue: section.defaultTitle })}
             </h3>
             <div className="space-y-1.5">

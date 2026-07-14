@@ -569,7 +569,7 @@ function SuggestTasksCard({
 
       {interaction.status === "accepted" ? (
         <div className="rounded-sm border border-emerald-500/60 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-100">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+          <div className="text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-eyebrow) text-emerald-700">
             {translateInstant("issueThreadInteraction.resolutionSummary", { defaultValue: "Resolution summary" })}
           </div>
           <p className="mt-1 leading-6">
@@ -589,7 +589,7 @@ function SuggestTasksCard({
 
       {interaction.status === "rejected" ? (
         <div className="rounded-sm border border-rose-500/60 bg-rose-500/10 px-4 py-3 text-sm text-rose-900 dark:text-rose-100">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-700">
+          <div className="text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-eyebrow) text-rose-700">
             {translateInstant("issueThreadInteraction.rejectionReason", { defaultValue: "Rejection reason" })}
           </div>
           <p className={cn(
@@ -1211,7 +1211,7 @@ function RequestConfirmationResolution({
     const expiredByTargetChange = outcome === "stale_target";
     return (
       <div className="space-y-3 rounded-sm border border-amber-500/60 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">
+        <div className="text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-eyebrow) text-amber-700">
           {expiredByComment
             ? translateInstant("issueThreadInteraction.expiredByComment", { defaultValue: "Expired by comment" })
             : translateInstant("issueThreadInteraction.expiredByTargetChange", { defaultValue: "Expired by target change" })}
@@ -1968,25 +1968,34 @@ function RequestCheckboxConfirmationCard({
 
 // --- Per-item verdicts (C3) ---------------------------------------------
 
-const VERDICT_LABEL: Record<RequestItemVerdictValue, string> = {
-  approve: "Approve",
-  reject: "Reject",
-  defer: "Defer",
-};
+function verdictLabel(verdict: RequestItemVerdictValue) {
+  switch (verdict) {
+    case "approve":
+      return translateInstant("issueThreadInteraction.verdict.approve", { defaultValue: "Approve" });
+    case "reject":
+      return translateInstant("issueThreadInteraction.verdict.reject", { defaultValue: "Reject" });
+    default:
+      return translateInstant("issueThreadInteraction.verdict.defer", { defaultValue: "Defer" });
+  }
+}
 
-/** Present-tense past-participle label for a resolved verdict chip. */
-const VERDICT_RESOLVED_LABEL: Record<RequestItemVerdictValue, string> = {
-  approve: "Approved",
-  reject: "Rejected",
-  defer: "Deferred",
-};
+function resolvedVerdictLabel(verdict: RequestItemVerdictValue) {
+  switch (verdict) {
+    case "approve":
+      return translateInstant("issueThreadInteraction.verdict.approved", { defaultValue: "Approved" });
+    case "reject":
+      return translateInstant("issueThreadInteraction.verdict.rejected", { defaultValue: "Rejected" });
+    default:
+      return translateInstant("issueThreadInteraction.verdict.deferred", { defaultValue: "Deferred" });
+  }
+}
 
 function verdictChipClasses(verdict: RequestItemVerdictValue) {
   switch (verdict) {
     case "approve":
-      return "border-emerald-500/60 bg-emerald-500/10 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-100";
+      return "border-(--status-task-done-border) bg-(--status-task-done-soft) text-(--status-task-done)";
     case "reject":
-      return "border-rose-500/60 bg-rose-500/10 text-rose-900 dark:bg-rose-500/15 dark:text-rose-100";
+      return "border-(--status-task-blocked-border) bg-(--status-task-blocked-soft) text-(--status-task-blocked)";
     default:
       return "border-border/70 bg-muted/40 text-muted-foreground";
   }
@@ -2002,7 +2011,7 @@ function VerdictConsequenceChip({ verdict }: { verdict: RequestItemVerdictValue 
       )}
     >
       <Icon className="h-3.5 w-3.5" aria-hidden />
-      {VERDICT_RESOLVED_LABEL[verdict]}
+      {resolvedVerdictLabel(verdict)}
     </span>
   );
 }
@@ -2015,7 +2024,7 @@ function ItemVerdictDeepLink({ item }: { item: RequestItemVerdictsItem }) {
     "inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1";
   const label = (
     <>
-      Open
+      {translateInstant("issueThreadInteraction.verdict.openItem", { defaultValue: "Open" })}
       {isInternal ? <ArrowUpRight className="h-3 w-3" aria-hidden /> : <ExternalLink className="h-3 w-3" aria-hidden />}
     </>
   );
@@ -2049,7 +2058,7 @@ function ItemVerdictSegmentedControl({
   return (
     <div
       role="group"
-      aria-label="Choose a verdict"
+      aria-label={translateInstant("issueThreadInteraction.verdict.choose", { defaultValue: "Choose a verdict" })}
       className="flex shrink-0 flex-wrap items-center gap-2"
     >
       {verdicts.map((verdict) => {
@@ -2068,7 +2077,10 @@ function ItemVerdictSegmentedControl({
             variant={variant}
             disabled={disabled}
             aria-pressed={active}
-            aria-label={`${VERDICT_LABEL[verdict]} this item`}
+            aria-label={translateInstant("issueThreadInteraction.verdict.itemActionAria", {
+              defaultValue: "{{action}} this item",
+              action: verdictLabel(verdict),
+            })}
             className="min-h-11 min-w-24"
             onClick={() => onSelect(verdict)}
             data-verdict={verdict}
@@ -2076,7 +2088,7 @@ function ItemVerdictSegmentedControl({
             data-active={active}
           >
             <Icon className="h-4 w-4" aria-hidden />
-            {VERDICT_LABEL[verdict]}
+            {verdictLabel(verdict)}
           </Button>
         );
       })}
@@ -2112,7 +2124,9 @@ function RequestItemVerdictsCard({
     [payload.requireReasonOn],
   );
   const allowBulkApprove = payload.allowBulkApprove !== false && enabledVerdicts.includes("approve");
-  const reasonLabel = payload.reasonLabel ?? "Reason";
+  const reasonLabel = payload.reasonLabel ?? translateInstant("issueThreadInteraction.verdict.reason", {
+    defaultValue: "Reason",
+  });
 
   const resolvedById = useMemo(
     () => new Map<string, RequestItemVerdictsResultItem>((interaction.result?.items ?? []).map((item) => [item.id, item])),
@@ -2213,15 +2227,17 @@ function RequestItemVerdictsCard({
       // Success: the parent refetch updates `interaction.result`, the effect
       // above clears drafts + applying state, and terminal chips render.
     } catch {
-      setActionError("Try again");
+      setActionError(translateInstant("Try again", { defaultValue: "Try again" }));
       setApplyingItemIds(new Set());
       setWorking(false);
     }
   }
 
-  const applyLabel = draftCount === 0
-    ? "Apply 0 decisions"
-    : `Apply ${draftCount} decision${draftCount === 1 ? "" : "s"}`;
+  const applyLabel = translateInstant("issueThreadInteraction.verdict.applyDecisions", {
+    defaultValue: "Apply {{count}} decision",
+    defaultValue_other: "Apply {{count}} decisions",
+    count: draftCount,
+  });
 
   return (
     <div className="space-y-4">
@@ -2243,26 +2259,40 @@ function RequestItemVerdictsCard({
 
       {/* Stale / superseded notice (S6) */}
       {isExpired ? (
-        <div className="rounded-sm border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+        <div className="rounded-sm border border-(--status-task-todo-border) bg-(--status-task-todo-soft) px-3 py-2 text-sm text-(--status-task-todo)">
           <div className="flex items-center gap-2 font-medium">
             <AlertTriangle className="h-4 w-4" aria-hidden />
             {interaction.result?.outcome === "superseded_by_comment"
-              ? "This review expired after a later comment."
+              ? translateInstant("issueThreadInteraction.verdict.expiredAfterComment", {
+                  defaultValue: "This review expired after a later comment.",
+                })
               : interaction.result?.outcome === "stale_target"
-                ? "This review expired after the target changed."
-                : "This review expired."}
+                ? translateInstant("issueThreadInteraction.verdict.expiredAfterTargetChanged", {
+                    defaultValue: "This review expired after the target changed.",
+                  })
+                : translateInstant("issueThreadInteraction.verdict.expired", {
+                    defaultValue: "This review expired.",
+                  })}
           </div>
           {progress.decided > 0 ? (
             <p className="mt-1 text-xs leading-5">
-              {progress.decided === 1 ? "1 item was" : `${progress.decided} items were`} already applied and cannot be
-              reverted. Remaining items were cancelled.
+              {translateInstant("issueThreadInteraction.verdict.expiredAppliedSummary", {
+                defaultValue: "{{count}} item was already applied and cannot be reverted. Remaining items were cancelled.",
+                defaultValue_other: "{{count}} items were already applied and cannot be reverted. Remaining items were cancelled.",
+                count: progress.decided,
+              })}
             </p>
           ) : null}
         </div>
       ) : null}
 
       {/* Item list (S1/S2/S3/S4) */}
-      <ul className="space-y-2" aria-label="Items to review">
+      <ul
+        className="space-y-2"
+        aria-label={translateInstant("issueThreadInteraction.verdict.itemsToReview", {
+          defaultValue: "Items to review",
+        })}
+      >
         {items.map((item) => {
           const resolved = resolvedById.get(item.id);
           const applying = applyingItemIds.has(item.id);
@@ -2305,12 +2335,12 @@ function RequestItemVerdictsCard({
                   ) : applying ? (
                     <span className="inline-flex items-center gap-1.5 rounded-sm border border-border/70 bg-muted/40 px-2 py-0.5 text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
                       <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" aria-hidden />
-                      Applying…
+                      {translateInstant("issueThreadInteraction.verdict.applying", { defaultValue: "Applying…" })}
                     </span>
                   ) : isTerminal ? (
                     <span className="inline-flex items-center gap-1 rounded-sm border border-border/70 bg-muted/30 px-2 py-0.5 text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
                       <CircleDashed className="h-3.5 w-3.5" aria-hidden />
-                      Not decided
+                      {translateInstant("issueThreadInteraction.verdict.notDecided", { defaultValue: "Not decided" })}
                     </span>
                   ) : (
                     <ItemVerdictSegmentedControl
@@ -2337,15 +2367,22 @@ function RequestItemVerdictsCard({
                     id={`${interaction.id}-${item.id}-reason`}
                     value={draft.reason}
                     onChange={(event) => setDraftReason(item.id, event.target.value)}
-                    placeholder="Give the agent a reason so it can act on this item."
+                    placeholder={translateInstant("issueThreadInteraction.verdict.reasonPlaceholder", {
+                      defaultValue: "Give the agent a reason so it can act on this item.",
+                    })}
                     aria-invalid={attempted && invalidDraftIds.has(item.id)}
                     className={cn(
                       "min-h-16 bg-background text-sm",
-                      attempted && invalidDraftIds.has(item.id) && "border-rose-500 focus-visible:ring-rose-500/25",
+                      attempted && invalidDraftIds.has(item.id) && "border-(--status-task-blocked) focus-visible:ring-(--status-task-blocked-ring)",
                     )}
                   />
                   {attempted && invalidDraftIds.has(item.id) ? (
-                    <p className="text-xs text-destructive">A reason is required to {VERDICT_LABEL[draft.verdict].toLowerCase()} this item.</p>
+                    <p className="text-xs text-destructive">
+                      {translateInstant("issueThreadInteraction.verdict.reasonRequired", {
+                        defaultValue: "A reason is required to {{action}} this item.",
+                        action: verdictLabel(draft.verdict).toLocaleLowerCase(),
+                      })}
+                    </p>
                   ) : null}
                 </div>
               ) : null}
@@ -2356,11 +2393,21 @@ function RequestItemVerdictsCard({
 
       {/* Complete summary (S5) */}
       {isComplete && !isExpired ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-sm border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-900 dark:text-emerald-100">
+        <div className="flex flex-wrap items-center gap-2 rounded-sm border border-(--status-task-done-border) bg-(--status-task-done-soft) px-3 py-2 text-sm text-(--status-task-done)">
           <CheckCircle2 className="h-4 w-4" aria-hidden />
           <span className="font-medium">
-            {progress.decided} decided · {progress.approved} approved · {progress.rejected} rejected
-            {progress.deferred > 0 ? ` · ${progress.deferred} deferred` : ""}
+            {translateInstant("issueThreadInteraction.verdict.completeSummary", {
+              defaultValue: "{{decided}} decided · {{approved}} approved · {{rejected}} rejected",
+              decided: progress.decided,
+              approved: progress.approved,
+              rejected: progress.rejected,
+            })}
+            {progress.deferred > 0
+              ? translateInstant("issueThreadInteraction.verdict.deferredSuffix", {
+                  defaultValue: " · {{count}} deferred",
+                  count: progress.deferred,
+                })
+              : ""}
           </span>
         </div>
       ) : null}
@@ -2370,8 +2417,14 @@ function RequestItemVerdictsCard({
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
           <div className="text-xs text-muted-foreground">
             {draftCount > 0
-              ? `${draftCount} draft verdict${draftCount === 1 ? "" : "s"} ready to apply`
-              : "Mark verdicts, then apply them in one pass."}
+              ? translateInstant("issueThreadInteraction.verdict.draftsReady", {
+                  defaultValue: "{{count}} draft verdict ready to apply",
+                  defaultValue_other: "{{count}} draft verdicts ready to apply",
+                  count: draftCount,
+                })
+              : translateInstant("issueThreadInteraction.verdict.markThenApply", {
+                  defaultValue: "Mark verdicts, then apply them in one pass.",
+                })}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {allowBulkApprove ? (
@@ -2383,7 +2436,7 @@ function RequestItemVerdictsCard({
                 onClick={handleApproveAll}
               >
                 <ThumbsUp className="h-4 w-4" aria-hidden />
-                Approve all
+                {translateInstant("issueThreadInteraction.verdict.approveAll", { defaultValue: "Approve all" })}
               </Button>
             ) : null}
             <Button
@@ -2397,7 +2450,7 @@ function RequestItemVerdictsCard({
               {working ? (
                 <>
                   <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden />
-                  Applying…
+                  {translateInstant("issueThreadInteraction.verdict.applying", { defaultValue: "Applying…" })}
                 </>
               ) : (
                 applyLabel
@@ -2428,9 +2481,9 @@ function VerdictProgressBadge({
     <div className="flex items-center gap-2">
       {/* Von Restorff accent when a draft reject is missing its reason */}
       {pendingReason ? (
-        <span className="inline-flex items-center gap-1 rounded-sm border border-amber-500/60 bg-amber-500/10 px-1.5 py-0.5 text-(length:--text-nano) font-semibold uppercase tracking-(--tracking-eyebrow) text-amber-900 dark:text-amber-100">
+        <span className="inline-flex items-center gap-1 rounded-sm border border-(--status-task-todo-border) bg-(--status-task-todo-soft) px-1.5 py-0.5 text-(length:--text-nano) font-semibold uppercase tracking-(--tracking-eyebrow) text-(--status-task-todo)">
           <AlertTriangle className="h-3 w-3" aria-hidden />
-          Reason needed
+          {translateInstant("issueThreadInteraction.verdict.reasonNeeded", { defaultValue: "Reason needed" })}
         </span>
       ) : null}
       <div
@@ -2439,7 +2492,11 @@ function VerdictProgressBadge({
         aria-valuemin={0}
         aria-valuemax={progress.total}
         aria-valuenow={progress.decided}
-        aria-label={`${progress.decided} of ${progress.total} decided`}
+        aria-label={translateInstant("issueThreadInteraction.verdict.progress", {
+          defaultValue: "{{decided}} of {{total}} decided",
+          decided: progress.decided,
+          total: progress.total,
+        })}
       >
         <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
           <div
@@ -2448,7 +2505,11 @@ function VerdictProgressBadge({
           />
         </div>
         <span className="whitespace-nowrap text-xs font-medium text-muted-foreground">
-          {progress.decided} of {progress.total} decided
+          {translateInstant("issueThreadInteraction.verdict.progress", {
+            defaultValue: "{{decided}} of {{total}} decided",
+            decided: progress.decided,
+            total: progress.total,
+          })}
         </span>
       </div>
     </div>
@@ -2508,7 +2569,7 @@ export function IssueThreadInteractionCard({
           <div className="mt-3 text-lg font-bold text-foreground">
             {interaction.title
               ?? (interaction.kind === "suggest_tasks"
-                ? "Suggested task tree"
+                ? translateInstant("issueThreadInteraction.suggestedTaskTree", { defaultValue: "Suggested task tree" })
                 : interaction.kind === "ask_user_questions"
                   ? interaction.payload.title ?? translateInstant("issueThreadInteraction.questionsForOperator", { defaultValue: "Questions for the operator" })
                 : interaction.kind === "request_checkbox_confirmation"

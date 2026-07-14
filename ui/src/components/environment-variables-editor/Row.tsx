@@ -286,7 +286,7 @@ export function EnvironmentVariableRow({
                 <DropdownMenuContent align="start" className="w-56">
                   <DropdownMenuItem className="flex-col items-start gap-0.5" onSelect={() => switchSource("text")}>
                     <span className="text-sm">{t("envVarEditor.textValue", { defaultValue: "Text value" })}</span>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-(length:--text-micro) text-muted-foreground">
                       {t("envVarEditor.textValueDescription", { defaultValue: "Store the value inline as plain text." })}
                     </span>
                   </DropdownMenuItem>
@@ -294,13 +294,13 @@ export function EnvironmentVariableRow({
                     <span className="text-sm">
                       {t("envVarEditor.companySecret", { defaultValue: "Company secret" })}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-(length:--text-micro) text-muted-foreground">
                       {t("envVarEditor.secretReferenceDescription", { defaultValue: "Resolve a stored company secret at run start." })}
                     </span>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="flex-col items-start gap-0.5" onSelect={() => switchSource("user_secret")}>
                     <span className="text-sm">{t("envVarEditor.userSecret", { defaultValue: "User secret" })}</span>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-(length:--text-micro) text-muted-foreground">
                       {t("envVarEditor.userSecretReferenceDescription", {
                         defaultValue: "Resolve the responsible user's own value at run start.",
                       })}
@@ -334,7 +334,7 @@ export function EnvironmentVariableRow({
                         type="button"
                         onClick={openStoreAsSecret}
                         disabled={disabled}
-                        className="flex items-center gap-1 px-2 text-[11px] text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                        className="flex items-center gap-1 px-2 text-(length:--text-micro) text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
                         title={t("envVarEditor.sensitiveValueTitle", { defaultValue: "This value looks sensitive - store it as a secret" })}
                       >
                         <ShieldAlert className="size-3.5" />
@@ -413,7 +413,7 @@ export function EnvironmentVariableRow({
                           )}
                         >
                           {t("secretBindingPicker.latest", { defaultValue: "latest" })}{" "}
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-(length:--text-micro) text-muted-foreground">
                             {t("envVarEditor.recommendedSuffix", { defaultValue: "(recommended)" })}
                           </span>
                         </button>
@@ -562,7 +562,7 @@ export function EnvironmentVariableRow({
 
         {/* 5s undo after Secret→Text */}
         {undoPrev ? (
-          <p className="mt-0.5 inline-flex items-center gap-2 text-[11px] text-muted-foreground">
+          <p className="mt-0.5 inline-flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
             {t("envVarEditor.revertedToText", { defaultValue: "Reverted to text -" })}{" "}
             <button
               type="button"

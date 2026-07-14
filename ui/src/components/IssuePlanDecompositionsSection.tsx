@@ -52,7 +52,7 @@ export function IssuePlanDecompositionsSection({
         <h3 className="text-sm font-medium text-muted-foreground">
           {t("issuePlanDecomposition.title", { defaultValue: "Plan decomposition" })}
         </h3>
-        <span className="text-[11px] text-muted-foreground/80">
+        <span className="text-(length:--text-micro) text-muted-foreground/80">
           {items.length === 1
             ? t("issuePlanDecomposition.revisionCount", {
                 count: items.length,
@@ -132,7 +132,7 @@ export function IssuePlanDecompositionsSection({
                 </span>
                 {record.status === "completed" && requested > 0 ? (
                   <span
-                    className="inline-flex items-center gap-1 rounded-sm border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-900 dark:text-sky-100"
+                    className="inline-flex items-center gap-1 rounded-sm border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-(length:--text-nano) font-medium text-sky-900 dark:text-sky-100"
                     title={t("issuePlanDecomposition.idempotentClaimTooltip", {
                       defaultValue: "Repeat attempts with this fingerprint reuse this record instead of creating new children",
                     })}
@@ -143,7 +143,7 @@ export function IssuePlanDecompositionsSection({
                 ) : null}
               </div>
 
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-(length:--text-micro) text-muted-foreground">
                 {ownerName ? (
                   <span>
                     {t("issuePlanDecomposition.owner", { owner: ownerName, defaultValue: "Owner: {{owner}}" })}

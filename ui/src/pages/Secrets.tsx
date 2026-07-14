@@ -2386,7 +2386,7 @@ export function Secrets() {
                     <TabsTrigger value="user">{t("secrets.valueProvider.eachUser", { defaultValue: "Each user" })}</TabsTrigger>
                   </TabsList>
                 </Tabs>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-(length:--text-micro) text-muted-foreground">
                   {t("secrets.valueProviderHelp", {
                     defaultValue: "Company stores one shared value. Each user lets every member supply their own value under My secrets.",
                   })}
@@ -2487,7 +2487,7 @@ export function Secrets() {
                   {selectedCreateProviderConfig ? (
                     <ProviderVaultInlineWarning config={selectedCreateProviderConfig} />
                   ) : (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="mt-1 text-(length:--text-micro) text-muted-foreground">
                       {t("secrets.deploymentDefaultCompatibility", {
                         defaultValue: "Existing deployment-level provider settings stay available for backwards compatibility.",
                       })}
@@ -2496,7 +2496,7 @@ export function Secrets() {
                 </div>
                 {createMode === "managed" ? (
                   <>
-                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-[11px] text-emerald-700 dark:text-emerald-300">
+                <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2 text-(length:--text-micro) text-emerald-700 dark:text-emerald-300">
                   {t("secrets.paperclipManagedHelp", {
                     defaultValue: "Paperclip-managed secrets are created in the selected provider and future rotations write a new provider version through Paperclip.",
                   })}
@@ -2535,7 +2535,7 @@ export function Secrets() {
                       placeholder="arn:aws:secretsmanager:..."
                       className="font-mono text-xs"
                     />
-                    <p className="text-[11px] text-muted-foreground mt-1">
+                    <p className="text-(length:--text-micro) text-muted-foreground mt-1">
                       {t("secrets.externalReferenceHelp", {
                         defaultValue: "Existing provider secrets are resolve-only in Paperclip. Rotate the value in the provider, then update this reference only if the path, ARN, or version changes.",
                       })}
@@ -2545,7 +2545,7 @@ export function Secrets() {
               </>
             ) : (
               <>
-                <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-2 text-[11px] text-violet-800 dark:text-violet-200">
+                <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-2 text-(length:--text-micro) text-violet-800 dark:text-violet-200">
                   {t("secrets.userProvidedSecretHelp", {
                     defaultValue: "Every member supplies their own value under My secrets. Agents resolve the responsible user's value at runtime.",
                   })}
@@ -2562,7 +2562,7 @@ export function Secrets() {
                       setCreateForm((current) => ({ ...current, usageGuidance: event.target.value }))
                     }
                     placeholder={t("secrets.usageGuidancePlaceholder", { defaultValue: "Tell members how to create their token, required scopes, etc." })}
-                    className="min-h-[70px] text-sm"
+                    className="min-h-(--sz-70px) text-sm"
                   />
                 </div>
               </>
@@ -2782,7 +2782,7 @@ export function Secrets() {
             {selectedRotateProviderConfig ? (
               <ProviderVaultInlineWarning config={selectedRotateProviderConfig} />
             ) : (
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 text-(length:--text-micro) text-muted-foreground">
                 {t("secrets.rotateWithDefaultHelp", {
                   defaultValue: "Rotating with the deployment default preserves current fallback behavior.",
                 })}
@@ -2799,7 +2799,7 @@ export function Secrets() {
                 placeholder={selectedSecret.externalRef ?? t("secrets.updatedReferencePlaceholder", { defaultValue: "Updated reference" })}
                 className="font-mono text-xs"
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 text-(length:--text-micro) text-muted-foreground">
                 {t("secrets.rotateExternalReferenceHelp", {
                   defaultValue: "Rotate the actual value in the provider before changing this Paperclip reference.",
                 })}
@@ -3152,7 +3152,7 @@ function ProviderVaultInlineWarning({ config }: { config: CompanySecretProviderC
   const message = blockReason ?? config.healthMessage;
   if (!message) {
     return (
-      <p className="mt-1 text-[11px] text-muted-foreground">
+      <p className="mt-1 text-(length:--text-micro) text-muted-foreground">
         {config.isDefault
           ? t("secrets.defaultVault", { defaultValue: "Default vault" })
           : t("secrets.vault", { defaultValue: "Vault" })}{" "}
@@ -3902,7 +3902,7 @@ function UserSecretDetailsTab({
       <DetailRow label={t("secrets.usageGuidance", { defaultValue: "Usage guidance" })}>
         {definition.usageGuidance ?? <span className="text-muted-foreground">—</span>}
       </DetailRow>
-      <div className="mt-3 rounded-md border border-violet-500/30 bg-violet-500/5 p-2 text-[11px] text-violet-800 dark:text-violet-200">
+      <div className="mt-3 rounded-md border border-violet-500/30 bg-violet-500/5 p-2 text-(length:--text-micro) text-violet-800 dark:text-violet-200">
         {t("secrets.userDefinitionNoValue", {
           defaultValue: "No value is stored on this admin row. Each member manages their own value under My secrets.",
         })}
@@ -3982,7 +3982,7 @@ function UserSecretUsageTab({ definition }: { definition: UserSecretDefinition }
       </div>
       {definition.usageGuidance ? (
         <div>
-          <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">{t("secrets.memberGuidance", { defaultValue: "Member guidance" })}</p>
+          <p className="mb-1 text-(length:--text-micro) uppercase tracking-wide text-muted-foreground">{t("secrets.memberGuidance", { defaultValue: "Member guidance" })}</p>
           <p className="text-foreground">{definition.usageGuidance}</p>
         </div>
       ) : null}
@@ -4048,7 +4048,7 @@ function SecretDetailsTab({
       <DetailRow label={t("common.updated", { defaultValue: "Updated" })}>{formatRelative(secret.updatedAt, t)}</DetailRow>
       <DetailRow label={t("secrets.lastRotated", { defaultValue: "Last rotated" })}>{formatRelative(secret.lastRotatedAt, t)}</DetailRow>
       <DetailRow label={t("secrets.lastResolved", { defaultValue: "Last resolved" })}>{formatRelative(secret.lastResolvedAt, t)}</DetailRow>
-      <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px] text-amber-700 dark:text-amber-300">
+      <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-(length:--text-micro) text-amber-700 dark:text-amber-300">
         {modeDescription(secret.managedMode, t)}{" "}
         {t("secrets.neverRedisplaysValues", { defaultValue: "Paperclip never re-displays stored values." })}
       </div>
@@ -4099,7 +4099,7 @@ function SecretUsageTab({ loading, bindings }: { loading: boolean; bindings: Com
               <span className="truncate font-medium">{binding.target.label}</span>
             )}
             {binding.target.status ? (
-              <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+              <Badge variant="outline" className="h-5 px-1.5 text-(length:--text-nano) font-normal">
                 {translateStatusLabel(t, binding.target.status)}
               </Badge>
             ) : null}
@@ -4107,7 +4107,7 @@ function SecretUsageTab({ loading, bindings }: { loading: boolean; bindings: Com
           <div className="font-mono text-(length:--text-micro) text-muted-foreground break-all">
             {binding.targetId}
           </div>
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-(length:--text-micro) text-muted-foreground">
             {binding.configPath}{" "}
             {binding.required
               ? t("secrets.requiredSuffix", { defaultValue: "· required" })
@@ -4175,19 +4175,19 @@ function SecretEventsTab({
                 </Badge>
               ) : null}
             </span>
-            <span className="text-[11px] text-muted-foreground">{formatRelative(event.createdAt, t)}</span>
+            <span className="text-(length:--text-micro) text-muted-foreground">{formatRelative(event.createdAt, t)}</span>
           </div>
           <div className="font-mono text-(length:--text-micro) text-muted-foreground break-all">
             {event.consumerId}
           </div>
           {event.responsibleUserId ? (
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-(length:--text-micro) text-muted-foreground">
               {t("secrets.responsibleUser", { defaultValue: "Responsible user" })}: <span className="text-foreground">{userLabel(event.responsibleUserId)}</span>
             </div>
           ) : null}
           {event.credentialOwnerUserId &&
           event.credentialOwnerUserId !== event.responsibleUserId ? (
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-(length:--text-micro) text-muted-foreground">
               {t("secrets.credentialOwner", { defaultValue: "Credential owner" })}: <span className="text-foreground">{userLabel(event.credentialOwnerUserId)}</span>
             </div>
           ) : null}

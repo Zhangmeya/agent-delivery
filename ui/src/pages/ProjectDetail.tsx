@@ -153,7 +153,7 @@ function ProjectTilePicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="shrink-0 rounded-lg cursor-pointer hover:ring-2 hover:ring-foreground/20 transition-[box-shadow]"
+          className="shrink-0 rounded-lg cursor-pointer hover:ring-2 hover:ring-foreground/20 transition-(--tp-box-shadow)"
           aria-label={t("projectDetail.changeIconAndColor", { defaultValue: "Change project icon and color" })}
         >
           <ProjectTile color={color} icon={icon} size="md" />
@@ -833,8 +833,8 @@ export function ProjectDetail() {
             </div>
           ) : null}
           {project.managedByPlugin ? (
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: project.color ?? "#6366f1" }} />
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-(length:--text-micro) font-medium text-muted-foreground">
+              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: project.color ?? "var(--project-seed)" }} />
               {t("Managed by {{name}}", {
                 defaultValue: "Managed by {{name}}",
                 name: project.managedByPlugin.pluginDisplayName,

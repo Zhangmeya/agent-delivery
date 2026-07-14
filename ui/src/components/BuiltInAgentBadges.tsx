@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { brandChipBadge } from "@/lib/status-colors";
 import type { BuiltInAgentStatus } from "@/api/builtInAgents";
+import { useTranslation } from "react-i18next";
 
 /**
  * Provenance label ("Built-in"). Constant for the life of a built-in agent —
@@ -15,6 +16,7 @@ export function BuiltInAgentBadge({
   className?: string;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Badge
       variant="outline"
@@ -23,9 +25,11 @@ export function BuiltInAgentBadge({
         compact && "px-1.5 py-0 text-(length:--text-nano)",
         className,
       )}
-      title="Ships with Paperclip"
+      title={t("builtInAgents.badge.tooltip", {
+        defaultValue: "Ships with Paperclip CN",
+      })}
     >
-      Built-in
+      {t("builtInAgents.badge.label", { defaultValue: "Built-in" })}
     </Badge>
   );
 }
@@ -44,6 +48,7 @@ export function BuiltInLifecycleChip({
   compact?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   if (status !== "needs_setup" && status !== "pending_approval") return null;
   const isPendingApproval = status === "pending_approval";
   return (
@@ -56,11 +61,29 @@ export function BuiltInLifecycleChip({
       )}
       title={
         isPendingApproval
-          ? "Waiting on board hire approval before the feature can run"
-          : "Needs adapter/model setup before the feature can run"
+          ? t("builtInAgents.lifecycle.pendingApprovalTooltip", {
+              defaultValue:
+                "Waiting on board hire approval before the feature can run",
+            })
+          : t("builtInAgents.lifecycle.needsSetupTooltip", {
+              defaultValue:
+                "Needs adapter/model setup before the feature can run",
+            })
       }
     >
-      {isPendingApproval ? (compact ? "Approval" : "Pending approval") : compact ? "Setup" : "Needs setup"}
+      {isPendingApproval
+        ? compact
+          ? t("builtInAgents.lifecycle.approvalCompact", {
+              defaultValue: "Approval",
+            })
+          : t("builtInAgents.lifecycle.pendingApproval", {
+              defaultValue: "Pending approval",
+            })
+        : compact
+          ? t("builtInAgents.lifecycle.setupCompact", { defaultValue: "Setup" })
+          : t("builtInAgents.lifecycle.needsSetup", {
+              defaultValue: "Needs setup",
+            })}
     </Badge>
   );
 }

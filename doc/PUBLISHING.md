@@ -232,10 +232,13 @@ Example for a newly added public package from the repo root:
 
 ```bash
 # safe preview
-pnpm run release:bootstrap-package -- @paperclipai/new-package
+pnpm run release:bootstrap-package -- @penclipai/new-package
 
 # one-time first publish from an authenticated maintainer machine
-pnpm run release:bootstrap-package -- @paperclipai/new-package --publish --otp 123456
+pnpm run release:bootstrap-package -- @penclipai/new-package --publish --otp 123456
+
+# or use a granular npm token with bypass 2FA enabled
+NPM_TOKEN=... pnpm run release:bootstrap-package -- @penclipai/new-package --publish
 ```
 
 The helper script:
@@ -254,7 +257,7 @@ Pass `--otp <code>` for account 2FA, or set `NPM_TOKEN`/`NODE_AUTH_TOKEN` to a b
 
 After that first publish succeeds:
 
-1. open `https://www.npmjs.com/package/@paperclipai/new-package`
+1. open `https://www.npmjs.com/package/@penclipai/new-package`
 2. go to `Settings` → `Trusted publishing`
 3. add repository `penclipai/paperclip-cn`
 4. set workflow filename to `release.yml`

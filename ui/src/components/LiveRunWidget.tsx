@@ -99,7 +99,7 @@ export function LiveRunWidget({ issueId, companyId }: LiveRunWidgetProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-cyan-500/25 bg-background/80 shadow-[0_18px_50px_rgba(6,182,212,0.08)]">
       <div className="border-b border-border/60 bg-cyan-500/[0.04] px-4 py-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">
+        <div className="text-xs font-semibold uppercase tracking-(--tracking-caps) text-cyan-700 dark:text-cyan-300">
           {t("Live Runs")}
         </div>
         <div className="mt-1 text-xs text-muted-foreground">

@@ -418,7 +418,7 @@ const FieldWrapper = React.memo(({
         </p>
       )}
       {translatedError && (
-        <p className="text-[12px] font-medium text-destructive">{translatedError}</p>
+        <p className="text-xs font-medium text-destructive">{translatedError}</p>
       )}
     </div>
   );

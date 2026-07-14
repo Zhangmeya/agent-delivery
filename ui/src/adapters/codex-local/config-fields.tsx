@@ -64,7 +64,10 @@ export function CodexLocalConfigFields({
 
   return (
     <>
-      <Field label="Execution engine" hint="Auto uses ACP when prerequisites pass and falls back to Codex CLI with diagnostics.">
+      <Field
+        label={t("agentConfig.executionEngine")}
+        hint={t("agentConfig.executionEngineHint", { cli: "Codex CLI" })}
+      >
         <select
           className={inputClass}
           value={engine}
@@ -75,7 +78,7 @@ export function CodexLocalConfigFields({
               : mark("adapterConfig", "engine", value === "auto" ? undefined : value);
           }}
         >
-          <option value="auto">Auto (ACP preferred)</option>
+          <option value="auto">{t("agentConfig.autoAcpPreferred")}</option>
           <option value="cli">Codex CLI</option>
           <option value="acp">ACP</option>
         </select>
@@ -83,8 +86,11 @@ export function CodexLocalConfigFields({
       {acpSelected && (
         <>
           <Field
-            label="ACP server command"
-            hint="Optional override for the Codex ACP server command. Defaults to the package-local codex-acp binary."
+            label={t("agentConfig.acpServerCommand")}
+            hint={t("agentConfig.acpServerCommandHint", {
+              provider: "Codex",
+              defaultCommand: "codex-acp",
+            })}
           >
             <DraftInput
               value={
@@ -102,7 +108,7 @@ export function CodexLocalConfigFields({
               placeholder="codex-acp"
             />
           </Field>
-          <Field label="ACP session mode" hint="Persistent keeps ACP session state between runs. One-shot starts fresh each run.">
+          <Field label={t("agentConfig.acpSessionMode")} hint={t("agentConfig.acpSessionModeHint")}>
             <select
               className={inputClass}
               value={
@@ -117,13 +123,13 @@ export function CodexLocalConfigFields({
                   : mark("adapterConfig", "mode", value);
               }}
             >
-              <option value="persistent">Persistent</option>
-              <option value="oneshot">One-shot</option>
+              <option value="persistent">{t("agentConfig.persistent")}</option>
+              <option value="oneshot">{t("agentConfig.oneShot")}</option>
             </select>
           </Field>
           <Field
-            label="ACP non-interactive permissions"
-            hint="Fallback if the ACP agent asks for input outside an interactive session."
+            label={t("agentConfig.acpNonInteractivePermissions")}
+            hint={t("agentConfig.acpNonInteractivePermissionsHint")}
           >
             <select
               className={inputClass}
@@ -139,13 +145,13 @@ export function CodexLocalConfigFields({
                   : mark("adapterConfig", "nonInteractivePermissions", value);
               }}
             >
-              <option value="deny">Deny</option>
-              <option value="fail">Fail</option>
+              <option value="deny">{t("agentConfig.deny")}</option>
+              <option value="fail">{t("agentConfig.fail")}</option>
             </select>
           </Field>
           <Field
-            label="ACP state directory"
-            hint="Optional ACP session state directory. Defaults to Paperclip-managed company/agent scoped storage."
+            label={t("agentConfig.acpStateDirectory")}
+            hint={t("agentConfig.acpStateDirectoryHint")}
           >
             <div className="flex items-center gap-2">
               <DraftInput
@@ -167,8 +173,8 @@ export function CodexLocalConfigFields({
             </div>
           </Field>
           <Field
-            label="ACP warm process idle ms"
-            hint="Defaults to 0, which closes the ACP process after each run while retaining persistent session state."
+            label={t("agentConfig.acpWarmProcessIdleMs")}
+            hint={t("agentConfig.acpWarmProcessIdleMsHint")}
           >
             {isCreate ? (
               <input

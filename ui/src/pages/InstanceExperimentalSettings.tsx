@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, Clock, FlaskConical, Play, Search } from "lucide-react";
 import type {
@@ -31,8 +32,35 @@ function issueHref(identifier: string | null, issueId: string) {
   return `/${prefix}/issues/${identifier}`;
 }
 
-function formatRecoveryState(state: string) {
-  return state.replace(/_/g, " ");
+function formatRecoveryState(t: TFunction, state: string) {
+  switch (state) {
+    case "invalid_review_participant":
+      return t("instanceExperimentalSettings.recoveryState.invalidReviewParticipant", {
+        defaultValue: "Invalid review participant",
+      });
+    case "in_review_without_action_path":
+      return t("instanceExperimentalSettings.recoveryState.inReviewWithoutActionPath", {
+        defaultValue: "In review without an action path",
+      });
+    case "blocked_by_cancelled_issue":
+      return t("instanceExperimentalSettings.recoveryState.blockedByCancelledIssue", {
+        defaultValue: "Blocked by a cancelled task",
+      });
+    case "blocked_by_assigned_backlog_issue":
+      return t("instanceExperimentalSettings.recoveryState.blockedByAssignedBacklogIssue", {
+        defaultValue: "Blocked by an assigned backlog task",
+      });
+    case "blocked_by_unassigned_issue":
+      return t("instanceExperimentalSettings.recoveryState.blockedByUnassignedIssue", {
+        defaultValue: "Blocked by an unassigned task",
+      });
+    case "blocked_by_uninvokable_assignee":
+      return t("instanceExperimentalSettings.recoveryState.blockedByUninvokableAssignee", {
+        defaultValue: "Blocked by an unavailable assignee",
+      });
+    default:
+      return state.replace(/_/g, " ");
+  }
 }
 
 type WorktreeRunExecutionDisplayState =
@@ -127,7 +155,7 @@ function RecoveryPreviewDialog({
                   {item.identifier ?? item.issueId}
                 </a>
                 <span className="rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                  {formatRecoveryState(item.state)}
+                  {formatRecoveryState(t, item.state)}
                 </span>
               </div>
               <p className="mt-1 text-sm text-foreground">{item.title}</p>
@@ -364,10 +392,10 @@ export function InstanceExperimentalSettings() {
 
       <div
         role="alert"
-        className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3"
+        className="rounded-lg border border-(--status-task-todo-border) bg-(--status-task-todo-soft) px-4 py-3"
       >
         <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-(--status-task-todo)" />
           <div className="space-y-1 text-sm">
             <p className="font-medium text-foreground">{t("instanceExperimentalSettings.warningTitle", { defaultValue: "Experimental features may break at any time." })}</p>
             <p className="text-muted-foreground">
@@ -390,11 +418,16 @@ export function InstanceExperimentalSettings() {
           <div className="flex flex-col gap-4">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1.5">
-                <h2 className="text-sm font-semibold">Run tasks in this worktree</h2>
+                <h2 className="text-sm font-semibold">
+                  {t("instanceExperimentalSettings.worktreeRunExecutionTitle", {
+                    defaultValue: "Run tasks in this worktree",
+                  })}
+                </h2>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  This is an isolated git-worktree preview instance. Turn this on to let the scheduler execute runs
-                  here. Only tasks created after enabling will run automatically — copied/pre-existing tasks stay
-                  parked. Toggling off and on resets the cutoff.
+                  {t("instanceExperimentalSettings.worktreeRunExecutionDescription", {
+                    defaultValue:
+                      "This is an isolated git-worktree preview instance. Turn this on to let the scheduler execute runs here. Only tasks created after enabling will run automatically; copied or pre-existing tasks stay parked. Toggling off and on resets the cutoff.",
+                  })}
                 </p>
               </div>
               <ToggleSwitch
@@ -403,33 +436,48 @@ export function InstanceExperimentalSettings() {
                   toggleMutation.mutate({ enableWorktreeRunExecution: checked })
                 }
                 disabled={toggleMutation.isPending}
-                aria-label="Toggle worktree run execution setting"
+                aria-label={t("instanceExperimentalSettings.worktreeRunExecutionToggle", {
+                  defaultValue: "Toggle worktree run execution setting",
+                })}
               />
             </div>
 
             {worktreeRunExecutionState.kind === "armed" ? (
-              <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm text-foreground">
-                <Play className="h-4 w-4 shrink-0 text-emerald-600" />
+              <div className="flex items-center gap-2 rounded-md border border-(--status-task-done-border) bg-(--status-task-done-soft) px-3 py-2 text-sm text-foreground">
+                <Play className="h-4 w-4 shrink-0 text-(--status-task-done)" />
                 <span>
-                  Running tasks created after{" "}
-                  <span className="font-medium">
-                    {formatActivationTimestamp(worktreeRunExecutionState.activatedAt)}
-                  </span>
-                  .
+                  {t("instanceExperimentalSettings.worktreeRunExecutionArmed", {
+                    defaultValue: "Running tasks created after {{timestamp}}.",
+                    timestamp: formatActivationTimestamp(worktreeRunExecutionState.activatedAt),
+                  })}
                 </span>
               </div>
             ) : null}
 
             {worktreeRunExecutionState.kind === "fail_closed" ? (
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+              <div className="flex items-start gap-2 rounded-md border border-(--status-task-todo-border) bg-(--status-task-todo-soft) px-3 py-2 text-sm">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-(--status-task-todo)" />
                 <div className="space-y-0.5">
-                  <p className="font-medium text-foreground">Execution is suppressed — effectively off.</p>
+                  <p className="font-medium text-foreground">
+                    {t("instanceExperimentalSettings.worktreeRunExecutionSuppressedTitle", {
+                      defaultValue: "Execution is suppressed; this setting is effectively off.",
+                    })}
+                  </p>
                   <p className="text-muted-foreground">
                     {worktreeRunExecutionState.reason === "instance_mismatch"
-                      ? "This setting was armed in a different instance and copied here, so no tasks run automatically."
-                      : "This setting is missing its activation cutoff, so no tasks run automatically."}{" "}
-                    Toggle it off and back on to arm execution for tasks created here.
+                      ? t("instanceExperimentalSettings.worktreeRunExecutionInstanceMismatch", {
+                          defaultValue: "This setting was armed in a different instance and copied here, so no tasks run automatically.",
+                        })
+                      : worktreeRunExecutionState.reason === "missing_instance_id"
+                        ? t("instanceExperimentalSettings.worktreeRunExecutionMissingInstanceId", {
+                            defaultValue: "This preview instance has no stable instance ID, so no tasks run automatically.",
+                          })
+                        : t("instanceExperimentalSettings.worktreeRunExecutionMissingCutoff", {
+                            defaultValue: "This setting is missing its activation cutoff, so no tasks run automatically.",
+                          })}{" "}
+                    {t("instanceExperimentalSettings.worktreeRunExecutionRearm", {
+                      defaultValue: "Toggle it off and back on to arm execution for tasks created here.",
+                    })}
                   </p>
                 </div>
               </div>
@@ -442,22 +490,30 @@ export function InstanceExperimentalSettings() {
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold">Cases</h2>
-              <Badge variant="secondary">Experimental</Badge>
+              <h2 className="text-sm font-semibold">
+                {t("instanceExperimentalSettings.casesTitle", { defaultValue: "Cases" })}
+              </h2>
+              <Badge variant="secondary">{t("Experimental", { defaultValue: "Experimental" })}</Badge>
             </div>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Durable work products (blog posts, tweet storms…) that tasks create and iterate on. Adds the
-              Cases tab and the agent case API.
+              {t("instanceExperimentalSettings.casesDescription", {
+                defaultValue:
+                  "Durable work products such as blog posts and tweet storms that tasks create and iterate on. Adds the Cases tab and the agent case API.",
+              })}
             </p>
             <p className="max-w-2xl text-xs text-muted-foreground">
-              Turning Cases off hides the tab and blocks the case API; existing case data is kept.
+              {t("instanceExperimentalSettings.casesDisabledDescription", {
+                defaultValue: "Turning Cases off hides the tab and blocks the case API; existing case data is kept.",
+              })}
             </p>
           </div>
           <ToggleSwitch
             checked={enableCases}
             onCheckedChange={() => toggleMutation.mutate({ enableCases: !enableCases })}
             disabled={toggleMutation.isPending}
-            aria-label="Toggle cases experimental setting"
+            aria-label={t("instanceExperimentalSettings.casesToggle", {
+              defaultValue: "Toggle cases experimental setting",
+            })}
           />
         </div>
       </Card>
@@ -482,17 +538,23 @@ export function InstanceExperimentalSettings() {
       <Card className="block p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <h2 className="text-sm font-semibold">Built-in Agents</h2>
+            <h2 className="text-sm font-semibold">
+              {t("instanceExperimentalSettings.builtInAgentsTitle", { defaultValue: "Built-in Agents" })}
+            </h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Show Paperclip-managed built-in agent surfaces, including built-in roster badges, the Built-in agents
-              tab, and built-in agent setup controls.
+              {t("instanceExperimentalSettings.builtInAgentsDescription", {
+                defaultValue:
+                  "Show Paperclip CN-managed built-in agent surfaces, including roster badges, the Built-in agents tab, and setup controls.",
+              })}
             </p>
           </div>
           <ToggleSwitch
             checked={enableBuiltInAgents}
             onCheckedChange={() => toggleMutation.mutate({ enableBuiltInAgents: !enableBuiltInAgents })}
             disabled={toggleMutation.isPending}
-            aria-label="Toggle built-in agents experimental setting"
+            aria-label={t("instanceExperimentalSettings.builtInAgentsToggle", {
+              defaultValue: "Toggle built-in agents experimental setting",
+            })}
           />
         </div>
       </Card>
@@ -543,17 +605,23 @@ export function InstanceExperimentalSettings() {
       <Card className="block p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <h2 className="text-sm font-semibold">Decisions</h2>
+            <h2 className="text-sm font-semibold">
+              {t("instanceExperimentalSettings.decisionsTitle", { defaultValue: "Decisions" })}
+            </h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Show the Decisions item in the main sidebar — the attention home that surfaces the tasks awaiting your
-              input — while the surface is still being evaluated.
+              {t("instanceExperimentalSettings.decisionsDescription", {
+                defaultValue:
+                  "Show the Decisions item in the main sidebar, the attention home that surfaces tasks awaiting your input, while the surface is still being evaluated.",
+              })}
             </p>
           </div>
           <ToggleSwitch
             checked={enableDecisions}
             onCheckedChange={() => toggleMutation.mutate({ enableDecisions: !enableDecisions })}
             disabled={toggleMutation.isPending}
-            aria-label="Toggle decisions experimental setting"
+            aria-label={t("instanceExperimentalSettings.decisionsToggle", {
+              defaultValue: "Toggle decisions experimental setting",
+            })}
           />
         </div>
       </Card>
@@ -561,16 +629,22 @@ export function InstanceExperimentalSettings() {
       <Card className="block p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <h2 className="text-sm font-semibold">Goals Sidebar Link</h2>
+            <h2 className="text-sm font-semibold">
+              {t("instanceExperimentalSettings.goalsSidebarLinkTitle", { defaultValue: "Goals Sidebar Link" })}
+            </h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Restore the Goals item in the main sidebar while the goals surface is being evaluated.
+              {t("instanceExperimentalSettings.goalsSidebarLinkDescription", {
+                defaultValue: "Restore the Goals item in the main sidebar while the goals surface is being evaluated.",
+              })}
             </p>
           </div>
           <ToggleSwitch
             checked={enableGoalsSidebarLink}
             onCheckedChange={() => toggleMutation.mutate({ enableGoalsSidebarLink: !enableGoalsSidebarLink })}
             disabled={toggleMutation.isPending}
-            aria-label="Toggle goals sidebar link experimental setting"
+            aria-label={t("instanceExperimentalSettings.goalsSidebarLinkToggle", {
+              defaultValue: "Toggle goals sidebar link experimental setting",
+            })}
           />
         </div>
       </Card>

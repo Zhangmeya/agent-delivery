@@ -314,7 +314,7 @@ export function PipelineItemBodyDocument({
           />
         </div>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-(length:--text-micro) text-muted-foreground">
             {t("pipelineItemBody.saveHint", {
               revision: (doc?.latestRevisionNumber ?? 0) + 1,
               defaultValue: "Saving creates rev {{revision}} · ⌘↵ to save · Esc to cancel",
@@ -469,7 +469,7 @@ export function PipelineItemBodyDocument({
           />
         ) : null}
         actionsSlot={editing ? (
-          <span className="text-[11px] font-medium text-amber-300">
+          <span className="text-(length:--text-micro) font-medium text-amber-300">
             {t("pipelineItemBody.editingUnsaved", { defaultValue: "● Editing · unsaved" })}
           </span>
         ) : (

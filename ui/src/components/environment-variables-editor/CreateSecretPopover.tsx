@@ -93,7 +93,7 @@ export function SecretPopoverForm({
       <div className="space-y-1">
         <PopoverTitle className="text-sm font-medium">{heading}</PopoverTitle>
         {mode === "store" ? (
-          <PopoverDescription className="text-[11px] text-muted-foreground">
+          <PopoverDescription className="text-(length:--text-micro) text-muted-foreground">
             {t("envVarEditor.storeAsSecretDescriptionPrefix", {
               defaultValue: "Moves the typed value into an encrypted company secret and binds",
             })}{" "}
@@ -106,7 +106,7 @@ export function SecretPopoverForm({
       </div>
 
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium text-muted-foreground">
+        <span className="text-(length:--text-micro) font-medium text-muted-foreground">
           {t("common.name", { defaultValue: "Name" })}
         </span>
         <input
@@ -130,7 +130,7 @@ export function SecretPopoverForm({
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium text-muted-foreground">
+        <span className="text-(length:--text-micro) font-medium text-muted-foreground">
           {t("secrets.value", { defaultValue: "Value" })}
         </span>
         <div className="relative">

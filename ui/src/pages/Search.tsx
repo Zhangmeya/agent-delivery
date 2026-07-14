@@ -52,9 +52,9 @@ import { SearchSortMenu } from "../components/search/SearchSortMenu";
 import { ZeroResultsRecovery } from "../components/search/ZeroResultsRecovery";
 import { useSidebar } from "../context/SidebarContext";
 import {
-  SORT_LABELS,
   countActiveFilters,
   parseSearchSort,
+  searchSortLabel,
   type FilterChipLookups,
 } from "../lib/search-filters";
 import type { Agent } from "@penclipai/shared";
@@ -725,7 +725,7 @@ export function Search() {
                 totalResults={totalResults}
                 allMatchTotal={allMatchTotal}
                 activeFilterCount={activeFilterCount}
-                sortLabel={SORT_LABELS[sort]}
+                sortLabel={searchSortLabel(sort)}
                 zeroResultsSlot={zeroResultsSlot}
                 isFetching={isFetching && !!data}
                 agentsById={agentsById}
@@ -815,7 +815,7 @@ function SearchTabContent({
         </div>
         {recentSearches.length > 0 ? (
           <div>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="mb-2 text-(length:--text-micro) font-semibold uppercase tracking-wide text-muted-foreground">
               {t("searchPage.recentSearches")}
             </div>
             <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
@@ -837,7 +837,7 @@ function SearchTabContent({
         <ul className="space-y-1 text-xs text-muted-foreground">
           <li>
             <span className="font-medium text-foreground">{t("searchPage.tip.identifierLabel")}</span> {t("searchPage.tip.identifierBodyPrefix")}{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-[11px]">PAP-123</code> {t("searchPage.tip.identifierBodySuffix")}
+            <code className="rounded bg-muted px-1 py-0.5 text-(length:--text-micro)">PAP-123</code> {t("searchPage.tip.identifierBodySuffix")}
           </li>
           <li>
             <span className="font-medium text-foreground">{t("searchPage.tip.quotedLabel")}</span> {t("searchPage.tip.quotedBody")}

@@ -408,7 +408,7 @@ export function IssueWorkspaceCard({
           )}
           {workspace?.repoUrl && (
             <div className="flex items-center gap-1.5 text-muted-foreground">
-              <span className="text-[11px]">{t("issueWorkspace.repo", { defaultValue: "Repo:" })}</span>
+              <span className="text-(length:--text-micro)">{t("issueWorkspace.repo", { defaultValue: "Repo:" })}</span>
               <CopyableInline value={workspace.repoUrl} mono />
             </div>
           )}

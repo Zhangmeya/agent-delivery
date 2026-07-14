@@ -1279,7 +1279,7 @@ export function IssueDocumentsSection({
                       </div>
                       {activeConflict.showRemote && (
                         <div className="mt-3 rounded-md border border-border/70 bg-background/60 p-3">
-                          <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                          <div className="mb-2 flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
                             <span>
                               {t("issueDocuments.remoteRevision", {
                                 number: activeConflict.serverDocument.latestRevisionNumber,

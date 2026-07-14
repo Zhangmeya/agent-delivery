@@ -91,7 +91,7 @@ export function BudgetIncidentCard({
         </div>
 
         <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-          <label className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+          <label className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">
             {t("New budget", { defaultValue: "New budget" })}
           </label>
           <div className="mt-2 flex flex-col gap-3 sm:flex-row">

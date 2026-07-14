@@ -98,7 +98,7 @@ function createLocalSandboxRunner(
     args?: string[];
     cwd?: string;
     env?: Record<string, string>;
-  }) => void,
+  }) => void | Promise<void>,
 ) {
   let counter = 0;
   return {
@@ -113,7 +113,7 @@ function createLocalSandboxRunner(
       onSpawn?: (meta: { pid: number; startedAt: string }) => Promise<void>;
     }) => {
       counter += 1;
-      onExecute?.(input);
+      await onExecute?.(input);
       const usesPosixShell = input.command === "bash" || input.command === "sh";
       const command = usesPosixShell
         ? resolveTestPosixShellCommand(input.command as "bash" | "sh")
@@ -849,12 +849,14 @@ describe("shared ACPX engine runtime behavior", () => {
 
     let sessionPayload: Record<string, unknown> | null = null;
     const runner = createLocalSandboxRunner(
-      (input: { args?: string[]; env?: Record<string, string> }) => {
+      async (input: { args?: string[]; env?: Record<string, string> }) => {
         if (input.env?.PAPERCLIP_SANDBOX_EXEC_CHANNEL === "bridge") {
           const script = input.args?.[1] ?? "";
-          const match = script.match(/PAPERCLIP_PROCESS_SESSION_COMMAND_B64='([^']+)'/);
+          const match = script.match(/PAPERCLIP_PROCESS_SESSION_DIR='([^']+)'/);
           if (match) {
-            sessionPayload = JSON.parse(Buffer.from(match[1]!, "base64").toString("utf8")) as Record<string, unknown>;
+            sessionPayload = JSON.parse(
+              await fs.readFile(path.join(match[1]!, "command.json"), "utf8"),
+            ) as Record<string, unknown>;
           }
         }
       },

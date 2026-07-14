@@ -258,7 +258,7 @@ function KanbanColumn({
           </button>
         ) : null}
         {issues.length > 0 && (hiddenCount > 0 || issues.length >= visibleCount) ? (
-          <p className="px-1 pt-1 text-[11px] text-muted-foreground">
+          <p className="px-1 pt-1 text-(length:--text-micro) text-muted-foreground">
             {t("kanban.showingCount", {
               defaultValue: "Showing {{shown}} of {{total}}",
               shown: visibleIssues.length,
@@ -339,7 +339,7 @@ function KanbanCard({
           </span>
           {isSuccessfulRunHandoffRequired(issue) ? (
             <span
-              className="inline-flex items-center gap-1 rounded-full border border-amber-400/45 bg-amber-50/60 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-300/35 dark:bg-amber-400/10 dark:text-amber-300"
+              className="inline-flex items-center gap-1 rounded-full border border-amber-400/45 bg-amber-50/60 px-1.5 py-0.5 text-(length:--text-nano) font-medium text-amber-700 dark:border-amber-300/35 dark:bg-amber-400/10 dark:text-amber-300"
               title={t("kanban.nextStepTitle", { defaultValue: "This task needs a next step" })}
               aria-label={t("kanban.nextStepAriaLabel", { defaultValue: "Needs next step" })}
             >

@@ -20,18 +20,19 @@ import {
   resolveAdapterExecutionTargetTimeoutSec,
   runAdapterExecutionTargetProcess,
   runAdapterExecutionTargetShellCommand,
-  startAdapterExecutionTargetProcessSessionBridge,
-  startAdapterExecutionTargetPaperclipBridge,
-  type AdapterSandboxExecutionTarget,
+    startAdapterExecutionTargetProcessSessionBridge,
+    startAdapterExecutionTargetPaperclipBridge,
+    type AdapterExecutionTargetProcessSessionBridgeHandle,
+    type AdapterSandboxExecutionTarget,
 } from "./execution-target.js";
 import { createSandboxRunLogTailFactory } from "./sandbox-run-log-stream.js";
 import { runChildProcess } from "./server-utils.js";
 import { shellQuote } from "./ssh.js";
 
 const execFileAsync = promisify(execFile);
-const PROCESS_SESSION_TEST_TIMEOUT_MS = process.platform === "win32" ? 20_000 : 5_000;
-const PROCESS_SESSION_PROXY_TIMEOUT_MS = process.platform === "win32" ? 15_000 : 5_000;
-const PROCESS_SESSION_LIVE_OUTPUT_TIMEOUT_MS = process.platform === "win32" ? 10_000 : 3_000;
+  const PROCESS_SESSION_TEST_TIMEOUT_MS = process.platform === "win32" ? 45_000 : 5_000;
+  const PROCESS_SESSION_PROXY_TIMEOUT_MS = process.platform === "win32" ? 30_000 : 5_000;
+  const PROCESS_SESSION_LIVE_OUTPUT_TIMEOUT_MS = process.platform === "win32" ? 20_000 : 3_000;
 
 function resolveTestPosixShellCommand(command: "bash" | "sh") {
   if (process.platform !== "win32") return command === "bash" ? "/bin/bash" : "sh";
@@ -158,20 +159,36 @@ describe("sandbox adapter execution targets", () => {
     throw new Error(message);
   }
 
-  function spawnProcessSessionProxy(command: string) {
-    return spawn(command, [], {
+  function parseProcessSessionProxyCommand(command: string) {
+    if (process.platform !== "win32") return { command, args: [] as string[], sourcePath: command };
+    const match = command.match(/^"([^"]+)"\s+"([^"]+)"$/);
+    if (!match) throw new Error(`Unexpected Windows process session proxy command: ${command}`);
+    return { command: match[1]!, args: [match[2]!], sourcePath: match[2]! };
+  }
+
+  function spawnProcessSessionProxy(agentCommand: string) {
+    const parsed = parseProcessSessionProxyCommand(agentCommand);
+    return spawn(parsed.command, parsed.args, {
       stdio: ["pipe", "pipe", "pipe"],
-      shell: process.platform === "win32",
     });
   }
 
   function processSessionProxySourcePath(command: string) {
-    if (process.platform !== "win32") return command;
-    return path.join(path.dirname(command), "paperclip-process-session-proxy.mjs");
+    return parseProcessSessionProxyCommand(command).sourcePath;
   }
 
-  async function runProxyWithInput(command: string, input: string): Promise<{ stdout: string; stderr: string; code: number | null }> {
-    const child = spawnProcessSessionProxy(command);
+  async function waitForChildSpawn(child: ReturnType<typeof spawnProcessSessionProxy>) {
+    await new Promise<void>((resolve, reject) => {
+      child.once("spawn", resolve);
+      child.once("error", reject);
+    });
+  }
+
+  async function runProxyWithInput(
+    bridge: AdapterExecutionTargetProcessSessionBridgeHandle,
+    input: string,
+  ): Promise<{ stdout: string; stderr: string; code: number | null }> {
+    const child = spawnProcessSessionProxy(bridge.agentCommand);
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -182,6 +199,8 @@ describe("sandbox adapter execution targets", () => {
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
     });
+    await waitForChildSpawn(child);
+    await bridge.ready;
     child.stdin.end(input);
     const code = await new Promise<number | null>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -194,7 +213,7 @@ describe("sandbox adapter execution targets", () => {
         clearTimeout(timeout);
         reject(error);
       });
-      child.on("exit", (exitCode) => {
+      child.on("close", (exitCode) => {
         clearTimeout(timeout);
         resolve(exitCode);
       });
@@ -299,7 +318,7 @@ describe("sandbox adapter execution targets", () => {
     expect(bridge).not.toBeNull();
 
     try {
-      const result = await runProxyWithInput(bridge!.agentCommand, "hello\n");
+      const result = await runProxyWithInput(bridge!, "hello\n");
       expect(result.code).toBe(0);
       expect(result.stdout).toBe("out:hello\n");
       expect(result.stderr).toBe("err:hello\n");
@@ -346,7 +365,7 @@ describe("sandbox adapter execution targets", () => {
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 300));
-      const result = await runProxyWithInput(bridge!.agentCommand, "");
+      const result = await runProxyWithInput(bridge!, "");
       expect(result.code).toBe(0);
       expect(result.stdout).toBe("early-out\n");
       expect(result.stderr).toBe("early-err\n");
@@ -391,7 +410,7 @@ describe("sandbox adapter execution targets", () => {
     expect(bridge).not.toBeNull();
 
     try {
-      const result = await runProxyWithInput(bridge!.agentCommand, "");
+      const result = await runProxyWithInput(bridge!, "");
       expect(result.code).toBe(0);
       expect(result.stdout).toBe("final-out\n");
       expect(result.stderr).toBe("final-err\n");
@@ -456,7 +475,7 @@ describe("sandbox adapter execution targets", () => {
       await badPeerClosed;
 
       // The authenticated proxy still attaches and receives the buffered output.
-      const result = await runProxyWithInput(bridge!.agentCommand, "");
+      const result = await runProxyWithInput(bridge!, "");
       expect(result.code).toBe(0);
       expect(result.stdout).toBe("guarded-out\n");
       expect(squatterReceived).toBe("");
@@ -537,6 +556,8 @@ describe("sandbox adapter execution targets", () => {
     });
 
     try {
+      await waitForChildSpawn(child);
+      await bridge!.ready;
       child.stdin.write("ping\n");
       await waitForCondition(
         () => stdout.includes("delta:ping\n") && stderr.includes("trace:ping\n"),

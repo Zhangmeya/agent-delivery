@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Loader2, Plus, Trash2, Users } from "lucide-react";
 import type {
   Agent,
@@ -54,9 +55,19 @@ export function AgentsUsingSkillBadge({
   skill: CompanySkillDetail;
   canManage?: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const count = skill.usedByAgents.length;
-  const label = `${count} ${count === 1 ? "agent uses" : "agents use"} this skill`;
+  const label =
+    count === 1
+      ? t("skillStudio.agentsUsing.badgeAria_one", {
+          defaultValue: "{{count}} agent uses this skill",
+          count,
+        })
+      : t("skillStudio.agentsUsing.badgeAria_other", {
+          defaultValue: "{{count}} agents use this skill",
+          count,
+        });
 
   return (
     <>
@@ -72,7 +83,15 @@ export function AgentsUsingSkillBadge({
         )}
       >
         <Users className="h-3.5 w-3.5" aria-hidden="true" />
-        {count} {count === 1 ? "agent" : "agents"}
+        {count === 1
+          ? t("skillStudio.agentsUsing.count_one", {
+              defaultValue: "{{count}} agent",
+              count,
+            })
+          : t("skillStudio.agentsUsing.count_other", {
+              defaultValue: "{{count}} agents",
+              count,
+            })}
       </button>
       <AgentsUsingSkillDialog
         open={open}
@@ -105,6 +124,7 @@ export function AgentsUsingSkillDialog({
   skill: CompanySkillDetail;
   canManage?: boolean;
 }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const toast = useOptionalToastActions();
   const adapterCaps = useAdapterCapabilities();
@@ -131,12 +151,16 @@ export function AgentsUsingSkillDialog({
   }, [open]);
 
   const versions = useMemo<CompanySkillVersion[]>(
-    () => [...(versionsQuery.data ?? [])].sort((a, b) => b.revisionNumber - a.revisionNumber),
+    () =>
+      [...(versionsQuery.data ?? [])].sort(
+        (a, b) => b.revisionNumber - a.revisionNumber,
+      ),
     [versionsQuery.data],
   );
   const latestRevision = skill.currentVersion?.revisionNumber ?? null;
   const revisionByVersionId = useMemo(
-    () => new Map(versions.map((version) => [version.id, version.revisionNumber])),
+    () =>
+      new Map(versions.map((version) => [version.id, version.revisionNumber])),
     [versions],
   );
 
@@ -177,7 +201,8 @@ export function AgentsUsingSkillDialog({
       // Prefer the richer entries payload; fall back to bare keys (versionId
       // null = tracks latest) for older snapshots.
       const currentEntries: AgentDesiredSkillEntry[] =
-        snapshot.desiredSkillEntries ?? snapshot.desiredSkills.map((key) => ({ key, versionId: null }));
+        snapshot.desiredSkillEntries ??
+        snapshot.desiredSkills.map((key) => ({ key, versionId: null }));
       const others = currentEntries.filter((entry) => entry.key !== skillKey);
       const nextEntries = [...others];
       if (change.kind !== "remove") {
@@ -194,18 +219,36 @@ export function AgentsUsingSkillDialog({
     },
     onSuccess: async ({ agentId }) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.companySkills.detail(companyId, skill.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.companySkills.list(companyId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.companySkills.detail(companyId, skill.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.companySkills.list(companyId),
+        }),
         // Keep the agent's own Skills tab (PAP-13194) in sync.
-        queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills(agentId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agents.skills(agentId),
+        }),
       ]);
     },
     onError: (error) => {
-      const message = error instanceof Error ? error.message : "Failed to update agent skills.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("skillStudio.agentsUsing.updateFailedBody", {
+              defaultValue: "Failed to update agent skills.",
+            });
       toast?.pushToast({
         tone: "error",
-        title: "Update failed",
-        body: message.includes("403") ? "You don't have permission to change this agent's skills." : message,
+        title: t("skillStudio.agentsUsing.updateFailedTitle", {
+          defaultValue: "Update failed",
+        }),
+        body: message.includes("403")
+          ? t("skillStudio.agentsUsing.permissionDenied", {
+              defaultValue:
+                "You don't have permission to change this agent's skills.",
+            })
+          : message,
       });
     },
   });
@@ -232,11 +275,28 @@ export function AgentsUsingSkillDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Agents using {skill.name}</DialogTitle>
+          <DialogTitle>
+            {t("skillStudio.agentsUsing.title", {
+              defaultValue: "Agents using {{name}}",
+              name: skill.name,
+            })}
+          </DialogTitle>
           <DialogDescription>
             {count === 0
-              ? "No agents have this skill assigned yet."
-              : `${count} ${count === 1 ? "agent has" : "agents have"} this skill in their desired set.`}
+              ? t("skillStudio.agentsUsing.noneAssigned", {
+                  defaultValue: "No agents have this skill assigned yet.",
+                })
+              : count === 1
+                ? t("skillStudio.agentsUsing.description_one", {
+                    defaultValue:
+                      "{{count}} agent has this skill in its desired set.",
+                    count,
+                  })
+                : t("skillStudio.agentsUsing.description_other", {
+                    defaultValue:
+                      "{{count}} agents have this skill in their desired sets.",
+                    count,
+                  })}
           </DialogDescription>
         </DialogHeader>
 
@@ -244,8 +304,12 @@ export function AgentsUsingSkillDialog({
           {count === 0 ? (
             <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
               {canManage
-                ? "Add an agent below to assign this skill."
-                : "This skill isn't assigned to any agents."}
+                ? t("skillStudio.agentsUsing.addAgentHint", {
+                    defaultValue: "Add an agent below to assign this skill.",
+                  })
+                : t("skillStudio.agentsUsing.unassigned", {
+                    defaultValue: "This skill isn't assigned to any agents.",
+                  })}
             </div>
           ) : (
             <ul className="divide-y divide-border">
@@ -258,13 +322,19 @@ export function AgentsUsingSkillDialog({
                   hasVersions={hasVersions}
                   versions={versions}
                   latestRevision={latestRevision}
-                  pinnedRevision={agent.versionId ? revisionByVersionId.get(agent.versionId) ?? null : null}
+                  pinnedRevision={
+                    agent.versionId
+                      ? (revisionByVersionId.get(agent.versionId) ?? null)
+                      : null
+                  }
                   busy={pendingAgentId === agent.id}
                   confirmingRemove={confirmRemoveId === agent.id}
                   onRequestRemove={() => setConfirmRemoveId(agent.id)}
                   onCancelRemove={() => setConfirmRemoveId(null)}
                   onRemove={() => applyChange(agent, { kind: "remove" })}
-                  onPin={(versionId) => applyChange(agent, { kind: "pin", versionId })}
+                  onPin={(versionId) =>
+                    applyChange(agent, { kind: "pin", versionId })
+                  }
                 />
               ))}
             </ul>
@@ -280,7 +350,10 @@ export function AgentsUsingSkillDialog({
               onSelect={(agent) => applyChange(agent, { kind: "add" })}
             />
             {syncMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+              <Loader2
+                className="h-4 w-4 animate-spin text-muted-foreground"
+                aria-hidden="true"
+              />
             ) : null}
           </div>
         ) : null}
@@ -318,14 +391,20 @@ function AgentRow({
   onRemove: () => void;
   onPin: (versionId: string | null) => void;
 }) {
+  const { t } = useTranslation();
   const behindLatest =
-    pinnedRevision !== null && latestRevision !== null && latestRevision > pinnedRevision
+    pinnedRevision !== null &&
+    latestRevision !== null &&
+    latestRevision > pinnedRevision
       ? latestRevision - pinnedRevision
       : 0;
 
   return (
     <li className="flex items-center gap-3 py-2.5">
-      <AgentIcon icon={icon} className="h-6 w-6 shrink-0 rounded-md text-muted-foreground" />
+      <AgentIcon
+        icon={icon}
+        className="h-6 w-6 shrink-0 rounded-md text-muted-foreground"
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <Link
           to={`/agents/${agent.urlKey}/skills`}
@@ -340,21 +419,39 @@ function AgentRow({
 
       <div className="flex shrink-0 flex-col items-end gap-0.5">
         {!hasVersions ? (
-          <span className="text-sm text-muted-foreground" aria-label={`${agent.name} version`}>
+          <span
+            className="text-sm text-muted-foreground"
+            aria-label={t("skillStudio.agentsUsing.agentVersionAria", {
+              defaultValue: "{{name}} version",
+              name: agent.name,
+            })}
+          >
             —
           </span>
         ) : canManage ? (
           <select
-            aria-label={`${agent.name} skill version`}
+            aria-label={t("skillStudio.agentsUsing.skillVersionAria", {
+              defaultValue: "{{name}} skill version",
+              name: agent.name,
+            })}
             value={agent.versionId ?? LATEST_VALUE}
             disabled={busy}
             onChange={(event) =>
-              onPin(event.target.value === LATEST_VALUE ? null : event.target.value)
+              onPin(
+                event.target.value === LATEST_VALUE ? null : event.target.value,
+              )
             }
             className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground disabled:opacity-60"
           >
             <option value={LATEST_VALUE}>
-              Latest{latestRevision !== null ? ` (v${latestRevision})` : ""}
+              {latestRevision !== null
+                ? t("skillStudio.agentsUsing.latestVersion", {
+                    defaultValue: "Latest (v{{revision}})",
+                    revision: latestRevision,
+                  })
+                : t("skillStudio.agentsUsing.latest", {
+                    defaultValue: "Latest",
+                  })}
             </option>
             {versions.map((version) => (
               <option key={version.id} value={version.id}>
@@ -367,12 +464,27 @@ function AgentRow({
           <span className="text-xs text-muted-foreground">
             {agent.versionId
               ? `v${pinnedRevision ?? "?"}`
-              : `Latest${latestRevision !== null ? ` (v${latestRevision})` : ""}`}
+              : latestRevision !== null
+                ? t("skillStudio.agentsUsing.latestVersion", {
+                    defaultValue: "Latest (v{{revision}})",
+                    revision: latestRevision,
+                  })
+                : t("skillStudio.agentsUsing.latest", {
+                    defaultValue: "Latest",
+                  })}
           </span>
         )}
         {behindLatest > 0 ? (
           <span className="text-(length:--text-nano) text-amber-500">
-            {behindLatest} version{behindLatest === 1 ? "" : "s"} behind latest
+            {behindLatest === 1
+              ? t("skillStudio.agentsUsing.behindLatest_one", {
+                  defaultValue: "{{count}} version behind latest",
+                  count: behindLatest,
+                })
+              : t("skillStudio.agentsUsing.behindLatest_other", {
+                  defaultValue: "{{count}} versions behind latest",
+                  count: behindLatest,
+                })}
           </span>
         ) : null}
       </div>
@@ -385,12 +497,24 @@ function AgentRow({
               size="sm"
               onClick={onRemove}
               disabled={busy}
-              aria-label={`Confirm removing this skill from ${agent.name}`}
+              aria-label={t("skillStudio.agentsUsing.confirmRemoveAria", {
+                defaultValue: "Confirm removing this skill from {{name}}",
+                name: agent.name,
+              })}
             >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Remove"}
+              {busy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                t("common.remove", { defaultValue: "Remove" })
+              )}
             </Button>
-            <Button variant="ghost" size="sm" onClick={onCancelRemove} disabled={busy}>
-              Cancel
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onCancelRemove}
+              disabled={busy}
+            >
+              {t("common.cancel", { defaultValue: "Cancel" })}
             </Button>
           </div>
         ) : (
@@ -400,7 +524,10 @@ function AgentRow({
             onClick={onRequestRemove}
             disabled={busy}
             className="shrink-0 text-muted-foreground hover:text-destructive"
-            aria-label={`Remove this skill from ${agent.name}`}
+            aria-label={t("skillStudio.agentsUsing.removeAria", {
+              defaultValue: "Remove this skill from {{name}}",
+              name: agent.name,
+            })}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -421,8 +548,11 @@ function AddAgentPicker({
   disabled: boolean;
   onSelect: (agent: Agent) => void;
 }) {
+  const { t } = useTranslation();
   type AgentOption = SearchableSelectOption<string> & { agent: Agent };
-  const groups = useMemo<readonly SearchableSelectGroup<string, AgentOption>[]>(() => {
+  const groups = useMemo<
+    readonly SearchableSelectGroup<string, AgentOption>[]
+  >(() => {
     const options: AgentOption[] = agents.map((agent) => ({
       key: agent.id,
       value: agent.id,
@@ -439,10 +569,18 @@ function AddAgentPicker({
       value=""
       groups={groups}
       loading={loading}
-      loadingMessage="Loading agents..."
-      placeholder="Add agent…"
-      searchPlaceholder="Search agents..."
-      emptyMessage="All eligible agents already have this skill."
+      loadingMessage={t("skillStudio.agentsUsing.loadingAgents", {
+        defaultValue: "Loading agents...",
+      })}
+      placeholder={t("skillStudio.agentsUsing.addAgent", {
+        defaultValue: "Add agent…",
+      })}
+      searchPlaceholder={t("skillStudio.agentsUsing.searchAgents", {
+        defaultValue: "Search agents...",
+      })}
+      emptyMessage={t("skillStudio.agentsUsing.allEligibleAssigned", {
+        defaultValue: "All eligible agents already have this skill.",
+      })}
       disabled={disabled}
       onValueChange={(_value, option) => {
         onSelect(option.agent);
@@ -453,7 +591,9 @@ function AddAgentPicker({
       renderValue={() => (
         <span className="flex items-center gap-1.5 text-muted-foreground">
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          Add agent…
+          {t("skillStudio.agentsUsing.addAgent", {
+            defaultValue: "Add agent…",
+          })}
         </span>
       )}
       renderOption={(option) => (
@@ -469,9 +609,13 @@ function AddAgentPicker({
 }
 
 /** Order-insensitive comparison of desired skill sets by (key, versionId). */
-function desiredSetsEqual(a: AgentDesiredSkillEntry[], b: AgentDesiredSkillEntry[]): boolean {
+function desiredSetsEqual(
+  a: AgentDesiredSkillEntry[],
+  b: AgentDesiredSkillEntry[],
+): boolean {
   if (a.length !== b.length) return false;
-  const encode = (entry: AgentDesiredSkillEntry) => `${entry.key} ${entry.versionId ?? ""}`;
+  const encode = (entry: AgentDesiredSkillEntry) =>
+    `${entry.key} ${entry.versionId ?? ""}`;
   const setA = new Set(a.map(encode));
   return b.every((entry) => setA.has(encode(entry)));
 }

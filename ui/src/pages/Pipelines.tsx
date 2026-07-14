@@ -744,7 +744,7 @@ export function PipelinesIndexTable({
         <div className="overflow-x-auto">
           <table className="w-full min-w-(--sz-780px) border-collapse text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <tr className="border-b border-border text-left text-(length:--text-micro) font-semibold uppercase tracking-widest text-muted-foreground">
                 <th className="py-2 pl-3 pr-4">{t("pipelines.name", { defaultValue: "Name" })}</th>
                 <th className="px-4 py-2">{t("pipelines.attention", { defaultValue: "Attention" })}</th>
                 <th className="px-4 py-2">{t("pipelines.openItems", { defaultValue: "Open items" })}</th>
@@ -963,7 +963,7 @@ function PipelinesIndex() {
     <div className="w-full max-w-6xl px-6 py-8">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t("pipelines.work", { defaultValue: "Work" })}</p>
+          <p className="text-xs font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">{t("pipelines.work", { defaultValue: "Work" })}</p>
           <h1 className="text-2xl font-semibold text-foreground">{t("pipelines.title", { defaultValue: "Pipelines" })}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {t("pipelines.indexSummary", {
@@ -1725,7 +1725,7 @@ function PipelineBoard({ pipelineId }: { pipelineId: string }) {
     return (
       <div className="mx-auto max-w-6xl space-y-4 px-6 py-8">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t("pipelines.pipeline", { defaultValue: "Pipeline" })}</p>
+          <p className="text-xs font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">{t("pipelines.pipeline", { defaultValue: "Pipeline" })}</p>
           <h1 className="text-2xl font-semibold text-foreground">{pipeline.name}</h1>
           <p className="text-sm text-muted-foreground">{t("pipelines.noStages", { defaultValue: "No stages are set up for this pipeline yet." })}</p>
         </div>
@@ -1745,7 +1745,7 @@ function PipelineBoard({ pipelineId }: { pipelineId: string }) {
     <div className="w-full space-y-4 px-6 py-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t("pipelines.pipeline", { defaultValue: "Pipeline" })}</p>
+          <p className="text-xs font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">{t("pipelines.pipeline", { defaultValue: "Pipeline" })}</p>
           <h1 className="text-2xl font-semibold text-foreground">{pipeline.name}</h1>
           {pipeline.description ? <p className="mt-1 text-sm text-muted-foreground">{pipeline.description}</p> : null}
           <p className="mt-1 text-xs text-muted-foreground">
@@ -1769,7 +1769,7 @@ function PipelineBoard({ pipelineId }: { pipelineId: string }) {
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
           <Select value={groupBy} onValueChange={handleGroupByChange}>
-            <SelectTrigger className="h-9 w-[148px]" aria-label={t("pipelines.groupBy", { defaultValue: "Group by" })} title={t("pipelines.groupBy", { defaultValue: "Group by" })}>
+            <SelectTrigger className="h-9 w-(--sz-148px)" aria-label={t("pipelines.groupBy", { defaultValue: "Group by" })} title={t("pipelines.groupBy", { defaultValue: "Group by" })}>
               <Layers className="h-4 w-4 text-muted-foreground" />
               <SelectValue />
             </SelectTrigger>
@@ -3297,7 +3297,7 @@ export function PipelineItemDetailView({ pipelineId, caseId }: { pipelineId: str
               <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-90" />
                 {t("pipelines.moreDetails", { defaultValue: "More details" })}
-                <span className="text-[11px] font-normal text-muted-foreground">
+                <span className="text-(length:--text-micro) font-normal text-muted-foreground">
                   {t("pipelines.fieldCount", {
                     count: mainPaneFields.length,
                     defaultValue: "{{count}} field",
@@ -3718,7 +3718,7 @@ function ReviewDecisionPanel({
 
   return (
     <section>
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"><PipelineText k="pipelines.review" defaultValue="Review" /></h2>
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground"><PipelineText k="pipelines.review" defaultValue="Review" /></h2>
       <div className="border-y border-amber-300 bg-amber-50/70 p-5 text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100 sm:p-6">
         <div className="space-y-5">
           <div className="flex items-start gap-3">
@@ -4001,7 +4001,7 @@ function ItemOutputDocumentRow({ item }: { item: PipelineCaseDocumentOutputItem 
       </div>
       <Link
         to={href}
-        className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="inline-flex h-(--sz-30px) w-(--sz-30px) shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
         aria-label={t("pipelines.openNamedItem", { defaultValue: "Open {{name}}", name: item.title })}
         title={t("pipelines.openDocument", { defaultValue: "Open document" })}
       >
@@ -4030,7 +4030,7 @@ function ItemOutputWorkProductRow({ item }: { item: PipelineCaseWorkProductOutpu
       </div>
       <OutputLink
         to={href}
-        className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="inline-flex h-(--sz-30px) w-(--sz-30px) shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
         ariaLabel={t("pipelines.openNamedItem", { defaultValue: "Open {{name}}", name: item.title })}
         title={t("pipelines.openWorkProduct", { defaultValue: "Open work product" })}
       >
@@ -4054,7 +4054,7 @@ function ItemOutputAttachmentRow({ item }: { item: PipelineCaseAttachmentOutputI
           href={item.openPath}
           target="_blank"
           rel="noreferrer"
-          className="mt-0.5 block h-[30px] w-10 shrink-0 overflow-hidden rounded-sm border border-border bg-accent/10"
+          className="mt-0.5 block h-(--sz-30px) w-10 shrink-0 overflow-hidden rounded-sm border border-border bg-accent/10"
           aria-label={t("pipelines.openNamedItem", { defaultValue: "Open {{name}}", name: filename })}
         >
           <img src={item.contentPath} alt={filename} className="h-full w-full object-cover" loading="lazy" />
@@ -4084,7 +4084,7 @@ function ItemOutputAttachmentRow({ item }: { item: PipelineCaseAttachmentOutputI
           href={item.openPath}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="inline-flex h-(--sz-30px) w-(--sz-30px) items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label={t("pipelines.openNamedItem", { defaultValue: "Open {{name}}", name: filename })}
           title={t("common.open", { defaultValue: "Open" })}
         >
@@ -4092,7 +4092,7 @@ function ItemOutputAttachmentRow({ item }: { item: PipelineCaseAttachmentOutputI
         </a>
         <a
           href={item.downloadPath}
-          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="inline-flex h-(--sz-30px) w-(--sz-30px) items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
           aria-label={t("pipelines.downloadNamedItem", { defaultValue: "Download {{name}}", name: filename })}
           title={t("common.download", { defaultValue: "Download" })}
         >
@@ -4406,7 +4406,7 @@ function DraftItemRow({
     <section className={cn("border border-border bg-background", row.expanded && "border-primary")}>
       <div className="grid grid-cols-(--gtc-17) items-center gap-3 px-4 py-3">
         <button type="button" className="min-w-0 text-left" onClick={onToggle}>
-          <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="block text-xs font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
             {itemNumberLabel}
           </span>
           <span className="block truncate text-sm font-semibold text-foreground">{title}</span>
@@ -4445,7 +4445,7 @@ function DraftItemRow({
             {row.serverError ? <p className="md:col-span-2 text-sm text-destructive">{row.serverError}</p> : null}
           </div>
           <aside className="border border-border p-4 text-sm">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"><PipelineText k="pipelines.preview" defaultValue="Preview" /></p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground"><PipelineText k="pipelines.preview" defaultValue="Preview" /></p>
             <p className="font-semibold text-foreground">{title}</p>
             <p className="mt-3 text-xs text-muted-foreground"><PipelineText k="pipelines.firstStageOnSubmit" defaultValue="First stage on submit:" /></p>
             <p className="font-semibold text-foreground">{intake.stageName ?? "First stage"}</p>

@@ -150,7 +150,7 @@ export function DocumentFrameHeader({
                             <div className="flex items-center gap-2">
                               <span className="font-medium">{t("issueDocuments.revisionNumber", { defaultValue: "rev {{number}}", number: revision.revisionNumber })}</span>
                               {isCurrentRevision ? (
-                                <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                                <span className="rounded-full border border-border px-1.5 py-0.5 text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
                                   {t("documentFrame.current", { defaultValue: "Current" })}
                                 </span>
                               ) : null}

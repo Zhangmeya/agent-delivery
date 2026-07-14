@@ -143,7 +143,7 @@ export function IssueOutputSection({ workProducts, resolveCreatorName, onMediaCl
 
       {rest.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">
             {t("issueOutput.alsoProduced", { defaultValue: "Also produced" })}
           </p>
           {mediaRest.length > 0 ? (

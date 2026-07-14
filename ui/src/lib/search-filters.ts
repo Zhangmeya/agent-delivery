@@ -3,6 +3,7 @@ import {
   type CompanySearchSort,
 } from "@penclipai/shared";
 import type { ParsedSearchQuery } from "./search-query-parser";
+import { translateInstant } from "../i18n";
 
 /**
  * The issue-scoped filter model for /search. This is the SAME shape the query
@@ -20,6 +21,17 @@ export const SORT_LABELS: Record<CompanySearchSort, string> = {
   priority: "Priority",
 };
 
+const SORT_KEYS: Record<CompanySearchSort, string> = {
+  relevance: "searchFilters.sort.relevance",
+  updated: "searchFilters.sort.updated",
+  created: "searchFilters.sort.created",
+  priority: "searchFilters.priority",
+};
+
+export function searchSortLabel(value: CompanySearchSort): string {
+  return translateInstant(SORT_KEYS[value], { defaultValue: SORT_LABELS[value] });
+}
+
 export const UPDATED_WITHIN_LABELS: Record<string, string> = {
   "24h": "Last 24 hours",
   "7d": "Last 7 days",
@@ -28,7 +40,15 @@ export const UPDATED_WITHIN_LABELS: Record<string, string> = {
 };
 
 export function updatedWithinLabel(value: string): string {
-  return UPDATED_WITHIN_LABELS[value] ?? `Updated ≤ ${value}`;
+  const knownKey = value === "24h" || value === "7d" || value === "30d" || value === "90d"
+    ? `searchFilters.updatedWithin.${value}`
+    : null;
+  return knownKey
+    ? translateInstant(knownKey, { defaultValue: UPDATED_WITHIN_LABELS[value] })
+    : translateInstant("searchFilters.updatedWithin.custom", {
+        defaultValue: "Updated <= {{value}}",
+        value,
+      });
 }
 
 const SORT_SET = new Set<string>(COMPANY_SEARCH_SORTS);
@@ -109,15 +129,24 @@ function humanize(value: string): string {
 }
 
 function assigneeChipLabel(filters: SearchFilters, lookups: FilterChipLookups): string {
-  if (filters.assigneeAgentId === null) return "Unassigned";
+  if (filters.assigneeAgentId === null) return translateInstant("searchFilters.unassigned");
   if (typeof filters.assigneeAgentId === "string") {
-    return lookups.agentName(filters.assigneeAgentId) ?? "Agent";
+    return lookups.agentName(filters.assigneeAgentId) ?? translateInstant("searchFilters.agent");
   }
   if (filters.assigneeUserId) {
-    if (filters.assigneeUserId === lookups.currentUserId) return "Me";
-    return lookups.userName(filters.assigneeUserId) ?? "User";
+    if (filters.assigneeUserId === lookups.currentUserId) return translateInstant("searchFilters.me");
+    return lookups.userName(filters.assigneeUserId) ?? translateInstant("searchFilters.user");
   }
-  return "Assignee";
+  return translateInstant("searchFilters.assignee");
+}
+
+function translatedStatus(value: string): string {
+  const key = value === "in_progress" ? "status.inProgress" : value === "in_review" ? "status.inReview" : `status.${value}`;
+  return translateInstant(key, { defaultValue: humanize(value) });
+}
+
+function translatedPriority(value: string): string {
+  return translateInstant(`priority.${value}`, { defaultValue: humanize(value) });
 }
 
 /** Removable chip descriptors for the active-filter row. */
@@ -126,7 +155,7 @@ export function buildFilterChips(filters: SearchFilters, lookups: FilterChipLook
   for (const status of filters.status ?? []) {
     chips.push({
       id: `status:${status}`,
-      label: `Status: ${humanize(status)}`,
+      label: translateInstant("searchFilters.chip.status", { value: translatedStatus(status) }),
       remove: (current) => {
         const next = { ...current };
         const remaining = (current.status ?? []).filter((value) => value !== status);
@@ -139,7 +168,7 @@ export function buildFilterChips(filters: SearchFilters, lookups: FilterChipLook
   for (const priority of filters.priority ?? []) {
     chips.push({
       id: `priority:${priority}`,
-      label: `Priority: ${humanize(priority)}`,
+      label: translateInstant("searchFilters.chip.priority", { value: translatedPriority(priority) }),
       remove: (current) => {
         const next = { ...current };
         const remaining = (current.priority ?? []).filter((value) => value !== priority);
@@ -152,7 +181,7 @@ export function buildFilterChips(filters: SearchFilters, lookups: FilterChipLook
   if (filters.assigneeAgentId !== undefined || filters.assigneeUserId) {
     chips.push({
       id: "assignee",
-      label: `Assignee: ${assigneeChipLabel(filters, lookups)}`,
+      label: translateInstant("searchFilters.chip.assignee", { value: assigneeChipLabel(filters, lookups) }),
       remove: (current) => {
         const next = { ...current };
         delete next.assigneeAgentId;
@@ -164,7 +193,9 @@ export function buildFilterChips(filters: SearchFilters, lookups: FilterChipLook
   if (filters.projectId) {
     chips.push({
       id: "project",
-      label: `Project: ${lookups.projectName(filters.projectId) ?? "Project"}`,
+      label: translateInstant("searchFilters.chip.project", {
+        value: lookups.projectName(filters.projectId) ?? translateInstant("searchFilters.project"),
+      }),
       remove: (current) => {
         const next = { ...current };
         delete next.projectId;
@@ -175,7 +206,9 @@ export function buildFilterChips(filters: SearchFilters, lookups: FilterChipLook
   if (filters.labelId) {
     chips.push({
       id: "label",
-      label: `Label: ${lookups.labelName(filters.labelId) ?? "Label"}`,
+      label: translateInstant("searchFilters.chip.label", {
+        value: lookups.labelName(filters.labelId) ?? translateInstant("searchFilters.label"),
+      }),
       remove: (current) => {
         const next = { ...current };
         delete next.labelId;
@@ -186,7 +219,7 @@ export function buildFilterChips(filters: SearchFilters, lookups: FilterChipLook
   if (filters.updatedWithin) {
     chips.push({
       id: "updated",
-      label: `Updated: ${updatedWithinLabel(filters.updatedWithin)}`,
+      label: translateInstant("searchFilters.chip.updated", { value: updatedWithinLabel(filters.updatedWithin) }),
       remove: (current) => {
         const next = { ...current };
         delete next.updatedWithin;
@@ -202,20 +235,30 @@ export function buildFilterChips(filters: SearchFilters, lookups: FilterChipLook
 export function describeLoosenSuggestion(filterKey: string, values: string[], lookups: FilterChipLookups): string {
   switch (filterKey) {
     case "status":
-      return `Status: ${values.map(humanize).join(", ")}`;
+      return translateInstant("searchFilters.chip.status", { value: values.map(translatedStatus).join(", ") });
     case "priority":
-      return `Priority: ${values.map(humanize).join(", ")}`;
+      return translateInstant("searchFilters.chip.priority", { value: values.map(translatedPriority).join(", ") });
     case "assigneeAgentId":
-      return `Assignee: ${values.map((id) => lookups.agentName(id) ?? "Agent").join(", ")}`;
+      return translateInstant("searchFilters.chip.assignee", {
+        value: values.map((id) => lookups.agentName(id) ?? translateInstant("searchFilters.agent")).join(", "),
+      });
     case "assigneeUserId":
-      return `Assignee: ${values.map((id) => (id === lookups.currentUserId ? "Me" : lookups.userName(id) ?? "User")).join(", ")}`;
+      return translateInstant("searchFilters.chip.assignee", {
+        value: values.map((id) => id === lookups.currentUserId
+          ? translateInstant("searchFilters.me")
+          : lookups.userName(id) ?? translateInstant("searchFilters.user")).join(", "),
+      });
     case "projectId":
-      return `Project: ${values.map((id) => lookups.projectName(id) ?? "Project").join(", ")}`;
+      return translateInstant("searchFilters.chip.project", {
+        value: values.map((id) => lookups.projectName(id) ?? translateInstant("searchFilters.project")).join(", "),
+      });
     case "labelId":
-      return `Label: ${values.map((id) => lookups.labelName(id) ?? "Label").join(", ")}`;
+      return translateInstant("searchFilters.chip.label", {
+        value: values.map((id) => lookups.labelName(id) ?? translateInstant("searchFilters.label")).join(", "),
+      });
     case "updatedWithin":
     case "updatedAfter":
-      return "Updated window";
+      return translateInstant("searchFilters.updatedWindow");
     default:
       return humanize(filterKey);
   }

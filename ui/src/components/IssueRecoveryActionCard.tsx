@@ -999,7 +999,7 @@ function RunChip({
   const short = shortenRunId(runId);
   const inner = (
     <>
-      <code className="rounded bg-background/80 px-1.5 py-0.5 font-mono text-[11px] text-foreground/80">
+      <code className="rounded bg-background/80 px-1.5 py-0.5 font-mono text-(length:--text-micro) text-foreground/80">
         {t("issueRecoveryAction.runShort", {
           id: short,
           defaultValue: "run {{id}}",
@@ -1212,10 +1212,10 @@ export function IssueRecoveryActionCard({
           <ToneIcon className={cn("h-4 w-4", tone.iconClass)} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-semibold uppercase tracking-[0.14em]">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-eyebrow)">
             <span className={tone.labelClass}>{stateLabel}</span>
             <span className="text-muted-foreground/60" aria-hidden>·</span>
-            <code className="rounded bg-background/70 px-1.5 py-0.5 font-mono text-[11px] tracking-normal text-muted-foreground">
+            <code className="rounded bg-background/70 px-1.5 py-0.5 font-mono text-(length:--text-micro) tracking-normal text-muted-foreground">
               {kindLabel}
             </code>
             {updatedAtLabel ? (
@@ -1301,7 +1301,7 @@ export function IssueRecoveryActionCard({
           <span className="inline-flex flex-wrap items-center gap-1.5">
             {wakeSummary ? <span>{wakeSummary}</span> : <MissingValue />}
             {showAttempt ? (
-              <span className="rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              <span className="rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-(length:--text-micro) text-muted-foreground">
                 {t("issueRecoveryAction.attemptOf", {
                   attempt: action.attemptCount,
                   maxAttempts: action.maxAttempts,
@@ -1310,7 +1310,7 @@ export function IssueRecoveryActionCard({
               </span>
             ) : null}
             {showTimeoutInline ? (
-              <span className="rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              <span className="rounded-md border border-border/50 bg-background/60 px-1.5 py-0.5 text-(length:--text-micro) text-muted-foreground">
                 {t("issueRecoveryAction.timesOut", {
                   time: formatTimeShort(action.timeoutAt, t, locale) ?? t("issueRecoveryAction.time.soon", { defaultValue: "soon" }),
                   defaultValue: "Times out {{time}}",
@@ -1355,7 +1355,7 @@ export function IssueRecoveryActionCard({
                 sideOffset={6}
                 className="w-72 p-1.5"
               >
-                <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <div className="px-2 py-1 text-(length:--text-micro) font-semibold uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
                   {t("issueRecoveryAction.resolve.heading", { defaultValue: "Resolve recovery" })}
                 </div>
                 <div className="flex flex-col">
@@ -1373,7 +1373,7 @@ export function IssueRecoveryActionCard({
                       <span className="font-medium leading-5">
                         {t(option.labelKey, { defaultValue: option.label })}
                       </span>
-                      <span className="text-[11px] leading-4 text-muted-foreground">
+                      <span className="text-(length:--text-micro) leading-4 text-muted-foreground">
                         {t(option.descriptionKey, { defaultValue: option.description })}
                       </span>
                     </button>
@@ -1510,13 +1510,13 @@ export function IssueRecoveryActionCard({
           ) : null}
           {showResolveActions ? (
             cardState === "observe_only" ? (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-(length:--text-micro) text-muted-foreground">
                 {t("issueRecoveryAction.footer.observeOnly", {
                   defaultValue: "Recovery is observing without interrupting the live run.",
                 })}
               </span>
             ) : (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-(length:--text-micro) text-muted-foreground">
                 {t("issueRecoveryAction.footer.decisionRequired", {
                   defaultValue: "The card stays open until an explicit decision is recorded.",
                 })}

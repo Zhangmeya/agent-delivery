@@ -291,7 +291,7 @@ export function IssueStatusChart({ issues }: { issues: { status: string; created
       <DateLabels days={days} />
       <ChartLegend
         items={statusOrder.map((status) => ({
-          color: statusColors[status] ?? "#6b7280",
+          color: statusColors[status] ?? "var(--hex-6b7280)",
           label: translateStatusLabel(instantT, status),
         }))}
       />

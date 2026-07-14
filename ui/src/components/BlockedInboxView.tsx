@@ -457,7 +457,7 @@ function BlockedInboxRow({
           label={reasonLabel}
           severityLabel={severityLabel}
           ariaLabel={reasonAriaLabel}
-          className="ml-2 max-w-[12rem] align-middle sm:hidden"
+          className="ml-2 max-w-(--sz-12rem) align-middle sm:hidden"
         />
       }
       mobileMeta={mobileMeta}

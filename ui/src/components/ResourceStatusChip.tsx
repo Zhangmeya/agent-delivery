@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { brandChipBadge, type BrandChipColor } from "@/lib/status-colors";
 
@@ -28,45 +29,45 @@ export type ResourceStatusVariant =
 interface VariantSpec {
   color: BrandChipColor;
   glyph: string;
-  label: string;
-  title: string;
+  labelKey: string;
+  titleKey: string;
 }
 
 const VARIANTS: Record<ResourceStatusVariant, VariantSpec> = {
-  ready: { color: "green", glyph: "●", label: "Ready", title: "Materialized and matches the shipped default" },
-  needs_setup: { color: "amber", glyph: "⚠", label: "Needs setup", title: "Present but not usable yet" },
-  missing: { color: "amber", glyph: "⚠", label: "Missing", title: "Expected resource absent; reconcile will recreate it" },
-  error: { color: "red", glyph: "✕", label: "Error", title: "Failed to load or reconcile" },
+  ready: { color: "green", glyph: "●", labelKey: "resourceStatus.ready", titleKey: "resourceStatus.readyTitle" },
+  needs_setup: { color: "amber", glyph: "⚠", labelKey: "resourceStatus.needsSetup", titleKey: "resourceStatus.needsSetupTitle" },
+  missing: { color: "amber", glyph: "⚠", labelKey: "resourceStatus.missing", titleKey: "resourceStatus.missingTitle" },
+  error: { color: "red", glyph: "✕", labelKey: "resourceStatus.error", titleKey: "resourceStatus.errorTitle" },
   update_available: {
     color: "blue",
     glyph: "↑",
-    label: "Update available",
-    title: "Unedited — a newer shipped default can be applied",
+    labelKey: "resourceStatus.updateAvailable",
+    titleKey: "resourceStatus.updateAvailableTitle",
   },
   drifted: {
     color: "gray",
     glyph: "✎",
-    label: "Drifted",
-    title: "You've edited this; your changes are kept, not overwritten",
+    labelKey: "resourceStatus.drifted",
+    titleKey: "resourceStatus.driftedTitle",
   },
   schedule_off: {
     color: "gray",
     glyph: "◌",
-    label: "Schedule off",
-    title: "No background work runs until you enable it — costs zero tokens",
+    labelKey: "resourceStatus.scheduleOff",
+    titleKey: "resourceStatus.scheduleOffTitle",
   },
-  schedule_on: { color: "green", glyph: "●", label: "Weekly", title: "Runs on the weekly schedule" },
+  schedule_on: { color: "green", glyph: "●", labelKey: "resourceStatus.weekly", titleKey: "resourceStatus.weeklyTitle" },
   pending_approval: {
     color: "amber",
     glyph: "⚠",
-    label: "Pending approval",
-    title: "Waiting on board hire approval before it can run",
+    labelKey: "resourceStatus.pendingApproval",
+    titleKey: "resourceStatus.pendingApprovalTitle",
   },
   proposal_pending: {
     color: "blue",
     glyph: "↑",
-    label: "Proposal pending",
-    title: "A proposed update is waiting for your review",
+    labelKey: "resourceStatus.proposalPending",
+    titleKey: "resourceStatus.proposalPendingTitle",
   },
 };
 
@@ -82,6 +83,7 @@ export function ResourceStatusChip({
   compact?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   const spec = VARIANTS[variant];
   return (
     <Badge
@@ -92,10 +94,10 @@ export function ResourceStatusChip({
         compact && "px-1.5 py-0 text-(length:--text-nano)",
         className,
       )}
-      title={spec.title}
+      title={t(spec.titleKey)}
     >
       <span aria-hidden="true">{spec.glyph}</span>
-      {label ?? spec.label}
+      {label ?? t(spec.labelKey)}
     </Badge>
   );
 }

@@ -75,7 +75,7 @@ export function DevRestartBanner({ devServer }: { devServer?: DevServerHealthSta
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span>{t("devRestart.required", { defaultValue: "Restart Required" })}</span>
             {devServer.autoRestartEnabled ? (
-              <span className="rounded-full bg-amber-900/10 px-2 py-0.5 text-[10px] tracking-[0.14em] dark:bg-amber-100/10">
+              <span className="rounded-full bg-amber-900/10 px-2 py-0.5 text-(length:--text-nano) tracking-(--tracking-eyebrow) dark:bg-amber-100/10">
                 {t("devRestart.autoRestartOn", { defaultValue: "Auto-Restart On" })}
               </span>
             ) : null}

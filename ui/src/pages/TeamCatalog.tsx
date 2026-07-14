@@ -549,11 +549,11 @@ export function RequiredSkillsList({ skills }: { skills: CatalogTeamSkillRequire
             {skill.type}
           </Badge>
           {skill.resolved ? (
-            <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-300 border-emerald-500/30">
+            <Badge variant="outline" className="text-(length:--text-nano) text-emerald-600 dark:text-emerald-300 border-emerald-500/30">
               {t("teamCatalog.resolved")}
             </Badge>
           ) : (
-            <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-300 border-amber-500/30">
+            <Badge variant="outline" className="text-(length:--text-nano) text-amber-600 dark:text-amber-300 border-amber-500/30">
               {t("teamCatalog.external")}
             </Badge>
           )}
@@ -589,7 +589,7 @@ export function EnvInputsList({ inputs }: { inputs: CatalogTeamEnvInputSummary[]
               {input.kind}
             </Badge>
             {input.requirement === "required" && (
-              <Badge variant="outline" className="text-[10px]">{t("Required").toLowerCase()}</Badge>
+              <Badge variant="outline" className="text-(length:--text-nano)">{t("Required").toLowerCase()}</Badge>
             )}
           </li>
         ))}
@@ -716,7 +716,7 @@ export function TeamDetailPane({
               <CompatChip compatibility={team.compatibility} />
               <ProvenanceBadge team={team} />
               {isInstalled && !outOfDate && (
-                <Badge variant="secondary" className="gap-1 text-[10px]">
+                <Badge variant="secondary" className="gap-1 text-(length:--text-nano)">
                   <CheckCircle2 className="h-3 w-3" /> {t("teamCatalog.installed")}
                 </Badge>
               )}
@@ -1510,7 +1510,7 @@ export function StepSourcePolicy({
               <Icon className="h-3.5 w-3.5 text-muted-foreground" />
               <div className="min-w-0">
                 <p className="font-mono text-xs truncate">{source.ref}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-(length:--text-micro) text-muted-foreground">
                   {code === "ok" && t("teamCatalog.pinned").toLowerCase()}
                   {code === "unpinned" && t("teamCatalog.unpinnedReference")}
                   {code === "unsupported_in_ui" && t("teamCatalog.notInstallableFromBrowser")}
@@ -1623,7 +1623,7 @@ export function StepSkillPlan({
                 <p className="font-mono text-xs truncate">{prep.ref}</p>
                 {prep.reason && <p className="text-(length:--text-micro) text-muted-foreground">{prep.reason}</p>}
               </div>
-              <Badge variant="outline" className={cn("ml-auto text-[10px]", meta.tone)}>
+              <Badge variant="outline" className={cn("ml-auto text-(length:--text-nano)", meta.tone)}>
                 {t(`teamCatalog.skillAction.${prep.action}`, meta.label)}
               </Badge>
             </li>
@@ -2446,7 +2446,7 @@ export function TeamCatalog() {
             <div>
               {grouped.bundled.length > 0 && (
                 <>
-                  <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="px-3 py-2 text-(length:--text-micro) font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("teamCatalog.group.bundled", { count: grouped.bundled.length })}
                   </div>
                   {grouped.bundled.map((team) => (
@@ -2461,7 +2461,7 @@ export function TeamCatalog() {
               )}
               {grouped.optional.length > 0 && (
                 <>
-                  <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="px-3 py-2 text-(length:--text-micro) font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("teamCatalog.group.optional", { count: grouped.optional.length })}
                   </div>
                   {grouped.optional.map((team) => (
@@ -2476,7 +2476,7 @@ export function TeamCatalog() {
               )}
               {grouped.installed.length > 0 && (
                 <>
-                  <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <div className="px-3 py-2 text-(length:--text-micro) font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("teamCatalog.group.installed", { count: grouped.installed.length })}
                   </div>
                   {grouped.installed.map((team) => (

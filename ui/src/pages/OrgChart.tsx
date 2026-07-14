@@ -613,7 +613,7 @@ export function OrgChart() {
                     <span className="text-sm font-semibold text-foreground leading-tight">
                       {node.name}
                     </span>
-                    <span className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                    <span className="text-(length:--text-micro) text-muted-foreground leading-tight mt-0.5">
                       {agent?.title ?? translateRoleLabel(t, node.role)}
                     </span>
                     {agent && (

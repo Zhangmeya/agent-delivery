@@ -103,7 +103,7 @@ export function IssueColumnPicker({
       <DropdownMenuContent align="end" className="w-(--sz-300px) rounded-xl border-border/70 p-1.5 shadow-xl shadow-black/10">
         <DropdownMenuLabel className="px-2 pb-1 pt-1.5">
           <div className="space-y-1">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+            <div className="text-(length:--text-nano) font-semibold uppercase tracking-(--tracking-caps) text-muted-foreground">
               {t("Desktop issue rows", { defaultValue: "Desktop issue rows" })}
             </div>
             <div className="text-sm font-medium text-foreground">

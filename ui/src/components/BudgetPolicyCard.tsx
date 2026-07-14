@@ -65,12 +65,12 @@ export function BudgetPolicyCard({
   const observedBudgetGrid = isPlain ? (
     <div className="grid gap-6 sm:grid-cols-2">
       <div>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("Observed", { defaultValue: "Observed" })}</div>
+        <div className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("Observed", { defaultValue: "Observed" })}</div>
         <div className="mt-2 text-xl font-semibold tabular-nums">{formatCents(summary.observedAmount)}</div>
         <div className="mt-1 text-xs text-muted-foreground">{observedHint}</div>
       </div>
       <div>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("Budget", { defaultValue: "Budget" })}</div>
+        <div className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("Budget", { defaultValue: "Budget" })}</div>
         <div className="mt-2 text-xl font-semibold tabular-nums">{budgetValue}</div>
         <div className="mt-1 text-xs text-muted-foreground">{budgetHint}</div>
       </div>
@@ -78,12 +78,12 @@ export function BudgetPolicyCard({
   ) : (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="rounded-xl border border-border/70 bg-black/[0.18] px-4 py-3">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("Observed", { defaultValue: "Observed" })}</div>
+        <div className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("Observed", { defaultValue: "Observed" })}</div>
         <div className="mt-2 text-xl font-semibold tabular-nums">{formatCents(summary.observedAmount)}</div>
         <div className="mt-1 text-xs text-muted-foreground">{observedHint}</div>
       </div>
       <div className="rounded-xl border border-border/70 bg-black/[0.18] px-4 py-3">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("Budget", { defaultValue: "Budget" })}</div>
+        <div className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("Budget", { defaultValue: "Budget" })}</div>
         <div className="mt-2 text-xl font-semibold tabular-nums">{budgetValue}</div>
         <div className="mt-1 text-xs text-muted-foreground">{budgetHint}</div>
       </div>
@@ -130,7 +130,7 @@ export function BudgetPolicyCard({
   const saveSection = onSave ? (
     <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-end", isPlain ? "" : "rounded-xl border border-border/70 bg-background/50 p-3")}>
       <div className="min-w-0 flex-1">
-        <label className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+        <label className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">
           {t("Budget amount", { defaultValue: "Budget amount" })}
         </label>
         <Input
@@ -161,7 +161,7 @@ export function BudgetPolicyCard({
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-6">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+            <div className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">
               {t(summary.scopeType === "company" ? "Company" : summary.scopeType === "project" ? "Project" : "Agent", {
                 defaultValue: summary.scopeType === "company" ? "Company" : summary.scopeType === "project" ? "Project" : "Agent",
               })}
@@ -210,7 +210,7 @@ export function BudgetPolicyCard({
       <CardHeader className={cn("gap-3", compact ? "px-4 pt-4 pb-2" : "px-5 pt-5 pb-3")}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+            <div className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">
               {t(summary.scopeType === "company" ? "Company" : summary.scopeType === "project" ? "Project" : "Agent", {
                 defaultValue: summary.scopeType === "company" ? "Company" : summary.scopeType === "project" ? "Project" : "Agent",
               })}

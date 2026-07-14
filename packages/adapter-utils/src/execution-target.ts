@@ -131,6 +131,7 @@ export interface AdapterExecutionTargetPaperclipBridgeHandle {
 
 export interface AdapterExecutionTargetProcessSessionBridgeHandle {
   agentCommand: string;
+  ready: Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -1210,7 +1211,6 @@ async function readBridgeForwardResponseBody(response: Response, maxBodyBytes: n
 }
 
 const PROCESS_SESSION_PROXY_SCRIPT = "paperclip-process-session-proxy.mjs";
-const PROCESS_SESSION_PROXY_WINDOWS_LAUNCHER = "paperclip-process-session-proxy.cmd";
 const PROCESS_SESSION_REMOTE_SCRIPT = "paperclip-process-session-remote.mjs";
 const PROCESS_SESSION_AUTH_TIMEOUT_MS = 5_000;
 
@@ -1228,13 +1228,11 @@ async function writeProcessSessionProxyScript(dir: string, port: number, token: 
   const proxyPath = path.join(dir, PROCESS_SESSION_PROXY_SCRIPT);
   await fs.writeFile(proxyPath, getProcessSessionProxySource({ port, token }), { mode: 0o700 });
   if (process.platform === "win32") {
-    const launcherPath = path.join(dir, PROCESS_SESSION_PROXY_WINDOWS_LAUNCHER);
-    await fs.writeFile(
-      launcherPath,
-      `@echo off\r\n"${process.execPath}" "%~dp0${PROCESS_SESSION_PROXY_SCRIPT}" %*\r\n`,
-      { mode: 0o700 },
-    );
-    return launcherPath;
+    // ACPX splits override commands before spawning them. Use native Node
+    // directly so a .cmd shell layer cannot buffer the proxy's streaming stdin.
+    const nodePath = process.execPath.replace(/\\/g, "/");
+    const scriptPath = proxyPath.replace(/\\/g, "/");
+    return `${JSON.stringify(nodePath)} ${JSON.stringify(scriptPath)}`;
   }
   return proxyPath;
 }
@@ -1308,6 +1306,7 @@ export async function startAdapterExecutionTargetProcessSessionBridge(input: {
   const sessionDir = path.posix.join(bridgeRuntimeDir, sessionId);
   const stdinDir = path.posix.join(sessionDir, "stdin");
   const eventsDir = path.posix.join(sessionDir, "events");
+  const commandFilePath = path.posix.join(sessionDir, "command.json");
   const remoteScriptPath = path.posix.join(bridgeRuntimeDir, PROCESS_SESSION_REMOTE_SCRIPT);
   const client = createCommandManagedSandboxCallbackBridgeQueueClient({
     runner,
@@ -1320,12 +1319,13 @@ export async function startAdapterExecutionTargetProcessSessionBridge(input: {
   await client.makeDir(eventsDir);
   await syncProcessSessionRemoteScript({ client, remoteScriptPath });
 
-  const commandPayload = Buffer.from(JSON.stringify({
+  const commandPayload = JSON.stringify({
     command: input.command,
     args: input.args,
     cwd: input.cwd || target.remoteCwd,
     env: sanitizeRemoteExecutionEnv(input.env),
-  }), "utf8").toString("base64");
+  });
+  await client.writeTextFile(commandFilePath, commandPayload);
 
   await onLog("stdout", `[paperclip] Starting ACP process session bridge in sandbox (${target.providerKey ?? "provider"}).\n`);
   const startResult = await runner.execute({
@@ -1333,8 +1333,8 @@ export async function startAdapterExecutionTargetProcessSessionBridge(input: {
     args: shellCommandArgs(
       [
         `mkdir -p ${shellQuote(stdinDir)} ${shellQuote(eventsDir)}`,
+        `chmod 600 ${shellQuote(commandFilePath)}`,
         `PAPERCLIP_PROCESS_SESSION_DIR=${shellQuote(sessionDir)} ` +
-          `PAPERCLIP_PROCESS_SESSION_COMMAND_B64=${shellQuote(commandPayload)} ` +
           `nohup node ${shellQuote(remoteScriptPath)} >/dev/null 2>&1 < /dev/null &`,
         "printf '%s\\n' \"$!\"",
       ].join("\n"),
@@ -1353,6 +1353,10 @@ export async function startAdapterExecutionTargetProcessSessionBridge(input: {
   let stopping = false;
   let stdinSeq = 0;
   let pollTimer: NodeJS.Timeout | null = null;
+  let markReady: () => void = () => {};
+  const ready = new Promise<void>((resolve) => {
+    markReady = resolve;
+  });
   const pendingRemoteEvents: Array<{
     type?: string;
     stream?: "stdout" | "stderr";
@@ -1439,6 +1443,7 @@ export async function startAdapterExecutionTargetProcessSessionBridge(input: {
           authenticated = true;
           clearTimeout(authTimer);
           socket = nextSocket;
+          markReady();
           flushPendingRemoteEvents();
         }
         stdinWriteChain = stdinWriteChain.then(async () => {
@@ -1497,8 +1502,10 @@ export async function startAdapterExecutionTargetProcessSessionBridge(input: {
 
   return {
     agentCommand,
+    ready,
     stop: async () => {
       stopping = true;
+      markReady();
       if (pollTimer) clearTimeout(pollTimer);
       for (const liveSocket of liveSockets) liveSocket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve())).catch(() => undefined);
@@ -1521,15 +1528,53 @@ const socket = net.createConnection({ host: "127.0.0.1", port: ${input.port} });
 const token = ${JSON.stringify(input.token)};
 let buffer = "";
 let exiting = false;
+let outputChain = Promise.resolve();
+let connected = false;
+let stdinEnded = false;
+const pendingStdin = [];
 
 function send(message) {
   socket.write(JSON.stringify({ token, ...message }) + "\\n");
 }
 
-socket.on("connect", () => send({ type: "hello" }));
-process.stdin.on("data", (chunk) => send({ type: "stdin", data: Buffer.from(chunk).toString("base64") }));
-process.stdin.on("end", () => send({ type: "stdinEnd" }));
-process.stdin.resume();
+function writeOutput(stream, chunk) {
+  const output = stream === "stderr" ? process.stderr : process.stdout;
+  outputChain = outputChain.then(() => new Promise((resolve) => {
+    if (output.write(chunk)) resolve();
+    else output.once("drain", resolve);
+  }));
+}
+
+function finish(code) {
+  if (exiting) return;
+  exiting = true;
+  void outputChain.then(
+    () => {
+      process.exitCode = code;
+      socket.end();
+    },
+    () => {
+      process.exitCode = 1;
+      socket.destroy();
+    },
+  );
+}
+
+socket.on("connect", () => {
+  connected = true;
+  send({ type: "hello" });
+  for (const data of pendingStdin.splice(0)) send({ type: "stdin", data });
+  if (stdinEnded) send({ type: "stdinEnd" });
+});
+process.stdin.on("data", (chunk) => {
+  const data = Buffer.from(chunk).toString("base64");
+  if (connected) send({ type: "stdin", data });
+  else pendingStdin.push(data);
+});
+process.stdin.on("end", () => {
+  stdinEnded = true;
+  if (connected) send({ type: "stdinEnd" });
+});
 
 socket.setEncoding("utf8");
 socket.on("data", (chunk) => {
@@ -1541,16 +1586,12 @@ socket.on("data", (chunk) => {
     const message = JSON.parse(line);
     if (message.type === "data") {
       const out = Buffer.from(message.data || "", "base64");
-      (message.stream === "stderr" ? process.stderr : process.stdout).write(out);
+      writeOutput(message.stream, out);
     } else if (message.type === "error") {
-      process.stderr.write(String(message.message || "Process session bridge failed.") + "\\n");
-      exiting = true;
-      process.exitCode = 1;
-      socket.end();
+      writeOutput("stderr", String(message.message || "Process session bridge failed.") + "\\n");
+      finish(1);
     } else if (message.type === "exit") {
-      exiting = true;
-      process.exitCode = typeof message.code === "number" ? message.code : 1;
-      socket.end();
+      finish(typeof message.code === "number" ? message.code : 1);
     }
   }
 });
@@ -1566,15 +1607,15 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 const sessionDir = process.env.PAPERCLIP_PROCESS_SESSION_DIR;
-const commandPayload = process.env.PAPERCLIP_PROCESS_SESSION_COMMAND_B64;
-if (!sessionDir || !commandPayload) throw new Error("Missing process session bridge env.");
+if (!sessionDir) throw new Error("Missing process session bridge env.");
 
 const stdinDir = path.posix.join(sessionDir, "stdin");
 const eventsDir = path.posix.join(sessionDir, "events");
+const commandFilePath = path.posix.join(sessionDir, "command.json");
 let seq = 0;
 let stdinClosed = false;
 
-const config = JSON.parse(Buffer.from(commandPayload, "base64").toString("utf8"));
+const config = JSON.parse(await fs.readFile(commandFilePath, "utf8"));
 await fs.mkdir(stdinDir, { recursive: true });
 await fs.mkdir(eventsDir, { recursive: true });
 

@@ -111,7 +111,7 @@ function AttachmentActions({
 function AttachmentMeta({ attachment }: { attachment: IssueAttachment }) {
   const { t } = useTranslation();
   return (
-    <p className="mt-0.5 text-[11px] text-muted-foreground">
+    <p className="mt-0.5 text-(length:--text-micro) text-muted-foreground">
       {t("Attachment", { defaultValue: "Attachment" })} · {attachment.contentType} · {formatBytes(attachment.byteSize)}
     </p>
   );
@@ -221,7 +221,7 @@ function GenericAttachmentRow({
         >
           {filename}
         </a>
-        <p className="truncate text-[11px] text-muted-foreground">
+        <p className="truncate text-(length:--text-micro) text-muted-foreground">
           {t("Attachment", { defaultValue: "Attachment" })} · {attachment.contentType} · {formatBytes(attachment.byteSize)}
         </p>
       </div>

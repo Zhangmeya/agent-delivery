@@ -162,10 +162,17 @@
   --status-agent-error: #dc2626;
   --status-task-backlog: #a8aeb2;
   --status-task-todo: #f59e0b;
+  --status-task-todo-soft: color-mix(in srgb, var(--status-task-todo) 5%, transparent);
+  --status-task-todo-border: color-mix(in srgb, var(--status-task-todo) 30%, transparent);
   --status-task-in_progress: #2563eb;
   --status-task-in_review: #7c3aed;
   --status-task-done: #22c55e;
+  --status-task-done-soft: color-mix(in srgb, var(--status-task-done) 5%, transparent);
+  --status-task-done-border: color-mix(in srgb, var(--status-task-done) 30%, transparent);
   --status-task-blocked: #dc2626;
+  --status-task-blocked-soft: color-mix(in srgb, var(--status-task-blocked) 10%, transparent);
+  --status-task-blocked-border: color-mix(in srgb, var(--status-task-blocked) 60%, transparent);
+  --status-task-blocked-ring: color-mix(in srgb, var(--status-task-blocked) 25%, transparent);
   --status-task-cancelled: #a8aeb2;
 
   /* Task status ICON hues (PAP-238 3b) — AA-tuned (every glyph ≥ 3:1 against

@@ -76,7 +76,7 @@ export function OutputPrimaryCard({ item, creatorName, onMediaClick }: OutputPri
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-semibold text-foreground">{filename}</p>
           {item.degraded ? (
-            <p className="mt-0.5 text-[11px] text-destructive">
+            <p className="mt-0.5 text-(length:--text-micro) text-destructive">
               {t("issueOutput.metadataUnavailable", {
                 defaultValue: "Output metadata is unavailable - this file can't be played or downloaded here.",
               })}
@@ -84,7 +84,7 @@ export function OutputPrimaryCard({ item, creatorName, onMediaClick }: OutputPri
           ) : (
             <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-(length:--text-micro) text-muted-foreground">
               {item.isPrimary && (
-                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                <Badge variant="secondary" className="px-1.5 py-0 text-(length:--text-nano)">
                   {t("issueOutput.primary", { defaultValue: "Primary" })}
                 </Badge>
               )}

@@ -210,9 +210,9 @@ const AgentRunCard = memo(function AgentRunCard({
               ) : (
                 <span className="inline-flex h-2.5 w-2.5 rounded-full bg-muted-foreground/35" />
               )}
-              <Identity name={displaySeededName(run.agentName)} size="sm" className="[&>span:last-child]:!text-[11px]" />
+              <Identity name={displaySeededName(run.agentName)} size="sm" className="[&>span:last-child]:!text-(length:--text-micro)" />
             </div>
-            <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="mt-2 flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
               <span>
                 {isActive
                   ? t("Live now")

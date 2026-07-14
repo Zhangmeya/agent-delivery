@@ -1,5 +1,6 @@
 import { memo, useState, type KeyboardEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   AlarmClock,
   ChevronDown,
@@ -41,6 +42,7 @@ import {
 } from "./ui/dropdown-menu";
 import { AttentionInteractionResolver } from "./AttentionInteractionResolver";
 import { ProjectTile } from "./ProjectTile";
+import { translateInstant } from "../i18n";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -60,11 +62,11 @@ function tomorrowMorningIso(): string {
 }
 
 /** Snooze presets, resolved to a future ISO timestamp at click time. */
-const SNOOZE_PRESETS: ReadonlyArray<{ label: string; resolve: () => string }> = [
-  { label: "1 hour", resolve: () => new Date(Date.now() + HOUR_MS).toISOString() },
-  { label: "4 hours", resolve: () => new Date(Date.now() + 4 * HOUR_MS).toISOString() },
-  { label: "Tomorrow morning", resolve: tomorrowMorningIso },
-  { label: "Next week", resolve: () => new Date(Date.now() + 7 * DAY_MS).toISOString() },
+const SNOOZE_PRESETS: ReadonlyArray<{ key: string; defaultLabel: string; resolve: () => string }> = [
+  { key: "attentionQueue.snooze.oneHour", defaultLabel: "1 hour", resolve: () => new Date(Date.now() + HOUR_MS).toISOString() },
+  { key: "attentionQueue.snooze.fourHours", defaultLabel: "4 hours", resolve: () => new Date(Date.now() + 4 * HOUR_MS).toISOString() },
+  { key: "attentionQueue.snooze.tomorrowMorning", defaultLabel: "Tomorrow morning", resolve: tomorrowMorningIso },
+  { key: "attentionQueue.snooze.nextWeek", defaultLabel: "Next week", resolve: () => new Date(Date.now() + 7 * DAY_MS).toISOString() },
 ];
 
 interface AttentionQueueRowProps {
@@ -106,6 +108,7 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
   userLabelMap,
   selected = false,
 }: AttentionQueueRowProps) {
+  useTranslation();
   const meta = sourceMeta(item.sourceKind);
   const tone = attentionToneStyle(item);
   const sevBadge = severityBadge(item.severity);
@@ -170,7 +173,9 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
           <button
             type="button"
             className="mt-0.5 shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-ring focus-visible:ring-(length:--rad-3) focus-visible:outline-none"
-            aria-label={expanded ? "Collapse decision" : "Expand decision"}
+            aria-label={expanded
+              ? translateInstant("attentionQueue.collapseDecision", { defaultValue: "Collapse decision" })
+              : translateInstant("attentionQueue.expandDecision", { defaultValue: "Expand decision" })}
             aria-expanded={expanded}
             onClick={activate}
           >
@@ -189,7 +194,7 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
               <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
                 <Icon className={cn("h-3.5 w-3.5", tone.icon)} />
-                {meta.label}
+                {translateInstant(meta.label, { defaultValue: meta.label })}
               </span>
               {sevBadge && (
                 <span
@@ -198,7 +203,7 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
                     sevBadge.className,
                   )}
                 >
-                  {sevBadge.label}
+                  {translateInstant(sevBadge.label, { defaultValue: sevBadge.label })}
                 </span>
               )}
               {item.relatedIssue?.identifier && (
@@ -216,9 +221,15 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
               {isHidden && snoozedUntil ? (
                 <span
                   className="text-(length:--text-nano) text-muted-foreground"
-                  title={`Reappears ${new Date(snoozedUntil).toLocaleString()}`}
+                  title={translateInstant("attentionQueue.reappearsAt", {
+                    defaultValue: "Reappears {{time}}",
+                    time: new Date(snoozedUntil).toLocaleString(),
+                  })}
                 >
-                  Reappears {reappearLabel(snoozedUntil)}
+                  {translateInstant("attentionQueue.reappears", {
+                    defaultValue: "Reappears {{time}}",
+                    time: reappearLabel(snoozedUntil),
+                  })}
                 </span>
               ) : (
                 <span className="text-(length:--text-nano) text-muted-foreground">{relativeTime(item.activityAt)}</span>
@@ -230,7 +241,7 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
                       variant="ghost"
                       size="icon-xs"
                       className="text-muted-foreground"
-                      aria-label="Row actions"
+                      aria-label={translateInstant("attentionQueue.rowActions", { defaultValue: "Row actions" })}
                     >
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
@@ -239,13 +250,13 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
                     {onSnooze && <SnoozeSubmenu onSnooze={(iso) => onSnooze(item, iso)} />}
                     <DropdownMenuItem onClick={() => onDismiss(item)}>
                       <X className="h-4 w-4" />
-                      Dismiss
+                      {translateInstant("attentionQueue.dismiss", { defaultValue: "Dismiss" })}
                     </DropdownMenuItem>
                     {href && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem asChild>
-                          <Link to={href}>Open source</Link>
+                          <Link to={href}>{translateInstant("attentionQueue.openSource", { defaultValue: "Open source" })}</Link>
                         </DropdownMenuItem>
                       </>
                     )}
@@ -267,14 +278,16 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
                   role: "button",
                   tabIndex: 0,
                   "aria-expanded": expanded,
-                  "aria-label": expanded ? "Collapse decision" : "Expand decision",
+                  "aria-label": expanded
+                    ? translateInstant("attentionQueue.collapseDecision", { defaultValue: "Collapse decision" })
+                    : translateInstant("attentionQueue.expandDecision", { defaultValue: "Expand decision" }),
                   onClick: activate,
                   onKeyDown: onHeaderKeyDown,
                 }
               : {})}
           >
             <span className="line-clamp-2 text-sm font-medium text-foreground" title={item.subject.title ?? undefined}>
-              {item.subject.title ?? meta.label}
+              {item.subject.title ?? translateInstant(meta.label, { defaultValue: meta.label })}
             </span>
             <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{detailLine}</p>
           </div>
@@ -307,7 +320,7 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
               {showOpen && (
                 <Button asChild variant="outline" size="xs" className={cn(ACTION_BTN, "w-full @xl:w-auto")}>
                   <Link to={href!}>
-                    Open
+                    {translateInstant("attentionQueue.open", { defaultValue: "Open" })}
                     <ExternalLink className="h-3 w-3" />
                   </Link>
                 </Button>
@@ -322,7 +335,7 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
                   onClick={() => onRestore(item)}
                 >
                   <RotateCcw className="h-3 w-3" />
-                  Restore
+                  {translateInstant("attentionQueue.restore", { defaultValue: "Restore" })}
                 </Button>
               )}
             </div>
@@ -368,8 +381,21 @@ function compactDecisionAction(item: AttentionItem, verbId: string): CompactDeci
 function collectCompactActions(item: AttentionItem): Array<{ action: CompactDecisionAction; label: string; id: string }> {
   return item.decisionVerbs.slice(0, 3).flatMap((verb) => {
     const action = compactDecisionAction(item, verb.id);
-    return action ? [{ action, label: verb.label, id: verb.id }] : [];
+    return action ? [{ action, label: compactDecisionActionLabel(action), id: verb.id }] : [];
   });
+}
+
+function compactDecisionActionLabel(action: CompactDecisionAction): string {
+  switch (action) {
+    case "accept":
+      return translateInstant("attentionQueue.actions.accept", { defaultValue: "Accept" });
+    case "approve":
+      return translateInstant("attentionQueue.actions.approve", { defaultValue: "Approve" });
+    case "reject":
+      return translateInstant("attentionQueue.actions.reject", { defaultValue: "Reject" });
+    default:
+      return translateInstant("attentionQueue.actions.requestRevision", { defaultValue: "Request revision" });
+  }
 }
 
 function CompactDecisionActions({
@@ -399,11 +425,17 @@ function CompactDecisionActions({
       }
       if (item.sourceKind === "issue_thread_interaction") {
         const issueId = item.subject.metadata?.issueId;
-        if (typeof issueId !== "string") throw new Error("Missing issue reference for this decision.");
+        if (typeof issueId !== "string") {
+          throw new Error(translateInstant("attentionQueue.missingIssueReference", {
+            defaultValue: "Missing issue reference for this decision.",
+          }));
+        }
         if (action === "accept") return issuesApi.acceptInteraction(issueId, item.subject.id);
         return issuesApi.rejectInteraction(issueId, item.subject.id);
       }
-      throw new Error("This decision must be completed from its detail view.");
+      throw new Error(translateInstant("attentionQueue.completeFromDetail", {
+        defaultValue: "This decision must be completed from its detail view.",
+      }));
     },
     onSuccess: (_result, action) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.attention(companyId) });
@@ -419,8 +451,10 @@ function CompactDecisionActions({
     },
     onError: (error, action) => {
       pushToast({
-        title: `Could not ${decisionLabel(action)}`,
-        body: error instanceof Error ? error.message : "Please try again.",
+        title: translateInstant("attentionQueue.decisionFailed", { defaultValue: "Could not complete decision" }),
+        body: error instanceof Error
+          ? error.message
+          : translateInstant("Please try again.", { defaultValue: "Please try again." }),
         tone: "error",
       });
     },
@@ -429,12 +463,15 @@ function CompactDecisionActions({
   if (actions.length === 0) return null;
 
   return (
-    <div className="flex w-full flex-wrap items-center gap-2 @xl:w-auto @xl:justify-end @xl:gap-1" aria-label="Decision actions">
+    <div
+      className="flex w-full flex-wrap items-center gap-2 @xl:w-auto @xl:justify-end @xl:gap-1"
+      aria-label={translateInstant("attentionQueue.decisionActions", { defaultValue: "Decision actions" })}
+    >
       {actions.map(({ action, id, label }) => (
         <Button
           key={id}
           type="button"
-          variant={decisionVerbVariant({ id, label, description: "" })}
+          variant={action === "reject" ? "destructive" : action === "accept" || action === "approve" ? "default" : "outline"}
           size="xs"
           className={cn(ACTION_BTN, "min-w-0 flex-1 @xl:flex-none")}
           disabled={decision.isPending}
@@ -455,23 +492,23 @@ function CompactDecisionActions({
   );
 }
 
-function decisionLabel(action: CompactDecisionAction): string {
-  if (action === "request_revision") return "sent for revision";
-  if (action === "accept" || action === "approve") return "approved";
-  return "rejected";
-}
-
 function compactDecisionSuccessLabel(sourceKind: AttentionItem["sourceKind"], action: CompactDecisionAction): string {
-  if (sourceKind === "approval") return `Approval ${decisionLabel(action)}`;
-  if (sourceKind === "join_request") return `Join request ${decisionLabel(action)}`;
-  return action === "accept" ? "Confirmation accepted" : "Confirmation declined";
-}
-
-function decisionVerbVariant(verb: AttentionItem["decisionVerbs"][number]): "default" | "outline" | "destructive" {
-  const text = `${verb.label} ${verb.description ?? ""}`.toLowerCase();
-  if (/\b(reject|decline|deny|delete|remove)\b/.test(text)) return "destructive";
-  if (/\b(accept|approve|confirm|apply)\b/.test(text)) return "default";
-  return "outline";
+  if (sourceKind === "approval") {
+    if (action === "request_revision") {
+      return translateInstant("attentionQueue.success.approvalRevisionRequested", { defaultValue: "Approval sent for revision" });
+    }
+    return action === "approve"
+      ? translateInstant("attentionQueue.success.approvalApproved", { defaultValue: "Approval approved" })
+      : translateInstant("attentionQueue.success.approvalRejected", { defaultValue: "Approval rejected" });
+  }
+  if (sourceKind === "join_request") {
+    return action === "approve"
+      ? translateInstant("attentionQueue.success.joinRequestApproved", { defaultValue: "Join request approved" })
+      : translateInstant("attentionQueue.success.joinRequestRejected", { defaultValue: "Join request rejected" });
+  }
+  return action === "accept"
+    ? translateInstant("attentionQueue.success.confirmationAccepted", { defaultValue: "Confirmation accepted" })
+    : translateInstant("attentionQueue.success.confirmationDeclined", { defaultValue: "Confirmation declined" });
 }
 
 /** Inline project identity keeps useful context without a competing badge. */
@@ -528,12 +565,12 @@ function SnoozeSubmenu({ onSnooze }: { onSnooze: (snoozedUntil: string) => void 
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
         <AlarmClock className="h-4 w-4" />
-        Snooze
+        {translateInstant("attentionQueue.snooze.title", { defaultValue: "Snooze" })}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         {SNOOZE_PRESETS.map((preset) => (
-          <DropdownMenuItem key={preset.label} onClick={() => onSnooze(preset.resolve())}>
-            {preset.label}
+          <DropdownMenuItem key={preset.key} onClick={() => onSnooze(preset.resolve())}>
+            {translateInstant(preset.key, { defaultValue: preset.defaultLabel })}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
@@ -545,7 +582,7 @@ function SnoozeSubmenu({ onSnooze }: { onSnooze: (snoozedUntil: string) => void 
           onClick={(e) => e.stopPropagation()}
         >
           <span className="text-(length:--text-nano) font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
-            Custom
+            {translateInstant("attentionQueue.snooze.custom", { defaultValue: "Custom" })}
           </span>
           <input
             type="datetime-local"
@@ -554,7 +591,7 @@ function SnoozeSubmenu({ onSnooze }: { onSnooze: (snoozedUntil: string) => void 
             className="w-full rounded-sm border border-border bg-background px-2 py-1 text-xs"
           />
           <Button type="button" size="xs" disabled={!customValue} onClick={applyCustom}>
-            Snooze until…
+            {translateInstant("attentionQueue.snooze.until", { defaultValue: "Snooze until…" })}
           </Button>
         </div>
       </DropdownMenuSubContent>
@@ -565,13 +602,19 @@ function SnoozeSubmenu({ onSnooze }: { onSnooze: (snoozedUntil: string) => void 
 /** Compact "when does this snooze end" label, e.g. `in 2h`, `in 3d`. */
 function reappearLabel(snoozedUntil: string): string {
   const diffMs = new Date(snoozedUntil).getTime() - Date.now();
-  if (!Number.isFinite(diffMs) || diffMs <= 0) return "soon";
+  if (!Number.isFinite(diffMs) || diffMs <= 0) {
+    return translateInstant("attentionQueue.snooze.soon", { defaultValue: "soon" });
+  }
   const diffMin = Math.round(diffMs / 60000);
-  if (diffMin < 60) return `in ${diffMin}m`;
+  if (diffMin < 60) {
+    return translateInstant("attentionQueue.snooze.inMinutes", { defaultValue: "in {{count}}m", count: diffMin });
+  }
   const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `in ${diffHr}h`;
+  if (diffHr < 24) {
+    return translateInstant("attentionQueue.snooze.inHours", { defaultValue: "in {{count}}h", count: diffHr });
+  }
   const diffDay = Math.round(diffHr / 24);
-  return `in ${diffDay}d`;
+  return translateInstant("attentionQueue.snooze.inDays", { defaultValue: "in {{count}}d", count: diffDay });
 }
 
 function InlineResolver({
@@ -590,7 +633,13 @@ function InlineResolver({
   if (item.sourceKind === "issue_thread_interaction") {
     const issueId = (item.subject.metadata?.issueId as string | undefined) ?? item.relatedIssue?.id;
     if (!issueId) {
-      return <p className="text-xs text-muted-foreground">Missing issue reference for this decision.</p>;
+      return (
+        <p className="text-xs text-muted-foreground">
+          {translateInstant("attentionQueue.missingIssueReference", {
+            defaultValue: "Missing issue reference for this decision.",
+          })}
+        </p>
+      );
     }
     return (
       <AttentionInteractionResolver
@@ -641,21 +690,23 @@ function ApprovalResolver({ item, companyId }: { item: AttentionItem; companyId:
       <Textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        placeholder="Optional decision note…"
+        placeholder={translateInstant("attentionQueue.optionalDecisionNote", {
+          defaultValue: "Optional decision note…",
+        })}
         className="min-h-16 text-sm"
       />
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={() => approve.mutate()} disabled={pending}>
           {approve.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Approve
+          {translateInstant("attentionQueue.actions.approve", { defaultValue: "Approve" })}
         </Button>
         <Button size="sm" variant="outline" onClick={() => revise.mutate()} disabled={pending}>
           {revise.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Request revision
+          {translateInstant("attentionQueue.actions.requestRevision", { defaultValue: "Request revision" })}
         </Button>
         <Button size="sm" variant="destructive" onClick={() => reject.mutate()} disabled={pending}>
           {reject.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Reject
+          {translateInstant("attentionQueue.actions.reject", { defaultValue: "Reject" })}
         </Button>
       </div>
     </div>
@@ -682,11 +733,11 @@ function JoinRequestResolver({ item, companyId }: { item: AttentionItem; company
     <div className="flex flex-wrap gap-2">
       <Button size="sm" onClick={() => approve.mutate()} disabled={pending}>
         {approve.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-        Approve
+        {translateInstant("attentionQueue.actions.approve", { defaultValue: "Approve" })}
       </Button>
       <Button size="sm" variant="destructive" onClick={() => reject.mutate()} disabled={pending}>
         {reject.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-        Reject
+        {translateInstant("attentionQueue.actions.reject", { defaultValue: "Reject" })}
       </Button>
     </div>
   );

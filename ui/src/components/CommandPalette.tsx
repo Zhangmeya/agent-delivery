@@ -250,7 +250,7 @@ export function CommandPalette() {
               {t("commandPalette.noQuickMatchesPrefix", {
                 defaultValue: "No quick issue matches. Press",
               })}{" "}
-              <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-[10px]">↵</kbd>{" "}
+              <kbd className="rounded border border-border bg-muted px-1 py-0.5 text-(length:--text-nano)">↵</kbd>{" "}
               {t("commandPalette.noQuickMatchesSuffix", {
                 defaultValue: "to",
               })}{" "}
@@ -283,7 +283,7 @@ export function CommandPalette() {
                 <span>
                   {t("commandPalette.openFullSearch", { defaultValue: "open full search" })}
                 </span>
-                <kbd className="rounded border border-border bg-background px-1 py-0.5 text-[10px]">↵</kbd>
+                <kbd className="rounded border border-border bg-background px-1 py-0.5 text-(length:--text-nano)">↵</kbd>
               </span>
             </CommandItem>
           </CommandGroup>

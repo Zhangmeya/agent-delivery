@@ -784,7 +784,7 @@ export function IssueRunLedgerContent({
                 </Link>
               ))}
               {children.active.length > 4 ? (
-                <span className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground">
+                <span className="rounded-md border border-border px-2 py-1 text-(length:--text-micro) text-muted-foreground">
                   {t("issueRunLedger.moreCount", {
                     count: children.active.length - 4,
                     defaultValue: "+{{count}} more",
@@ -946,11 +946,11 @@ export function IssueRunLedgerContent({
                       <span className="text-foreground">{onBehalfOfLabel}</span>
                     </span>
                   ) : null}
-                  <span className="rounded-md border border-border px-1.5 py-0.5 text-[11px] capitalize text-muted-foreground">
+                  <span className="rounded-md border border-border px-1.5 py-0.5 text-(length:--text-micro) capitalize text-muted-foreground">
                     {statusLabel(run.status, t)}
                   </span>
                   {run.isLive ? (
-                    <span className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-700 dark:text-cyan-300">
+                    <span className="inline-flex items-center gap-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-(length:--text-micro) text-cyan-700 dark:text-cyan-300">
                       <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
                       {t("issueRunLedger.live", { defaultValue: "live" })}
                     </span>
@@ -965,7 +965,7 @@ export function IssueRunLedgerContent({
                     {liveness.label}
                   </span>
                   {exhausted ? (
-                    <span className="rounded-md border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[11px] font-medium text-red-700 dark:text-red-300">
+                    <span className="rounded-md border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-(length:--text-micro) font-medium text-red-700 dark:text-red-300">
                       {t("issueRunLedger.exhausted", { defaultValue: "Exhausted" })}
                     </span>
                   ) : null}
@@ -985,7 +985,7 @@ export function IssueRunLedgerContent({
                   {outputSilence ? (
                     <span
                       className={cn(
-                        "rounded-md border px-1.5 py-0.5 text-[11px] font-medium",
+                        "rounded-md border px-1.5 py-0.5 text-(length:--text-micro) font-medium",
                         outputSilence.tone,
                       )}
                     >

@@ -403,7 +403,7 @@ function CatalogFilterMenu({
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-[min(28rem,70vh)] w-56 overflow-y-auto">
+      <DropdownMenuContent align="end" className="max-h-(--sz-calc-32) w-56 overflow-y-auto">
         <DropdownMenuLabel>{t("Type")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={kindFilter} onValueChange={(next) => onKindChange(next as "all" | "bundled" | "optional")}>
           <DropdownMenuRadioItem value="all">{t("All")}</DropdownMenuRadioItem>
@@ -829,7 +829,7 @@ function SkillCard({ card, onOpen }: { card: DiscoveryCard; onOpen: (card: Disco
 
       <div className="mt-auto pt-3">
         {/* Stats: installed agents · stars · forks — stars/forks only when > 0. */}
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
           <span>{t(card.agentCount === 1 ? "companySkills.agentCount_one" : "companySkills.agentCount_other", { count: card.agentCount })}</span>
           {card.starCount > 0 ? (
             <>
@@ -846,7 +846,7 @@ function SkillCard({ card, onOpen }: { card: DiscoveryCard; onOpen: (card: Disco
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1">
           {card.installed ? (
-            <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+            <span className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-(length:--text-nano) text-emerald-300">
               {t("Installed")}
             </span>
           ) : null}
@@ -989,7 +989,7 @@ export function DiscoveryGrid({
           <h2 className="text-sm font-semibold text-foreground">{t("companySkills.storeTitle")}</h2>
           <p className="text-xs text-muted-foreground">{t("companySkills.storeSubtitle")}</p>
         </div>
-        <div className="px-4 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="px-4 pb-1 pt-3 text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">
           {t("companySkills.categories")}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pb-4">
@@ -1129,19 +1129,19 @@ export function DiscoveryGrid({
             <TabsList variant="line" className="p-0">
               <TabsTrigger value="all" className="px-3">
                 <span>{discoveryTabLabel("all")}</span>
-                <span className="ml-1.5 text-[11px] text-muted-foreground">{tabCounts.all}</span>
+                <span className="ml-1.5 text-(length:--text-micro) text-muted-foreground">{tabCounts.all}</span>
               </TabsTrigger>
               <TabsTrigger value="installed" className="px-3">
                 <span>{discoveryTabLabel("installed")}</span>
-                <span className="ml-1.5 text-[11px] text-muted-foreground">{tabCounts.installed}</span>
+                <span className="ml-1.5 text-(length:--text-micro) text-muted-foreground">{tabCounts.installed}</span>
               </TabsTrigger>
               <TabsTrigger value="catalog" className="px-3">
                 <span>{discoveryTabLabel("catalog")}</span>
-                <span className="ml-1.5 text-[11px] text-muted-foreground">{tabCounts.catalog}</span>
+                <span className="ml-1.5 text-(length:--text-micro) text-muted-foreground">{tabCounts.catalog}</span>
               </TabsTrigger>
               <TabsTrigger value="bundled" className="px-3">
                 <span>{discoveryTabLabel("bundled")}</span>
-                <span className="ml-1.5 text-[11px] text-muted-foreground">{tabCounts.bundled}</span>
+                <span className="ml-1.5 text-(length:--text-micro) text-muted-foreground">{tabCounts.bundled}</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -1380,7 +1380,7 @@ function NewSkillWizard({
         </div>
       ) : (
         <div className="space-y-4 text-sm">
-          <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-2">
+          <div className="grid grid-cols-(--gtc-26) gap-y-2">
             <span className="text-muted-foreground">{t("Name")}</span>
             <span>{draft.name || t("companySkills.untitled")}</span>
             <span className="text-muted-foreground">{t("Slug")}</span>
@@ -1705,27 +1705,27 @@ function CatalogDetailPane({
             </Tooltip>
           ) : null}
           {skill.requires.length > 0 ? (
-            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-(length:--text-micro) text-muted-foreground">
               {t("companySkills.requiresList", { value: skill.requires.join(", ") })}
             </span>
           ) : null}
           {skill.recommendedForRoles.length > 0 ? (
-            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-(length:--text-micro) text-muted-foreground">
               {t("companySkills.rolesList", { value: skill.recommendedForRoles.join(" · ") })}
             </span>
           ) : null}
           {skill.tags.length > 0 ? (
-            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+            <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-(length:--text-micro) text-muted-foreground">
               {t("companySkills.tagsList", { value: skill.tags.join(" · ") })}
             </span>
           ) : null}
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="uppercase tracking-[0.18em]">{t("Key")}</span>
+          <span className="uppercase tracking-(--tracking-caps)">{t("Key")}</span>
           <span className="font-mono">{skill.key}</span>
-          <span className="uppercase tracking-[0.18em]">·</span>
-          <span className="uppercase tracking-[0.18em]">{t("companySkills.hash")}</span>
+          <span className="uppercase tracking-(--tracking-caps)">·</span>
+          <span className="uppercase tracking-(--tracking-caps)">{t("companySkills.hash")}</span>
           <span className="font-mono">{skill.contentHash.slice(0, 24)}…</span>
           <CopyText
             text={skill.contentHash}
@@ -1828,7 +1828,7 @@ function InstallPreviewDialog({
 
         <div className="space-y-4 text-sm">
           <div className="rounded-md border border-border p-3">
-            <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-y-2 text-xs">
+            <div className="grid grid-cols-(--gtc-26) gap-y-2 text-xs">
               <div className="text-muted-foreground">{t("companySkills.trustLabel")}</div>
               <div className="flex items-center gap-2">
                 <TrustChip level={skill.trustLevel} />
@@ -2463,8 +2463,8 @@ function SkillVersionDiffDialog({
             ) : left?.id === right.id ? (
               <div className="p-6 text-center text-sm text-muted-foreground">{t("companySkills.sameVersion")}</div>
             ) : (
-              <div className="font-mono text-[12px] leading-6">
-                <div className="grid grid-cols-[56px_56px_24px_minmax(0,1fr)] border-b border-border/60 bg-muted/30 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+              <div className="font-mono text-xs leading-6">
+                <div className="grid grid-cols-(--gtc-1) border-b border-border/60 bg-muted/30 px-3 py-2 text-(length:--text-micro) uppercase tracking-wide text-muted-foreground">
                   <span>{t("companySkills.old")}</span>
                   <span>{t("companySkills.newVersion")}</span>
                   <span />
@@ -3440,7 +3440,7 @@ function SkillPane({
         <div className="mt-4 space-y-3 border-t border-border pt-4 text-sm">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("Source")}</span>
+              <span className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("Source")}</span>
               <span className="flex min-w-0 items-center gap-2">
                 <SourceIcon className="h-3.5 w-3.5 text-muted-foreground" />
                 {detail.sourcePath && displaySourcePath ? (
@@ -3468,7 +3468,7 @@ function SkillPane({
             </div>
             {detail.sourceType === "github" && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("companySkills.pin")}</span>
+                <span className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("companySkills.pin")}</span>
                 <span className="font-mono text-xs">{currentPin ?? "untracked"}</span>
                 {updateStatus?.trackingRef && (
                   <span className="text-xs text-muted-foreground">tracking {updateStatus.trackingRef}</span>
@@ -3501,16 +3501,16 @@ function SkillPane({
               </div>
             )}
             <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("Key")}</span>
+              <span className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("Key")}</span>
               <span className="font-mono text-xs">{detail.key}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("companySkills.mode")}</span>
+              <span className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("companySkills.mode")}</span>
               <span>{detail.editable ? t("companySkills.editable") : t("companySkills.readOnly")}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("companySkills.trustLabel")}</span>
+            <span className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("companySkills.trustLabel")}</span>
             <TrustChip level={detail.trustLevel} />
             <CompatChip compatibility={detail.compatibility} />
             {readonlyMetadataValue(detail.metadata, "userModifiedAt") ? (
@@ -3532,7 +3532,7 @@ function SkillPane({
           </div>
           <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{t("companySkills.usedBy")}</span>
+              <span className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">{t("companySkills.usedBy")}</span>
               <AttachAgentsPopover
                 agents={attachAgents}
                 attachedAgentIds={usedBy.map((agent) => agent.id)}

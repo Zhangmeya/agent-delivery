@@ -714,7 +714,7 @@ export function DeliverySection() {
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
           {t("routineDetail.concurrency", { defaultValue: "Concurrency" })}
         </p>
         <RadioCardGroup
@@ -727,7 +727,7 @@ export function DeliverySection() {
         />
       </div>
       <div className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
           {t("routineDetail.catchUp", { defaultValue: "Catch-up" })}
         </p>
         <RadioCardGroup
@@ -787,7 +787,7 @@ function NextFiresPreview({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
         {t("routineDetail.nextFiveFires", { defaultValue: "Next 5 fires" })}
       </p>
       {preview ? (
@@ -807,7 +807,7 @@ function NextFiresPreview({
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground/60">
+          <p className="text-(length:--text-micro) text-muted-foreground/60">
             {t("routineDetail.previewAssumesPreviousRun", { defaultValue: "Preview assumes the previous run is still in flight when the next fires. Times shown in" })}{" "}
             {preview.timeZone}.
           </p>

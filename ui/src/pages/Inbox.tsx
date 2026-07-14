@@ -2439,7 +2439,7 @@ export function Inbox() {
             value={allCategoryFilter}
             onValueChange={(value) => updateAllCategoryFilter(value as InboxCategoryFilter)}
           >
-            <SelectTrigger className="h-8 w-[170px] text-xs">
+            <SelectTrigger className="h-8 w-(--sz-170px) text-xs">
               <SelectValue placeholder={t("Category", { defaultValue: "Category" })} />
             </SelectTrigger>
             <SelectContent>
@@ -2457,7 +2457,7 @@ export function Inbox() {
               value={allApprovalFilter}
               onValueChange={(value) => updateAllApprovalFilter(value as InboxApprovalFilter)}
             >
-              <SelectTrigger className="h-8 w-[170px] text-xs">
+              <SelectTrigger className="h-8 w-(--sz-170px) text-xs">
                 <SelectValue placeholder={t("Approval status", { defaultValue: "Approval status" })} />
               </SelectTrigger>
               <SelectContent>
@@ -2694,7 +2694,7 @@ export function Inbox() {
                         className="flex items-center gap-3 border-y border-border/70 bg-muted/30 px-4 py-2"
                       >
                         <div className="h-px flex-1 bg-border/80" />
-                        <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span className="shrink-0 text-(length:--text-micro) font-semibold uppercase tracking-wide text-muted-foreground">
                           {group.searchSection === "archived"
                             ? t("Archived", { defaultValue: "Archived" })
                             : t("Other results", { defaultValue: "Other results" })}
@@ -2782,7 +2782,7 @@ export function Inbox() {
                       elements.push(
                         <div key={`today-divider-${group.key}-${index}`} className="my-2 flex items-center gap-3 px-4">
                           <div className="flex-1 border-t border-zinc-600" />
-                          <span className="shrink-0 text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                          <span className="shrink-0 text-(length:--text-micro) font-medium uppercase tracking-wider text-zinc-500">
                             {t("Earlier", { defaultValue: "Earlier" })}
                           </span>
                         </div>,

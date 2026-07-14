@@ -950,13 +950,13 @@ function SelectStep(props: SelectStepProps) {
                     <span className="flex items-center gap-2">
                       <span>{vault.displayName}</span>
                       {vault.isDefault && (
-                        <Badge variant="outline" className="px-1 py-0 text-[10px]">{t("common.default", { defaultValue: "default" })}</Badge>
+                        <Badge variant="outline" className="px-1 py-0 text-(length:--text-nano)">{t("common.default", { defaultValue: "default" })}</Badge>
                       )}
                       {vault.status === "warning" && (
-                        <Badge variant="outline" className="px-1 py-0 text-[10px] text-amber-500 border-amber-500/40">{t("status.warning", { defaultValue: "warning" })}</Badge>
+                        <Badge variant="outline" className="px-1 py-0 text-(length:--text-nano) text-amber-500 border-amber-500/40">{t("status.warning", { defaultValue: "warning" })}</Badge>
                       )}
                       {blocked && (
-                        <Badge variant="outline" className="px-1 py-0 text-[10px] text-muted-foreground">
+                        <Badge variant="outline" className="px-1 py-0 text-(length:--text-nano) text-muted-foreground">
                           {translateStatusLabel(t, vault.status)}
                         </Badge>
                       )}
@@ -1100,7 +1100,7 @@ function SelectStep(props: SelectStepProps) {
                         <StatusBadge status={candidate.status} />
                         {candidate.status === "duplicate" &&
                           candidate.conflicts.find((c) => c.type === "exact_reference")?.existingSecretId && (
-                            <span className="text-[11px] text-muted-foreground">
+                            <span className="text-(length:--text-micro) text-muted-foreground">
                               {t("secretsImport.alreadyImported", { defaultValue: "Already imported" })}
                             </span>
                           )}

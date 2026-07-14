@@ -981,7 +981,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                 value={eff("identity", "capabilities", props.agent.capabilities ?? "") ?? ""}
                 onChange={(v) => mark("identity", "capabilities", v || null)}
                 placeholder={t("agentConfig.capabilitiesPlaceholder", { defaultValue: "Describe what this agent can do..." })}
-                contentClassName="min-h-[44px] text-sm font-mono"
+                contentClassName="min-h-(--sz-44px) text-sm font-mono"
                 imageUploadHandler={async (file) => {
                   const asset = await uploadMarkdownImage.mutateAsync({
                     file,
@@ -1002,7 +1002,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                     )}
                     onChange={(v) => mark("adapterConfig", "promptTemplate", v ?? "")}
                     placeholder={t("agentConfig.promptTemplatePlaceholder", { defaultValue: "You are agent {{ agent.name }}. Your role is {{ agent.role }}..." })}
-                    contentClassName="min-h-[88px] text-sm font-mono"
+                    contentClassName="min-h-(--sz-88px) text-sm font-mono"
                     imageUploadHandler={async (file) => {
                       const namespace = `agents/${props.agent.id}/prompt-template`;
                       const asset = await uploadMarkdownImage.mutateAsync({ file, namespace });
@@ -1268,7 +1268,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               </Field>
 
               {supportsModelProfiles && (
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                <div className="text-(length:--text-micro) uppercase tracking-wide text-muted-foreground">
                   {t("issueProperties.primaryModel", { defaultValue: "Primary model" })}
                 </div>
               )}
@@ -1371,7 +1371,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                         mark("adapterConfig", "bootstrapPromptTemplate", v || undefined)
                       }
                       placeholder={t("agentConfig.bootstrapPromptPlaceholder", { defaultValue: "Optional initial setup prompt for the first run" })}
-                      contentClassName="min-h-[44px] text-sm font-mono"
+                      contentClassName="min-h-(--sz-44px) text-sm font-mono"
                       imageUploadHandler={async (file) => {
                         const namespace = `agents/${props.agent.id}/bootstrap-prompt`;
                         const asset = await uploadMarkdownImage.mutateAsync({ file, namespace });
@@ -1693,7 +1693,7 @@ export function AdapterTypeDropdown({
               {item.experimental && <ExperimentalBadge />}
             </span>
             {item.comingSoon && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-(length:--text-nano) text-muted-foreground">
                 {t("agentConfig.comingSoon", { defaultValue: "Coming soon" })}
               </span>
             )}
@@ -1707,7 +1707,7 @@ export function AdapterTypeDropdown({
 function ExperimentalBadge() {
   const { t } = useTranslation();
   return (
-    <span className="shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-700 dark:text-amber-200">
+    <span className="shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-(length:--text-nano) font-medium leading-none text-amber-700 dark:text-amber-200">
       {t("Experimental", { defaultValue: "Experimental" })}
     </span>
   );
@@ -1923,7 +1923,7 @@ export function ModelDropdown({
               <span className="block w-full text-left truncate font-mono text-xs" title={value}>
                 {models.find((m) => m.id === value)?.label ?? value}
               </span>
-              <span className="shrink-0 ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/20">
+              <span className="shrink-0 ml-auto text-(length:--text-nano) font-medium px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 border border-green-500/20">
                 {t("agentConfig.currentBadge", { defaultValue: "current" })}
               </span>
             </button>
@@ -1942,7 +1942,7 @@ export function ModelDropdown({
               <span className="block w-full text-left truncate font-mono text-xs" title={detectedModel}>
                 {models.find((m) => m.id === detectedModel)?.label ?? detectedModel}
               </span>
-              <span className="shrink-0 ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">
+              <span className="shrink-0 ml-auto text-(length:--text-nano) font-medium px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">
                 {t("agentConfig.detectedBadge", { defaultValue: "detected" })}
               </span>
             </button>
@@ -1966,7 +1966,7 @@ export function ModelDropdown({
                   <span className="block w-full text-left truncate font-mono text-xs" title={candidate}>
                     {entry?.label ?? candidate}
                   </span>
-                  <span className="shrink-0 ml-auto text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/20">
+                  <span className="shrink-0 ml-auto text-(length:--text-nano) font-medium px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/20">
                     {t("agentConfig.configBadge", { defaultValue: "config" })}
                   </span>
                 </button>
@@ -2074,7 +2074,7 @@ function CheapModelSection({
     <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          <div className="text-(length:--text-micro) uppercase tracking-wide text-muted-foreground">
             {t("agentConfig.cheapModel", { defaultValue: "Cheap model" })}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -2101,12 +2101,12 @@ function CheapModelSection({
         />
       ) : null}
       {enabled && !model && adapterDefaultModel ? (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-(length:--text-micro) text-muted-foreground">
           {t("agentConfig.noExplicitCheapModelFallback", { defaultValue: "No explicit cheap model selected — runtime falls back to {{model}}.", model: adapterDefaultModel })}
         </p>
       ) : null}
       {enabled && !model && !adapterDefaultModel ? (
-        <p className="text-[11px] text-amber-500">
+        <p className="text-(length:--text-micro) text-amber-500">
           {t("agentConfig.noCheapModelSelectedNoAdapterDefault", { defaultValue: "No cheap model selected and the adapter has no default. Cheap-lane runs will continue on the primary model with a fallback note." })}
         </p>
       ) : null}

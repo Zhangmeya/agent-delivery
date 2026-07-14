@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, Copy, MoreVertical, Plus, SlidersHorizontal } from "lucide-react";
 import { Link, Navigate, useCaseHref, useParams } from "@/lib/router";
@@ -39,16 +40,17 @@ import { CaseCopyableToken, CaseIdentifierKey } from "@/components/CaseIdentifie
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
-const STATUS_LABEL: Record<CaseStatus, string> = {
-  draft: "Draft",
-  in_progress: "In progress",
-  in_review: "In review",
-  approved: "Approved",
-  done: "Done",
-  cancelled: "Cancelled",
+const STATUS_LABEL: Record<CaseStatus, { key: string; defaultValue: string }> = {
+  draft: { key: "caseDetail.status.draft", defaultValue: "Draft" },
+  in_progress: { key: "caseDetail.status.inProgress", defaultValue: "In progress" },
+  in_review: { key: "caseDetail.status.inReview", defaultValue: "In review" },
+  approved: { key: "caseDetail.status.approved", defaultValue: "Approved" },
+  done: { key: "caseDetail.status.done", defaultValue: "Done" },
+  cancelled: { key: "caseDetail.status.cancelled", defaultValue: "Cancelled" },
 };
 
 const PRIMARY_FIELD_KEYS = ["name", "title", "body", "description"] as const;
+
 const ISSUE_REFERENCE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "done", "blocked", "cancelled"] as const;
 
 type CasePropertyDisplayMode = "compact" | "full";
@@ -83,7 +85,11 @@ function casePropertyRows(caseData: CaseDetailData) {
     else if (key === "body") value = fieldValueByName(caseData.fields, key);
     else value = fieldValueByName(caseData.fields, key);
     return { key, label: key, value };
-  }).filter((row): row is { key: typeof PRIMARY_FIELD_KEYS[number]; label: typeof PRIMARY_FIELD_KEYS[number]; value: unknown } =>
+  }).filter((row): row is {
+    key: typeof PRIMARY_FIELD_KEYS[number];
+    label: typeof PRIMARY_FIELD_KEYS[number];
+    value: unknown;
+  } =>
     row !== null && hasFieldValue(row.value)
   );
 
@@ -123,19 +129,30 @@ function CaseRelationshipsSection({
   parent: CaseParentRef | null;
   children: CaseSummary[];
 }) {
+  const { t } = useTranslation();
   if (!parent && children.length === 0) return null;
 
   return (
-    <section className="space-y-3" aria-label="Case relationships">
+    <section
+      className="space-y-3"
+      aria-label={t("caseDetail.relationships.ariaLabel", { defaultValue: "Case relationships" })}
+    >
       {parent ? (
         <div className="space-y-1">
-          <h2 className="text-xs font-medium text-muted-foreground">Parent</h2>
+          <h2 className="text-xs font-medium text-muted-foreground">
+            {t("caseDetail.relationships.parent", { defaultValue: "Parent" })}
+          </h2>
           <CaseChildrenTree children={[parent]} />
         </div>
       ) : null}
       {children.length > 0 ? (
         <div className="space-y-1">
-          <h2 className="text-xs font-medium text-muted-foreground">Children {children.length}</h2>
+          <h2 className="text-xs font-medium text-muted-foreground">
+            {t("caseDetail.relationships.childrenCount", {
+              defaultValue: "Children {{count}}",
+              count: children.length,
+            })}
+          </h2>
           <CaseChildrenTree children={children} maxVisible={5} />
         </div>
       ) : null}
@@ -194,6 +211,7 @@ function CaseStatusPicker({
   onChange: (next: CaseStatus) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -202,7 +220,7 @@ function CaseStatusPicker({
           type="button"
           disabled={disabled}
           className="inline-flex items-center gap-1 rounded-md hover:bg-accent/50 disabled:opacity-50"
-          aria-label="Change case status"
+          aria-label={t("caseDetail.actions.changeStatus", { defaultValue: "Change case status" })}
         >
           <StatusBadge status={status} />
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -238,6 +256,7 @@ function CaseLabelsPicker({
   selected: IssueLabel[];
   onChange: (labelIds: string[]) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [newColor, setNewColor] = useState<string>(PROJECT_COLORS[0]);
@@ -275,14 +294,15 @@ function CaseLabelsPicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs text-muted-foreground">
-          <Plus className="h-3.5 w-3.5" /> Labels
+          <Plus className="h-3.5 w-3.5" />
+          {t("caseDetail.labels.button", { defaultValue: "Labels" })}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-2">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search labels…"
+          placeholder={t("caseDetail.labels.searchPlaceholder", { defaultValue: "Search labels..." })}
           className="mb-2 h-7 text-xs"
         />
         <div className="max-h-52 space-y-0.5 overflow-y-auto">
@@ -299,7 +319,9 @@ function CaseLabelsPicker({
             </button>
           ))}
           {filtered.length === 0 && !search.trim() && (
-            <p className="px-2 py-1 text-xs text-muted-foreground">No labels yet.</p>
+            <p className="px-2 py-1 text-xs text-muted-foreground">
+              {t("caseDetail.labels.empty", { defaultValue: "No labels yet." })}
+            </p>
           )}
         </div>
         {search.trim() && !all.some((l) => l.name.toLowerCase() === search.trim().toLowerCase()) && (
@@ -309,7 +331,7 @@ function CaseLabelsPicker({
               value={newColor}
               onChange={(e) => setNewColor(e.target.value)}
               className="h-6 w-6 shrink-0 cursor-pointer rounded border border-border bg-transparent"
-              aria-label="New label color"
+              aria-label={t("caseDetail.labels.newColor", { defaultValue: "New label color" })}
             />
             <Button
               size="sm"
@@ -318,7 +340,7 @@ function CaseLabelsPicker({
               disabled={createLabel.isPending}
               onClick={() => createLabel.mutate({ name: search.trim(), color: newColor })}
             >
-              Create “{search.trim()}”
+              {t("caseDetail.labels.create", { defaultValue: "Create \"{{name}}\"", name: search.trim() })}
             </Button>
           </div>
         )}
@@ -343,26 +365,27 @@ function CasePropertiesContent({
   onLabelIdsChange: (labelIds: string[]) => void;
   mode: CasePropertyDisplayMode;
 }) {
+  const { t } = useTranslation();
   const propertyRows = casePropertyRows(caseData);
   const isFull = mode === "full";
 
   return (
     <div className={cn("space-y-4", isFull && "space-y-6")}>
-      <PropertySection title="Case" first>
-        <CasePropertyRow label="Type" mode={mode}>
+      <PropertySection title={t("caseDetail.properties.case", { defaultValue: "Case" })} first>
+        <CasePropertyRow label={t("caseDetail.properties.type", { defaultValue: "Type" })} mode={mode}>
           <PropertyChip>{caseData.caseType}</PropertyChip>
         </CasePropertyRow>
         {caseData.key ? (
-          <CasePropertyRow label="Key" mode={mode}>
+          <CasePropertyRow label={t("caseDetail.properties.key", { defaultValue: "Key" })} mode={mode}>
             <CaseCopyableToken
               value={caseData.key}
-              label="case key"
+              label={t("caseDetail.labels.caseKey", { defaultValue: "case key" })}
               className="font-mono text-xs text-muted-foreground"
               truncate={!isFull}
             />
           </CasePropertyRow>
         ) : null}
-        <CasePropertyRow label="Labels" wrap mode={mode}>
+        <CasePropertyRow label={t("caseDetail.properties.labels", { defaultValue: "Labels" })} wrap mode={mode}>
           {caseData.labels.length > 0 ? (
             caseData.labels.map((label) => (
               <PropertyChip
@@ -374,7 +397,9 @@ function CasePropertiesContent({
               </PropertyChip>
             ))
           ) : (
-            <span className="text-xs text-muted-foreground">None</span>
+            <span className="text-xs text-muted-foreground">
+              {t("caseDetail.common.none", { defaultValue: "None" })}
+            </span>
           )}
           {companyId ? (
             <CaseLabelsPicker
@@ -383,12 +408,16 @@ function CasePropertiesContent({
               onChange={onLabelIdsChange}
             />
           ) : null}
-          {labelsPending ? <span className="text-xs text-muted-foreground">Saving...</span> : null}
+          {labelsPending ? (
+            <span className="text-xs text-muted-foreground">
+              {t("caseDetail.common.saving", { defaultValue: "Saving..." })}
+            </span>
+          ) : null}
         </CasePropertyRow>
       </PropertySection>
 
       {propertyRows.length > 0 ? (
-        <PropertySection title="Fields">
+        <PropertySection title={t("caseDetail.properties.fields", { defaultValue: "Fields" })}>
           {propertyRows.map(({ key, label, value }) => (
             <CasePropertyRow
               key={key}
@@ -404,13 +433,15 @@ function CasePropertiesContent({
         </PropertySection>
       ) : null}
 
-      <PropertySection title="Linked tasks">
+      <PropertySection title={t("caseDetail.properties.linkedTasks", { defaultValue: "Linked tasks" })}>
         {caseData.issueLinks.length === 0 ? (
-          <CasePropertyRow label="Tasks" mode={mode}>
-            <span className="text-xs text-muted-foreground">None yet</span>
+          <CasePropertyRow label={t("caseDetail.properties.tasks", { defaultValue: "Tasks" })} mode={mode}>
+            <span className="text-xs text-muted-foreground">
+              {t("caseDetail.common.noneYet", { defaultValue: "None yet" })}
+            </span>
           </CasePropertyRow>
         ) : (
-          <CasePropertyRow label="Tasks" wrap mode={mode}>
+          <CasePropertyRow label={t("caseDetail.properties.tasks", { defaultValue: "Tasks" })} wrap mode={mode}>
             <div className="flex flex-wrap items-center gap-1.5">
               {caseData.issueLinks.map((link) => (
                 <IssueReferencePill
@@ -428,15 +459,21 @@ function CasePropertiesContent({
         )}
       </PropertySection>
 
-      <PropertySection title={`Children${childCases.length > 0 ? ` ${childCases.length}` : ""}`}>
+      <PropertySection
+        title={childCases.length > 0
+          ? t("caseDetail.properties.childrenCount", { defaultValue: "Children {{count}}", count: childCases.length })
+          : t("caseDetail.properties.children", { defaultValue: "Children" })}
+      >
         <CaseChildrenTree children={childCases} />
       </PropertySection>
 
       {caseData.attachments.length > 0 ? (
-        <PropertySection title="Attachments">
-          <CasePropertyRow label="Files" mode={mode}>
+        <PropertySection title={t("caseDetail.properties.attachments", { defaultValue: "Attachments" })}>
+          <CasePropertyRow label={t("caseDetail.properties.files", { defaultValue: "Files" })} mode={mode}>
             <span className="text-xs text-muted-foreground">
-              {caseData.attachments.length} {caseData.attachments.length === 1 ? "file" : "files"}
+              {caseData.attachments.length === 1
+                ? t("caseDetail.fileCount.one", { defaultValue: "{{count}} file", count: caseData.attachments.length })
+                : t("caseDetail.fileCount.other", { defaultValue: "{{count}} files", count: caseData.attachments.length })}
             </span>
           </CasePropertyRow>
         </PropertySection>
@@ -446,6 +483,7 @@ function CasePropertiesContent({
 }
 
 export function CaseDetail() {
+  const { t } = useTranslation();
   const { caseIdentifier } = useParams<{ caseIdentifier: string }>();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
@@ -493,10 +531,14 @@ export function CaseDetail() {
 
   useEffect(() => {
     setBreadcrumbs([
-      { label: "Cases", href: caseHref() },
-      { label: caseData ? `${caseData.identifier} — ${caseData.title}` : (caseIdentifier ?? "Case") },
+      { label: t("caseDetail.breadcrumb.cases", { defaultValue: "Cases" }), href: caseHref() },
+      {
+        label: caseData
+          ? `${caseData.identifier} — ${caseData.title}`
+          : (caseIdentifier ?? t("caseDetail.breadcrumb.fallback", { defaultValue: "Case" })),
+      },
     ]);
-  }, [setBreadcrumbs, caseData, caseIdentifier, caseHref]);
+  }, [setBreadcrumbs, caseData, caseIdentifier, caseHref, t]);
 
   const events = useMemo(() => eventsQuery.data ?? [], [eventsQuery.data]);
   const caseDocumentSubject = useMemo(() => {
@@ -588,9 +630,11 @@ export function CaseDetail() {
   if (caseQuery.isError || !caseData) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
-        <p className="text-sm text-muted-foreground">Case not found.</p>
+        <p className="text-sm text-muted-foreground">
+          {t("caseDetail.notFound.message", { defaultValue: "Case not found." })}
+        </p>
         <Link to={caseHref()} className="mt-2 inline-block text-sm text-primary hover:underline">
-          ← Back to cases
+          {t("caseDetail.notFound.back", { defaultValue: "← Back to cases" })}
         </Link>
       </div>
     );
@@ -599,13 +643,25 @@ export function CaseDetail() {
   const description = caseData.fields.description ?? caseData.fields.Description ?? null;
 
   function copyCaseToClipboard(currentCase: CaseDetailData) {
+    const statusLabel = STATUS_LABEL[currentCase.status];
     const markdown = [
       `# ${currentCase.identifier} ${currentCase.title}`,
       "",
-      `- Key: ${currentCase.key ?? "none"}`,
-      `- Type: ${currentCase.caseType}`,
-      `- Status: ${STATUS_LABEL[currentCase.status]}`,
-      currentCase.labels.length > 0 ? `- Labels: ${currentCase.labels.map((label) => label.name).join(", ")}` : "- Labels: none",
+      t("caseDetail.copy.key", {
+        defaultValue: "- Key: {{value}}",
+        value: currentCase.key ?? t("caseDetail.common.noneLower", { defaultValue: "none" }),
+      }),
+      t("caseDetail.copy.type", { defaultValue: "- Type: {{value}}", value: currentCase.caseType }),
+      t("caseDetail.copy.status", {
+        defaultValue: "- Status: {{value}}",
+        value: t(statusLabel.key, { defaultValue: statusLabel.defaultValue }),
+      }),
+      currentCase.labels.length > 0
+        ? t("caseDetail.copy.labels", {
+          defaultValue: "- Labels: {{value}}",
+          value: currentCase.labels.map((label) => label.name).join(", "),
+        })
+        : t("caseDetail.copy.noLabels", { defaultValue: "- Labels: none" }),
     ].join("\n");
     void copyTextToClipboard(markdown).then(() => {
       setCopied(true);
@@ -629,7 +685,12 @@ export function CaseDetail() {
             />
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon-xs" aria-label="More case actions" title="More case actions">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={t("caseDetail.actions.more", { defaultValue: "More case actions" })}
+                  title={t("caseDetail.actions.more", { defaultValue: "More case actions" })}
+                >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </PopoverTrigger>
@@ -640,7 +701,7 @@ export function CaseDetail() {
                   onClick={() => copyCaseToClipboard(caseData)}
                 >
                   {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  Copy as markdown
+                  {t("caseDetail.actions.copyMarkdown", { defaultValue: "Copy as markdown" })}
                 </button>
                 <button
                   type="button"
@@ -650,7 +711,7 @@ export function CaseDetail() {
                   }}
                 >
                   <SlidersHorizontal className="h-3 w-3" />
-                  Properties
+                  {t("caseDetail.tabs.properties", { defaultValue: "Properties" })}
                 </button>
               </PopoverContent>
             </Popover>
@@ -666,10 +727,15 @@ export function CaseDetail() {
 
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList variant="line" className="w-full justify-start gap-1">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="properties">Properties</TabsTrigger>
+          <TabsTrigger value="overview">
+            {t("caseDetail.tabs.overview", { defaultValue: "Overview" })}
+          </TabsTrigger>
+          <TabsTrigger value="properties">
+            {t("caseDetail.tabs.properties", { defaultValue: "Properties" })}
+          </TabsTrigger>
           <TabsTrigger value="activity">
-            Activity{events.length > 0 && <span className="ml-1 text-muted-foreground">{events.length}</span>}
+            {t("caseDetail.tabs.activity", { defaultValue: "Activity" })}
+            {events.length > 0 && <span className="ml-1 text-muted-foreground">{events.length}</span>}
           </TabsTrigger>
         </TabsList>
 
@@ -684,7 +750,9 @@ export function CaseDetail() {
 
           {description ? (
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold">Description</h2>
+              <h2 className="text-sm font-semibold">
+                {t("caseDetail.sections.description", { defaultValue: "Description" })}
+              </h2>
               <Card className="px-4 py-3">
                 <CaseFieldValue value={description} />
               </Card>
@@ -693,7 +761,12 @@ export function CaseDetail() {
 
           {caseData.attachments.length > 0 && (
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold">Attachments ({caseData.attachments.length})</h2>
+              <h2 className="text-sm font-semibold">
+                {t("caseDetail.sections.attachmentsCount", {
+                  defaultValue: "Attachments ({{count}})",
+                  count: caseData.attachments.length,
+                })}
+              </h2>
               <CaseAttachmentsGallery attachments={caseData.attachments} />
             </section>
           )}

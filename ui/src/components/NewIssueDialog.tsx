@@ -1839,7 +1839,7 @@ export function NewIssueDialog() {
             <div className="px-4 py-3 space-y-2">
             <div className="space-y-1.5">
               <div className="text-xs font-medium">{t("newIssue.executionWorkspaceTitle", { defaultValue: "Execution workspace" })}</div>
-              <div className="text-[11px] text-muted-foreground">
+              <div className="text-(length:--text-micro) text-muted-foreground">
                 {t("newIssue.executionWorkspaceHelp", { defaultValue: "Control whether this issue runs in the shared workspace, a new isolated workspace, or an existing one." })}
               </div>
               <select
@@ -1869,7 +1869,7 @@ export function NewIssueDialog() {
                 />
               )}
               {executionWorkspaceMode === "reuse_existing" && selectedReusableExecutionWorkspace && (
-                <div className="text-[11px] text-muted-foreground">
+                <div className="text-(length:--text-micro) text-muted-foreground">
                   {t("newIssue.reusingExecutionWorkspace", {
                     defaultValue: "Reusing {{name}} from {{source}}.",
                     name: selectedReusableExecutionWorkspace.name,
@@ -1878,7 +1878,7 @@ export function NewIssueDialog() {
                 </div>
               )}
               {showParentWorkspaceWarning ? (
-                <div className="rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-100">
+                <div className="rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1.5 text-(length:--text-micro) text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-100">
                   {t("newIssue.executionWorkspace.parentWarning", {
                     defaultValue: "Warning: this sub-issue will no longer use the parent issue workspace{{suffix}}.",
                     suffix: parentExecutionWorkspaceLabel ? ` (${parentExecutionWorkspaceLabel})` : "",
@@ -1928,7 +1928,7 @@ export function NewIssueDialog() {
                     ))}
                   </div>
                   {assigneeModelLane === "cheap" && (
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-(length:--text-micro) text-muted-foreground">
                       {t("newIssue.modelLane.cheapSendsPrefix", { defaultValue: "Sends" })} <code>modelProfile: "cheap"</code>{" "}
                       {assigneeCheapProfile?.adapterConfig && typeof (assigneeCheapProfile.adapterConfig as Record<string, unknown>).model === "string"
                         ? <>{t("newIssue.modelLane.adapterDefaultPrefix", { defaultValue: "· adapter default" })} <code>{String((assigneeCheapProfile.adapterConfig as Record<string, unknown>).model)}</code></>
@@ -1938,10 +1938,10 @@ export function NewIssueDialog() {
                     </p>
                   )}
                   {assigneeModelLane === "primary" && (
-                    <p className="text-[11px] text-muted-foreground">{t("newIssue.modelLane.primaryDescription", { defaultValue: "Runs on the agent's primary model." })}</p>
+                    <p className="text-(length:--text-micro) text-muted-foreground">{t("newIssue.modelLane.primaryDescription", { defaultValue: "Runs on the agent's primary model." })}</p>
                   )}
                   {assigneeModelLane === "custom" && (
-                    <p className="text-[11px] text-muted-foreground">{t("newIssue.modelLane.customDescription", { defaultValue: "Override the model and effort for this issue only." })}</p>
+                    <p className="text-(length:--text-micro) text-muted-foreground">{t("newIssue.modelLane.customDescription", { defaultValue: "Override the model and effort for this issue only." })}</p>
                   )}
                 </div>
                 {assigneeModelLane === "custom" && (
@@ -2236,7 +2236,7 @@ export function NewIssueDialog() {
             </PopoverTrigger>
             <PopoverContent className="w-44 p-1" align="start" data-testid="new-issue-more-menu">
               <div className="sm:hidden">
-                <div className="px-2 py-1 text-[10px] font-medium uppercase text-muted-foreground">
+                <div className="px-2 py-1 text-(length:--text-nano) font-medium uppercase text-muted-foreground">
                   {t("newIssue.priority", { defaultValue: "Priority" })}
                 </div>
                 {priorityOptions.map((p) => (

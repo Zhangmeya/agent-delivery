@@ -457,10 +457,10 @@ function RevisionList({
   return (
     <aside className="space-y-1">
       <header className="flex items-center justify-between pb-2">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
           {t("routineHistory.revisions", { defaultValue: "Revisions" })}
         </p>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-(length:--text-micro) text-muted-foreground">
           {t("routineHistory.totalRevisions", {
             defaultValue: "{{count}} total",
             count: totalRevisions,
@@ -500,12 +500,12 @@ function RevisionList({
                 })}
               </span>
               {isCurrent && (
-                <span className="rounded-full border border-border px-1.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                <span className="rounded-full border border-border px-1.5 text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
                   {t("Current", { defaultValue: "Current" })}
                 </span>
               )}
               {revision.restoredFromRevisionId && (
-                <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-[10px] uppercase tracking-[0.12em] text-amber-200">
+                <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow) text-amber-200">
                   {t("routineHistory.restoredBadge", { defaultValue: "Restored" })}
                 </span>
               )}
@@ -654,7 +654,7 @@ function RevisionPreview({
       </header>
 
       <div className={`${cardWrapper} p-3`}>
-        <p className="pb-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="pb-2 text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
           {t("routineHistory.structuredFields", { defaultValue: "Structured fields" })}
         </p>
         <div className="grid gap-3 md:grid-cols-2 divide-y md:divide-y-0 divide-border">
@@ -664,7 +664,7 @@ function RevisionPreview({
               <p className="text-sm">
                 {row.value || <span className="text-muted-foreground">—</span>}
                 {row.differs && (
-                  <span className="ml-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-[10px] uppercase tracking-[0.12em] text-amber-200">
+                  <span className="ml-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow) text-amber-200">
                     {t("routineHistory.differsFromCurrent", { defaultValue: "differs from current" })}
                   </span>
                 )}
@@ -675,7 +675,7 @@ function RevisionPreview({
       </div>
 
       <div className={`${cardWrapper} p-3 space-y-2`}>
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
           {t("routineHistory.description", { defaultValue: "Description" })}
         </p>
         <div className="rounded-md bg-background/40 p-3 text-sm leading-7">
@@ -688,7 +688,7 @@ function RevisionPreview({
       </div>
 
       <div className={`${cardWrapper} p-3 space-y-2`}>
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
           {t("routineHistory.triggersCount", {
             defaultValue: "Triggers ({{count}})",
             count: triggers.length,
@@ -727,7 +727,7 @@ function RevisionPreview({
 
       {snapshot.variables.length > 0 && (
         <div className={`${cardWrapper} p-3 space-y-2`}>
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
             {t("routineHistory.variablesCount", {
               defaultValue: "Variables ({{count}})",
               count: snapshot.variables.length,
@@ -925,7 +925,7 @@ function RoutineRevisionDiffModal({
         </div>
         <div className="overflow-auto flex-1 space-y-4">
           <section className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
               {t("routineHistory.fieldChanges", { defaultValue: "Field changes" })}
             </p>
             {fieldChanges.length === 0 ? (
@@ -956,7 +956,7 @@ function RoutineRevisionDiffModal({
             )}
           </section>
           <section className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
               {t("routineHistory.descriptionDiff", { defaultValue: "Description diff" })}
             </p>
             <DiffTable rows={descriptionDiff} />
@@ -1045,7 +1045,7 @@ function DiffTable({ rows }: { rows: DiffRow[] }) {
   };
   return (
     <div className="rounded-md border border-border text-xs font-mono leading-6 overflow-hidden">
-      <div className="grid grid-cols-[56px_56px_24px_minmax(0,1fr)] border-b border-border/60 bg-muted/30 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+      <div className="grid grid-cols-(--gtc-1) border-b border-border/60 bg-muted/30 px-3 py-2 text-(length:--text-micro) uppercase tracking-wide text-muted-foreground">
         <span>{t("routineHistory.old", { defaultValue: "Old" })}</span>
         <span>{t("routineHistory.new", { defaultValue: "New" })}</span>
         <span />

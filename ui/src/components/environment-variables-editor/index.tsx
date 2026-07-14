@@ -459,11 +459,11 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
       {hasRows ? (
         <>
           {/* Header (desktop only) */}
-          <div className="hidden gap-x-1.5 @[40rem]/env:grid @[40rem]/env:grid-cols-[minmax(160px,2fr)_minmax(240px,3fr)_32px]">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="hidden gap-x-1.5 @[40rem]/env:grid @[40rem]/env:grid-cols-(--gtc-14)">
+            <span className="text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">
               {t("common.name", { defaultValue: "Name" })}
             </span>
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">
               {t("secrets.value", { defaultValue: "Value" })}
             </span>
             <span />
@@ -526,7 +526,7 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
                 key={secret.id}
                 type="button"
                 onClick={() => bindRecentSecret(secret)}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 font-mono text-(length:--text-micro) text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
                 title={t("envVarEditor.bindSecret", {
                   defaultValue: "Bind {{name}}",
                   name: secret.name,
