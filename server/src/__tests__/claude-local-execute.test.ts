@@ -807,6 +807,9 @@ describe("claude execute", () => {
       expect(result.exitCode).toBe(0);
       expect(result.errorMessage).toBeNull();
       const expectedResolvedCommand = process.platform === "win32" ? `${commandPath}.cmd` : commandPath;
+      expect(result.usage).toEqual({ inputTokens: 1, cachedInputTokens: 0, outputTokens: 1 });
+      expect(result.usageBasis).toBe("per_run");
+      expect(result.costUsd).toBeNull();
       expect(loggedCommand?.toLowerCase()).toBe(expectedResolvedCommand.toLowerCase());
       expect(loggedEnv.HOME).toBe(root);
       expect(loggedEnv.CLAUDE_CONFIG_DIR).toBe(claudeConfigDir);

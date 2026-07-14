@@ -378,10 +378,26 @@ function compactDecisionAction(item: AttentionItem, verbId: string): CompactDeci
 }
 
 /** The compact accept/reject verbs a collapsed row can resolve in place. */
-function collectCompactActions(item: AttentionItem): Array<{ action: CompactDecisionAction; label: string; id: string }> {
+function collectCompactActions(
+  item: AttentionItem,
+): Array<{
+  action: CompactDecisionAction;
+  description: string | null;
+  id: string;
+  label: string;
+}> {
   return item.decisionVerbs.slice(0, 3).flatMap((verb) => {
     const action = compactDecisionAction(item, verb.id);
-    return action ? [{ action, label: compactDecisionActionLabel(action), id: verb.id }] : [];
+    return action
+      ? [
+        {
+          action,
+          description: verb.description,
+          id: verb.id,
+          label: verb.label || compactDecisionActionLabel(action),
+        },
+      ]
+      : [];
   });
 }
 
@@ -467,11 +483,11 @@ function CompactDecisionActions({
       className="flex w-full flex-wrap items-center gap-2 @xl:w-auto @xl:justify-end @xl:gap-1"
       aria-label={translateInstant("attentionQueue.decisionActions", { defaultValue: "Decision actions" })}
     >
-      {actions.map(({ action, id, label }) => (
+      {actions.map(({ action, description, id, label }) => (
         <Button
           key={id}
           type="button"
-          variant={action === "reject" ? "destructive" : action === "accept" || action === "approve" ? "default" : "outline"}
+          variant={decisionVerbVariant({ id, label, description })}
           size="xs"
           className={cn(ACTION_BTN, "min-w-0 flex-1 @xl:flex-none")}
           disabled={decision.isPending}
@@ -509,6 +525,19 @@ function compactDecisionSuccessLabel(sourceKind: AttentionItem["sourceKind"], ac
   return action === "accept"
     ? translateInstant("attentionQueue.success.confirmationAccepted", { defaultValue: "Confirmation accepted" })
     : translateInstant("attentionQueue.success.confirmationDeclined", { defaultValue: "Confirmation declined" });
+}
+
+function decisionVerbVariant(
+  verb: AttentionItem["decisionVerbs"][number],
+): "default" | "outline" | "destructive" {
+  const text = `${verb.label} ${verb.description ?? ""}`.toLowerCase();
+  if (/\b(reject|decline|deny|delete|remove)\b/.test(text) || /拒绝|驳回|删除|移除/.test(text)) {
+    return "destructive";
+  }
+  if (/\b(accept|approve|confirm|apply)\b/.test(text) || /接受|批准|确认|应用/.test(text)) {
+    return "default";
+  }
+  return "outline";
 }
 
 /** Inline project identity keeps useful context without a competing badge. */

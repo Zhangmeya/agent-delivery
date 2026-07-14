@@ -10,9 +10,10 @@ import {
   UserRound,
   UserRoundPen,
 } from "lucide-react";
-import type { DeploymentMode } from "@penclipai/shared";
+import type { DeploymentMode, ServerGitInfo } from "@penclipai/shared";
 import { Link } from "@/lib/router";
 import { authApi } from "@/api/auth";
+import { BRAND_DOCS_URL, BRAND_NAME, BRAND_REPOSITORY_URL, BRAND_WEBSITE_URL } from "@/lib/branding";
 import { DEFAULT_INSTANCE_SETTINGS_PATH } from "@/lib/instance-settings";
 import { queryKeys } from "@/lib/queryKeys";
 import { useSidebar } from "../context/SidebarContext";
@@ -25,13 +26,14 @@ import { SidebarServerInfo } from "./SidebarServerInfo";
 import { Badge } from "@/components/ui/badge";
 
 const PROFILE_SETTINGS_PATH = "/company/settings/instance/profile";
-const DOCS_URL = "https://docs.paperclip.ing/";
-const FEEDBACK_URL = "https://paperclip.ing/feedback";
+const FEEDBACK_URL = `${BRAND_WEBSITE_URL}/feedback`;
+const SOURCE_VERSION_RE = /\+\d+\.git\.([0-9a-f]{7,40})(?:\.dirty)?$/i;
 
 interface SidebarAccountMenuProps {
   deploymentMode?: DeploymentMode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  serverGit?: ServerGitInfo;
   version?: string | null;
 }
 
@@ -64,6 +66,11 @@ function deriveUserSlug(name: string | null | undefined, email: string | null | 
     if (slug) return slug;
   }
   return "me";
+}
+
+function sourceVersionSha(version: string): string | null {
+  const sourceVersion = version.match(SOURCE_VERSION_RE);
+  return sourceVersion?.[1] ?? null;
 }
 
 function MenuAction({ label, description, icon: Icon, onClick, href, external = false }: MenuActionProps) {
@@ -109,6 +116,7 @@ export function SidebarAccountMenu({
   deploymentMode,
   open: controlledOpen,
   onOpenChange,
+  serverGit,
   version,
 }: SidebarAccountMenuProps) {
   const { t } = useTranslation();
@@ -129,6 +137,7 @@ export function SidebarAccountMenu({
     onSuccess: async () => {
       setOpen(false);
       await queryClient.invalidateQueries({ queryKey: queryKeys.auth.session });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.health });
     },
   });
 
@@ -146,6 +155,12 @@ export function SidebarAccountMenu({
     : t("Local", { defaultValue: "Local" });
   const initials = deriveInitials(displayName);
   const profileHref = `/u/${deriveUserSlug(session?.user.name, session?.user.email, session?.user.id)}`;
+  const sourceSha = version ? sourceVersionSha(version) : null;
+  const sourceFullSha =
+    sourceSha && serverGit?.available && serverGit.fullSha.toLowerCase().startsWith(sourceSha.toLowerCase())
+      ? serverGit.fullSha
+      : sourceSha;
+  const sourceBranch = sourceSha && serverGit?.available ? serverGit.branchName : null;
 
   function closeNavigationChrome() {
     setOpen(false);
@@ -191,7 +206,31 @@ export function SidebarAccountMenu({
                   </Badge>
                 </div>
                 <p className="truncate text-sm text-muted-foreground">{secondaryLabel}</p>
-                {version ? (
+                {sourceSha && sourceFullSha ? (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {sourceBranch ? (
+                      <a
+                        href={`${BRAND_REPOSITORY_URL}/tree/${encodeURIComponent(sourceBranch)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block truncate transition-colors hover:text-foreground"
+                      >
+                        {sourceBranch}
+                      </a>
+                    ) : null}
+                    <p>
+                      {BRAND_NAME}{" "}
+                      <a
+                        href={`${BRAND_REPOSITORY_URL}/commit/${sourceFullSha}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="transition-colors hover:text-foreground"
+                      >
+                        {sourceSha.slice(0, 7)}
+                      </a>
+                    </p>
+                  </div>
+                ) : version ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t("Paperclip v{{version}}", { defaultValue: "Paperclip v{{version}}", version })}
                   </p>
@@ -233,7 +272,7 @@ export function SidebarAccountMenu({
                   defaultValue: "Open Paperclip docs in a new tab.",
                 })}
                 icon={BookOpen}
-                href={DOCS_URL}
+                href={BRAND_DOCS_URL}
                 external
                 onClick={() => setOpen(false)}
               />

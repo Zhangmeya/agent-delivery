@@ -796,7 +796,7 @@ export function OnboardingWizard() {
             <span className="sr-only">{t("Close", { defaultValue: "Close" })}</span>
           </button>
           <div className="absolute top-4 right-4 z-10">
-            <LanguageSwitcher contentClassName="z-(--z-70)" />
+            <LanguageSwitcher contentClassName="z-(--z-120)" />
           </div>
 
           {/* Step 0: Front Door — full-screen choice */}
@@ -1770,7 +1770,7 @@ export function OnboardingWizard() {
               name + mission steps) */}
           <div
             className={cn(
-              "hidden md:block overflow-hidden bg-(--hex-1d1d1d) transition-(--tp-width-opacity) duration-500 ease-in-out",
+              "pointer-events-none hidden md:block overflow-hidden bg-(--hex-1d1d1d) transition-(--tp-width-opacity) duration-500 ease-in-out",
               step === 1 || step === 2 ? "w-1/2 opacity-100" : "w-0 opacity-0"
             )}
           >
