@@ -631,11 +631,10 @@ describe("CompanyEnvironments — test provider button", () => {
     });
 
     await act(async () => {
-      findButton(document.body, "Cancel")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      click(findButton(document.body, "Cancel"));
     });
-    await flushReact();
 
-    expect(getEnvironmentFormPage()).toBeNull();
+    await waitForAssertion(() => expect(getEnvironmentFormPage()).toBeNull());
   });
 
   it("opens the edit form on a standalone page with existing values and closes after save", async () => {
