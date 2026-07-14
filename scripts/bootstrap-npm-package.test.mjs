@@ -9,9 +9,9 @@ import {
 } from "./bootstrap-npm-package.mjs";
 
 test("parseArgs recognizes publish and skip-build flags", () => {
-  assert.deepEqual(parseArgs(["@penclipai/adapter-acpx-local", "--publish", "--skip-build"]), {
+  assert.deepEqual(parseArgs(["@paperclipai/plugin-workspace-diff", "--publish", "--skip-build"]), {
     help: false,
-    selector: "@penclipai/adapter-acpx-local",
+    selector: "@paperclipai/plugin-workspace-diff",
     publish: true,
     skipBuild: true,
     otp: null,
@@ -19,9 +19,9 @@ test("parseArgs recognizes publish and skip-build flags", () => {
 });
 
 test("parseArgs accepts an explicit otp value", () => {
-  assert.deepEqual(parseArgs(["packages/adapters/acpx-local", "--publish", "--otp", "123456"]), {
+  assert.deepEqual(parseArgs(["packages/plugins/plugin-workspace-diff", "--publish", "--otp", "123456"]), {
     help: false,
-    selector: "packages/adapters/acpx-local",
+    selector: "packages/plugins/plugin-workspace-diff",
     publish: true,
     skipBuild: false,
     otp: "123456",
@@ -29,9 +29,9 @@ test("parseArgs accepts an explicit otp value", () => {
 });
 
 test("parseArgs leaves otp null when omitted", () => {
-  assert.deepEqual(parseArgs(["packages/adapters/acpx-local", "--publish"]), {
+  assert.deepEqual(parseArgs(["packages/plugins/plugin-workspace-diff", "--publish"]), {
     help: false,
-    selector: "packages/adapters/acpx-local",
+    selector: "packages/plugins/plugin-workspace-diff",
     publish: true,
     skipBuild: false,
     otp: null,
@@ -118,7 +118,7 @@ test("buildPublishPackageJson converts local compatibility aliases to npm aliase
         version: "1.0.0",
         dependencies: {
           "@paperclipai/plugin-sdk": "link:../../packages/plugins/sdk",
-          "@paperclipai/shared": "workspace:@penclipai/shared@*",
+          "@penclipai/shared": "workspace:@penclipai/shared@*",
           "@daytonaio/sdk": "^0.171.0",
         },
       },
@@ -132,7 +132,7 @@ test("buildPublishPackageJson converts local compatibility aliases to npm aliase
 
   assert.deepEqual(packageJson.dependencies, {
     "@paperclipai/plugin-sdk": "npm:@penclipai/plugin-sdk@2026.428.0",
-    "@paperclipai/shared": "npm:@penclipai/shared@2026.428.1",
+    "@penclipai/shared": "npm:@penclipai/shared@2026.428.1",
     "@daytonaio/sdk": "^0.171.0",
   });
 });

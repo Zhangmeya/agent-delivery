@@ -102,7 +102,7 @@ export function CompanySettingsSidebar() {
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide px-3 py-2">
-        <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="px-3 pb-1 text-(length:--text-micro) font-semibold uppercase tracking-wide text-muted-foreground">
           {t("Company settings", { defaultValue: "Company settings" })}
         </div>
         <div className="flex flex-col gap-0.5">
@@ -136,7 +136,7 @@ export function CompanySettingsSidebar() {
           <SidebarNavItem to="/company/settings/invites" label={t("Invites")} icon={MailPlus} end />
           <SidebarNavItem to="/company/settings/secrets" label={t("Secrets")} icon={KeyRound} end />
         </div>
-        <div className="mt-5 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="mt-5 px-3 pb-1 text-(length:--text-micro) font-semibold uppercase tracking-wide text-muted-foreground">
           {t("Instance settings", { defaultValue: "Instance settings" })}
         </div>
         <div className="flex flex-col gap-0.5">

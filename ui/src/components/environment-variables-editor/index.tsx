@@ -10,8 +10,8 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, KeyRound, Plus, RotateCcw, Save } from "lucide-react";
-import type { CompanySecret, EnvBinding } from "@penclipai/shared";
+import { AlertCircle, KeyRound, Plus, RotateCcw, Save, UserRound } from "lucide-react";
+import type { CompanySecret, EnvBinding, UserSecretDefinition } from "@penclipai/shared";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useOptionalToastActions } from "@/context/ToastContext";
@@ -20,6 +20,7 @@ import { parseDotenv } from "./parse-dotenv";
 import {
   computeDuplicateNames,
   computeRowHealth,
+  computeUserSecretRowHealth,
   emptyRow,
   envKeyFromSecretName,
   rowsFromValue,
@@ -34,33 +35,57 @@ const DEFAULT_RESERVED_PREFIXES = ["PAPERCLIP_"];
 const DEFAULT_HINT =
   "Set the KEY to the env var name the process expects, for example GH_TOKEN. Choose a secret to resolve a stored value at run start. PAPERCLIP_* variables are injected automatically.";
 
+// Canonical entries for dirty comparison. Must mirror the emit semantics of
+// valueFromRows (trimmed names, incomplete refs dropped, last-writer-wins on
+// trimmed duplicates) — otherwise a saved value that round-trips lossily shows
+// a phantom "Unsaved changes" banner the moment the form opens.
+function normalizedEnvEntries(
+  value: Record<string, EnvBinding> | null | undefined,
+): Array<[string, Record<string, unknown>]> {
+  if (!value || typeof value !== "object") return [];
+  const byName = new Map<string, Record<string, unknown>>();
+  for (const [rawName, binding] of Object.entries(value)) {
+    const name = rawName.trim();
+    if (!name) continue;
+    if (typeof binding === "string") {
+      byName.set(name, { type: "plain", value: binding });
+    } else if (binding?.type === "secret_ref") {
+      const secretId = typeof binding.secretId === "string" ? binding.secretId : "";
+      if (!secretId) continue; // incomplete ref — never emitted by the editor
+      byName.set(name, {
+        type: "secret_ref",
+        secretId,
+        version: typeof binding.version === "number" ? binding.version : "latest",
+      });
+    } else if (binding?.type === "user_secret_ref") {
+      const key = typeof binding.key === "string" ? binding.key.trim() : "";
+      if (!key) continue; // incomplete ref — never emitted by the editor
+      byName.set(name, {
+        type: "user_secret_ref",
+        key,
+        version: typeof binding.version === "number" ? binding.version : "latest",
+        required: binding.required !== false,
+      });
+    } else if (binding?.type === "plain") {
+      byName.set(name, { type: "plain", value: typeof binding.value === "string" ? binding.value : "" });
+    } else {
+      byName.set(name, { type: "plain", value: "" });
+    }
+  }
+  return [...byName.entries()].sort(([left], [right]) => left.localeCompare(right));
+}
+
 function normalizedEnvKey(value: Record<string, EnvBinding> | null | undefined): string {
-  if (!value || typeof value !== "object") return "";
-  const entries = Object.entries(value)
-    .map(([name, binding]) => {
-      if (typeof binding === "string") {
-        return [name, { type: "plain", value: binding }] as const;
-      }
-      if (binding?.type === "secret_ref") {
-        return [
-          name,
-          {
-            type: "secret_ref",
-            secretId: typeof binding.secretId === "string" ? binding.secretId : "",
-            version: typeof binding.version === "number" ? binding.version : "latest",
-          },
-        ] as const;
-      }
-      if (binding?.type === "plain") {
-        return [
-          name,
-          { type: "plain", value: typeof binding.value === "string" ? binding.value : "" },
-        ] as const;
-      }
-      return [name, { type: "plain", value: "" }] as const;
-    })
-    .sort(([left], [right]) => left.localeCompare(right));
-  return JSON.stringify(entries);
+  return JSON.stringify(normalizedEnvEntries(value));
+}
+
+const CHANGE_SUMMARY_MAX_NAMES = 3;
+
+function formatChangedNames(names: readonly string[]): string {
+  const shown = names.slice(0, CHANGE_SUMMARY_MAX_NAMES).join(", ");
+  return names.length > CHANGE_SUMMARY_MAX_NAMES
+    ? `${shown} +${names.length - CHANGE_SUMMARY_MAX_NAMES} more`
+    : shown;
 }
 
 function cloneRows(rows: readonly EnvRow[]): EnvRow[] {
@@ -85,6 +110,8 @@ function rowDirtyFields(row: EnvRow, committedRow: EnvRow | undefined): Environm
       row.source !== committedRow.source ||
       row.textValue !== committedRow.textValue ||
       row.secretId !== committedRow.secretId ||
+      row.userSecretKey !== committedRow.userSecretKey ||
+      row.required !== committedRow.required ||
       row.version !== committedRow.version,
   };
 }
@@ -93,6 +120,11 @@ export interface EnvironmentVariablesEditorProps {
   value: Record<string, EnvBinding>;
   onChange: (next: Record<string, EnvBinding> | undefined) => void;
   secrets: readonly CompanySecret[];
+  /**
+   * Optional company user-secret definitions. When present, the "User secret"
+   * source becomes a picker; otherwise operators can type the definition key.
+   */
+  userSecretDefinitions?: readonly UserSecretDefinition[];
   onCreateSecret: (name: string, value: string) => Promise<CompanySecret>;
   /** Optional "Recently used" picker group + quick-bind chips. */
   recentlyUsedSecrets?: readonly CompanySecret[];
@@ -102,6 +134,8 @@ export interface EnvironmentVariablesEditorProps {
   reservedPrefixes?: readonly string[];
   /** Context-specific hint line. `null` hides the default copy; omit for default. */
   footerHint?: ReactNode | null;
+  /** Reports editor-local draft changes that are not yet promoted to the parent value. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export interface EnvironmentVariablesEditorHandle {
@@ -116,11 +150,13 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
   value,
   onChange,
   secrets,
+  userSecretDefinitions,
   onCreateSecret,
   recentlyUsedSecrets,
   disabled,
   reservedPrefixes = DEFAULT_RESERVED_PREFIXES,
   footerHint,
+  onDirtyChange,
 }: EnvironmentVariablesEditorProps, ref) {
   const { t } = useTranslation();
   const toast = useOptionalToastActions();
@@ -200,6 +236,50 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
   const draftValue = useMemo(() => valueFromRows(rows), [rows]);
   const draftValueKey = useMemo(() => normalizedEnvKey(draftValue), [draftValue]);
   const hasUnsavedChanges = draftValueKey !== committedValueKey;
+
+  useEffect(() => {
+    onDirtyChange?.(!disabled && hasUnsavedChanges);
+  }, [disabled, hasUnsavedChanges, onDirtyChange]);
+
+  // Which variables differ from the committed baseline, so the unsaved-changes
+  // banner can say *what* is unsaved instead of a bare label. A rename shows
+  // as one addition plus one removal.
+  const changeSummary = useMemo(() => {
+    const committed = new Map(
+      normalizedEnvEntries(valueFromRows(committedRows)).map(([name, binding]) => [name, JSON.stringify(binding)]),
+    );
+    const draft = new Map(
+      normalizedEnvEntries(draftValue).map(([name, binding]) => [name, JSON.stringify(binding)]),
+    );
+    const added: string[] = [];
+    const changed: string[] = [];
+    for (const [name, bindingKey] of draft) {
+      if (!committed.has(name)) added.push(name);
+      else if (committed.get(name) !== bindingKey) changed.push(name);
+    }
+    const removed = [...committed.keys()].filter((name) => !draft.has(name));
+    return { added, changed, removed };
+  }, [committedRows, draftValue]);
+
+  const changeSummaryText = useMemo(() => {
+    const parts: string[] = [];
+    if (changeSummary.added.length > 0) parts.push(`New: ${formatChangedNames(changeSummary.added)}`);
+    if (changeSummary.changed.length > 0) parts.push(`Edited: ${formatChangedNames(changeSummary.changed)}`);
+    if (changeSummary.removed.length > 0) parts.push(`Removed: ${formatChangedNames(changeSummary.removed)}`);
+    return parts.join(" · ");
+  }, [changeSummary]);
+
+  // Warn before the tab unloads with a dirty draft (same guard as the skill
+  // file editor). In-app navigation is not intercepted here.
+  useEffect(() => {
+    if (disabled || !hasUnsavedChanges) return;
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [disabled, hasUnsavedChanges]);
 
   const flushPendingDraft = useCallback(() => {
     if (disabled || !hasUnsavedChanges) return null;
@@ -286,6 +366,8 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
         existing.textValue = pairValue;
         existing.secretId = "";
         existing.sensitiveDismissed = false;
+        existing.userSecretKey = "";
+        existing.required = true;
       } else {
         working.push({ ...emptyRow(), name: key, textValue: pairValue });
       }
@@ -305,7 +387,7 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
     const next = rows.map((row) => ({ ...row }));
     const trailing = next[next.length - 1];
     let target: EnvRow;
-    if (trailing && !trailing.name && !trailing.textValue && !trailing.secretId) {
+    if (trailing && !trailing.name && !trailing.textValue && !trailing.secretId && !trailing.userSecretKey) {
       target = trailing;
     } else {
       target = emptyRow();
@@ -334,8 +416,15 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
   const duplicateNames = useMemo(() => computeDuplicateNames(rows), [rows]);
 
   const attentionCount = useMemo(
-    () => rows.reduce((count, row) => (computeRowHealth(row, secrets) ? count + 1 : count), 0),
-    [rows, secrets],
+    () =>
+      rows.reduce(
+        (count, row) =>
+          computeRowHealth(row, secrets) || computeUserSecretRowHealth(row, userSecretDefinitions)
+            ? count + 1
+            : count,
+        0,
+      ),
+    [rows, secrets, userSecretDefinitions],
   );
 
   const quickBind = useMemo(() => {
@@ -358,7 +447,7 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
     <TooltipProvider>
       <div ref={editorRootRef} className="@container/env space-y-2">
       {attentionCount > 1 ? (
-        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+        <p className="inline-flex items-center gap-1.5 text-(length:--text-micro) font-medium text-amber-700 dark:text-amber-400">
           <AlertCircle className="size-3.5" />
           {t("agentConfig.secretBindingsNeedAttention", {
             defaultValue: "{{count}} secret binding(s) need attention:",
@@ -370,11 +459,11 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
       {hasRows ? (
         <>
           {/* Header (desktop only) */}
-          <div className="hidden gap-x-1.5 @[40rem]/env:grid @[40rem]/env:grid-cols-[minmax(160px,2fr)_minmax(240px,3fr)_32px]">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="hidden gap-x-1.5 @[40rem]/env:grid @[40rem]/env:grid-cols-(--gtc-14)">
+            <span className="text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">
               {t("common.name", { defaultValue: "Name" })}
             </span>
-            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">
               {t("secrets.value", { defaultValue: "Value" })}
             </span>
             <span />
@@ -389,6 +478,7 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
                 row={row}
                 isLast={index === rows.length - 1}
                 secrets={secrets}
+                userSecretDefinitions={userSecretDefinitions}
                 recentlyUsedSecrets={recentlyUsedSecrets}
                 disabled={disabled}
                 nameIssue={issue}
@@ -427,7 +517,7 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
 
         {quickBind.length > 0 && !disabled ? (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/70">
+            <span className="inline-flex items-center gap-1 text-(length:--text-micro) text-muted-foreground/70">
               <KeyRound className="size-3" />
               {t("envVarEditor.recentlyUsed", { defaultValue: "Recently used:" })}
             </span>
@@ -436,7 +526,7 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
                 key={secret.id}
                 type="button"
                 onClick={() => bindRecentSecret(secret)}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 font-mono text-(length:--text-micro) text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
                 title={t("envVarEditor.bindSecret", {
                   defaultValue: "Bind {{name}}",
                   name: secret.name,
@@ -455,9 +545,16 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
           role="status"
           className="mt-3 flex w-full flex-col gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-amber-950 shadow-sm dark:bg-amber-500/15 dark:text-amber-100 @[34rem]/env:flex-row @[34rem]/env:items-center @[34rem]/env:justify-between"
         >
-          <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
-            <span className="size-2 rounded-full bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.18)]" />
-            <span>{t("common.unsavedChanges", { defaultValue: "Unsaved changes" })}</span>
+          <div className="min-w-0 space-y-1">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+              <span className="size-2 rounded-full bg-amber-500 shadow-[0_0_0_3px_rgba(245,158,11,0.18)]" />
+              <span>{t("common.unsavedChanges", { defaultValue: "Unsaved changes" })}</span>
+            </div>
+            {changeSummaryText ? (
+              <p className="truncate text-xs text-amber-900/80 dark:text-amber-100/80">
+                {changeSummaryText}
+              </p>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -480,7 +577,16 @@ export const EnvironmentVariablesEditor = forwardRef<EnvironmentVariablesEditorH
         </div>
       ) : null}
 
-      {hint ? <p className="text-[11px] text-muted-foreground/70">{hint}</p> : null}
+      {hint ? <p className="text-(length:--text-micro) text-muted-foreground/70">{hint}</p> : null}
+      {rows.some((row) => row.source === "user_secret" && row.userSecretKey) ? (
+        <p className="inline-flex items-start gap-1 text-(length:--text-micro) text-muted-foreground/70">
+          <UserRound className="mt-0.5 size-3 shrink-0" />
+          <span>
+            User secrets resolve from the user responsible for the run. Required bindings fail until that user
+            sets their value under Secrets → My secrets.
+          </span>
+        </p>
+      ) : null}
       </div>
     </TooltipProvider>
   );

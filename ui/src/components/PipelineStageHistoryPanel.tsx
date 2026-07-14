@@ -10,6 +10,7 @@ import { timeAgo } from "../lib/timeAgo";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "../lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 /**
  * Compact revisions panel for a per-stage instructions document. Mirrors the
@@ -121,7 +122,7 @@ export function PipelineStageHistoryPanel({
                     <p className="text-sm font-medium">
                       {t("pipelineStageHistory.revision", { defaultValue: "Revision {{number}}", number: revision.revisionNumber })}
                       {isCurrent ? (
-                        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-(length:--text-micro) font-medium text-muted-foreground">
                           {t("documentFrame.current", { defaultValue: "Current" })}
                         </span>
                       ) : null}

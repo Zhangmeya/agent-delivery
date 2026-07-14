@@ -23,6 +23,7 @@ vi.mock("../services/index.js", () => ({
       attachmentMaxBytes: 10 * 1024 * 1024,
     })),
   }),
+  companySkillService: () => ({}),
   documentAnnotationService: () => ({ remapOpenThreadsForDocument: async () => [] }),
   documentService: () => ({}),
   executionWorkspaceService: () => ({}),

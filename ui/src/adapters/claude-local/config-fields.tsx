@@ -87,9 +87,148 @@ export function ClaudeLocalAdvancedFields({
   mark,
 }: AdapterConfigFieldsProps) {
   const { t } = useTranslation();
+  const rawEngine = isCreate
+    ? values!.claudeEngine ?? "auto"
+    : eff("adapterConfig", "engine", String(config.engine ?? "auto"));
+  const engine = rawEngine === "acp" || rawEngine === "cli" ? rawEngine : "auto";
+  const acpSelected = engine === "acp";
 
   return (
     <>
+      <Field
+        label={t("agentConfig.executionEngine")}
+        hint={t("agentConfig.executionEngineHint", { cli: "Claude CLI" })}
+      >
+        <select
+          className={inputClass}
+          value={engine}
+          onChange={(e) => {
+            const value = e.target.value === "acp" ? "acp" : e.target.value === "cli" ? "cli" : "auto";
+            isCreate
+              ? set!({ claudeEngine: value })
+              : mark("adapterConfig", "engine", value === "auto" ? undefined : value);
+          }}
+        >
+          <option value="auto">{t("agentConfig.autoAcpPreferred")}</option>
+          <option value="cli">Claude CLI</option>
+          <option value="acp">ACP</option>
+        </select>
+      </Field>
+      {acpSelected && (
+        <>
+          <Field
+            label={t("agentConfig.acpServerCommand")}
+            hint={t("agentConfig.acpServerCommandHint", {
+              provider: "Claude",
+              defaultCommand: "claude-agent-acp",
+            })}
+          >
+            <DraftInput
+              value={
+                isCreate
+                  ? values!.claudeAcpAgentCommand ?? ""
+                  : eff("adapterConfig", "agentCommand", String(config.agentCommand ?? ""))
+              }
+              onCommit={(v) =>
+                isCreate
+                  ? set!({ claudeAcpAgentCommand: v })
+                  : mark("adapterConfig", "agentCommand", v || undefined)
+              }
+              immediate
+              className={inputClass}
+              placeholder="claude-agent-acp"
+            />
+          </Field>
+          <Field label={t("agentConfig.acpSessionMode")} hint={t("agentConfig.acpSessionModeHint")}>
+            <select
+              className={inputClass}
+              value={
+                isCreate
+                  ? values!.claudeAcpMode ?? "persistent"
+                  : eff("adapterConfig", "mode", String(config.mode ?? "persistent"))
+              }
+              onChange={(e) => {
+                const value = e.target.value === "oneshot" ? "oneshot" : "persistent";
+                isCreate
+                  ? set!({ claudeAcpMode: value })
+                  : mark("adapterConfig", "mode", value);
+              }}
+            >
+              <option value="persistent">{t("agentConfig.persistent")}</option>
+              <option value="oneshot">{t("agentConfig.oneShot")}</option>
+            </select>
+          </Field>
+          <Field
+            label={t("agentConfig.acpNonInteractivePermissions")}
+            hint={t("agentConfig.acpNonInteractivePermissionsHint")}
+          >
+            <select
+              className={inputClass}
+              value={
+                isCreate
+                  ? values!.claudeAcpNonInteractivePermissions ?? "deny"
+                  : eff("adapterConfig", "nonInteractivePermissions", String(config.nonInteractivePermissions ?? "deny"))
+              }
+              onChange={(e) => {
+                const value = e.target.value === "fail" ? "fail" : "deny";
+                isCreate
+                  ? set!({ claudeAcpNonInteractivePermissions: value })
+                  : mark("adapterConfig", "nonInteractivePermissions", value);
+              }}
+            >
+              <option value="deny">{t("agentConfig.deny")}</option>
+              <option value="fail">{t("agentConfig.fail")}</option>
+            </select>
+          </Field>
+          <Field
+            label={t("agentConfig.acpStateDirectory")}
+            hint={t("agentConfig.acpStateDirectoryHint")}
+          >
+            <div className="flex items-center gap-2">
+              <DraftInput
+                value={
+                  isCreate
+                    ? values!.claudeAcpStateDir ?? ""
+                    : eff("adapterConfig", "stateDir", String(config.stateDir ?? ""))
+                }
+                onCommit={(v) =>
+                  isCreate
+                    ? set!({ claudeAcpStateDir: v })
+                    : mark("adapterConfig", "stateDir", v || undefined)
+                }
+                immediate
+                className={inputClass}
+                placeholder="/path/to/acp-state"
+              />
+              <ChoosePathButton />
+            </div>
+          </Field>
+          <Field
+            label={t("agentConfig.acpWarmProcessIdleMs")}
+            hint={t("agentConfig.acpWarmProcessIdleMsHint")}
+          >
+            {isCreate ? (
+              <input
+                type="number"
+                className={inputClass}
+                value={values!.claudeAcpWarmHandleIdleMs ?? 0}
+                onChange={(e) => set!({ claudeAcpWarmHandleIdleMs: Number(e.target.value) })}
+              />
+            ) : (
+              <DraftNumberInput
+                value={eff(
+                  "adapterConfig",
+                  "warmHandleIdleMs",
+                  Number(config.warmHandleIdleMs ?? 0),
+                )}
+                onCommit={(v) => mark("adapterConfig", "warmHandleIdleMs", v || 0)}
+                immediate
+                className={inputClass}
+              />
+            )}
+          </Field>
+        </>
+      )}
       <ToggleField
         label={t("Enable Chrome", { defaultValue: "Enable Chrome" })}
         hint={help.chrome}

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { pickTextColorForPillBg } from "@/lib/color-contrast";
 import { issueStatusText } from "@/lib/status-colors";
 import { Link } from "@/lib/router";
-import type { Issue, IssueLabel } from "@penclipai/shared";
+import { deriveOriginatingActor, type Issue, type IssueLabel } from "@penclipai/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { accessApi } from "../../api/access";
 import { agentsApi } from "../../api/agents";
@@ -14,7 +14,7 @@ import { issuesApi } from "../../api/issues";
 import { projectsApi } from "../../api/projects";
 import { useCompany } from "../../context/CompanyContext";
 import { queryKeys } from "../../lib/queryKeys";
-import { buildCompanyUserInlineOptions, buildCompanyUserLabelMap, isAgentTaskTarget } from "../../lib/company-members";
+import { buildCompanyUserInlineOptions, buildCompanyUserLabelMap, buildCompanyUserProfileMap, isAgentTaskTarget } from "../../lib/company-members";
 import { ISSUE_OVERRIDE_ADAPTER_TYPES, type IssueModelLane } from "../../lib/issue-assignee-overrides";
 import { useProjectOrder } from "../../hooks/useProjectOrder";
 import {
@@ -25,7 +25,7 @@ import {
 } from "../../lib/recent-assignees";
 import { getRecentProjectIds, trackRecentProject } from "../../lib/recent-projects";
 import { orderItemsBySelectedAndRecent } from "../../lib/recent-selections";
-import { formatAssigneeUserLabel } from "../../lib/assignees";
+import { formatAssigneeUserLabel, formatUserLabel } from "../../lib/assignees";
 import { buildExecutionPolicy, stageParticipantValues } from "../../lib/issue-execution-policy";
 import { formatMonitorOffset } from "../../lib/issue-monitor";
 import { extractProviderIdWithFallback } from "../../lib/model-utils";
@@ -74,7 +74,9 @@ import {
 } from "./helpers";
 import { PropertyPicker } from "./property-picker";
 import { PropertyChip, PropertyRow, PropertySection } from "./primitives";
+import { IssueCasesPanel } from "../IssueCasesPanel";
 import { ExpandRelationListButton, RemovableIssueReferencePill } from "./relation-controls";
+import { Badge } from "@/components/ui/badge";
 
 function TruncatedCopyable({ value, icon: Icon }: { value: string; icon: ComponentType<{ className?: string }> }) {
   const { t } = useTranslation();
@@ -184,6 +186,7 @@ export function IssueProperties({
   const [assigneeOptionsOpen, setAssigneeOptionsOpen] = useState(false);
   const [labelSearch, setLabelSearch] = useState("");
   const [newLabelName, setNewLabelName] = useState("");
+  // token-extraction: allowlisted — color-picker seed state, persisted into label-create payload; a var() string would break that payload.
   const [newLabelColor, setNewLabelColor] = useState("#6366f1");
   const [monitorAtInput, setMonitorAtInput] = useState(() => toDateTimeLocalValue(issue.executionPolicy?.monitor?.nextCheckAt));
   const [monitorNotesInput, setMonitorNotesInput] = useState(issue.executionPolicy?.monitor?.notes ?? "");
@@ -392,6 +395,10 @@ export function IssueProperties({
   const recentProjectIds = useMemo(() => getRecentProjectIds(), [projectOpen]);
   const userLabelMap = useMemo(
     () => buildCompanyUserLabelMap(companyMembers?.users),
+    [companyMembers?.users],
+  );
+  const userProfileMap = useMemo(
+    () => buildCompanyUserProfileMap(companyMembers?.users),
     [companyMembers?.users],
   );
   const otherUserOptions = useMemo(
@@ -617,16 +624,16 @@ export function IssueProperties({
       ) : null}
     </div>
   ) : (
-    <div className="w-full space-y-2 p-2">
-      <p className="text-xs text-muted-foreground">
-        {assignee
+      <div className="w-full space-y-2 p-2">
+        <p className="text-xs text-muted-foreground">
+          {assignee
           ? t("issueProperties.noEditableIssueOverrides", {
-              defaultValue: "This assignee's adapter does not expose editable issue overrides.",
+              defaultValue: "This responsible agent's adapter does not expose editable task overrides.",
             })
           : t("issueProperties.selectCompatibleAssigneeForOverrides", {
-              defaultValue: "Select a compatible agent assignee to edit these overrides.",
+              defaultValue: "Select a compatible responsible agent to edit these overrides.",
             })}
-      </p>
+        </p>
       <button
         type="button"
         className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
@@ -639,8 +646,16 @@ export function IssueProperties({
   const reviewerValues = stageParticipantValues(issue.executionPolicy, "review");
   const approverValues = stageParticipantValues(issue.executionPolicy, "approval");
   const userLabel = (userId: string | null | undefined) => formatAssigneeUserLabel(userId, currentUserId, userLabelMap);
+  const actualUserLabel = (userId: string | null | undefined) => formatUserLabel(userId, userLabelMap);
   const assigneeUserLabel = userLabel(issue.assigneeUserId);
-  const creatorUserLabel = userLabel(issue.createdByUserId);
+  const creatorUserLabel = actualUserLabel(issue.createdByUserId);
+  const originatingActor = deriveOriginatingActor(issue);
+  const originatingUserProfile =
+    originatingActor?.kind === "user" ? userProfileMap.get(originatingActor.id) : null;
+  const originatingViaAgentName =
+    originatingActor?.kind === "user" && originatingActor.viaAgentId
+      ? agentName(originatingActor.viaAgentId) ?? originatingActor.viaAgentId.slice(0, 8)
+      : null;
   const selectedAssigneeValue = issue.assigneeAgentId
     ? `agent:${issue.assigneeAgentId}`
     : issue.assigneeUserId
@@ -1142,7 +1157,7 @@ export function IssueProperties({
           </span>
         ) : null}
       </div>
-      <dl className="grid grid-cols-[6rem_1fr] gap-y-1">
+      <dl className="grid grid-cols-(--gtc-15) gap-y-1">
         {scheduledRetryReasonLabel ? (
           <>
             <dt className="text-muted-foreground">{t("issueScheduledRetry.reason", { defaultValue: "Reason" })}</dt>
@@ -1411,15 +1426,15 @@ export function IssueProperties({
   );
 
   const assigneeTrigger = assignee ? (
-    <Identity name={assignee.name} size="sm" />
+    <Identity name={assignee.name} size="sm" shape="square" />
   ) : assigneeUserLabel ? (
     <>
       <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <span className="min-w-0 truncate text-sm" title={assigneeUserLabel}>{assigneeUserLabel}</span>
     </>
-  ) : (
-    <span className="text-sm text-muted-foreground">{t("Unassigned", { defaultValue: "Unassigned" })}</span>
-  );
+    ) : (
+      <span className="text-sm text-muted-foreground">{t("Unassigned", { defaultValue: "Unassigned" })}</span>
+    );
 
   // Grouped picker options (design surface 2): a board-users section and an
   // agents section, plus the "No assignee" reset. Agents stay recency-sorted
@@ -1670,7 +1685,7 @@ export function IssueProperties({
     <>
       <span
         className="shrink-0 h-3 w-3 rounded-sm"
-        style={{ backgroundColor: orderedProjects.find((p) => p.id === issue.projectId)?.color ?? "#6366f1" }}
+        style={{ backgroundColor: orderedProjects.find((p) => p.id === issue.projectId)?.color ?? "var(--project-seed)" }}
       />
       <span className="text-sm truncate min-w-0" title={projectName(issue.projectId)}>{projectName(issue.projectId)}</span>
     </>
@@ -1743,7 +1758,7 @@ export function IssueProperties({
               {option.kind === "project" ? (
                 <span
                   className="shrink-0 h-3 w-3 rounded-sm"
-                  style={{ backgroundColor: option.color ?? "#6366f1" }}
+                  style={{ backgroundColor: option.color ?? "var(--project-seed)" }}
                 />
               ) : null}
               {option.name}
@@ -2043,7 +2058,7 @@ export function IssueProperties({
           onOpenChange={(open) => { setProjectOpen(open); if (!open) setProjectSearch(""); }}
           triggerContent={projectTrigger}
           triggerClassName="min-w-0 max-w-full"
-          popoverClassName="w-fit min-w-[11rem]"
+          popoverClassName="w-fit min-w-(--sz-11rem)"
           extra={issue.projectId ? (
             <Link
               to={projectLink(issue.projectId)!}
@@ -2239,7 +2254,7 @@ export function IssueProperties({
             onOpenChange={setScheduledRetryOpen}
             triggerContent={scheduledRetryTrigger}
             triggerClassName="min-w-0 max-w-full"
-            popoverClassName={cn("max-w-full", inline ? "w-full" : "w-80 sm:w-[32rem]")}
+            popoverClassName={cn("max-w-full", inline ? "w-full" : "w-80 sm:w-(--sz-32rem)")}
             extra={scheduledRetryAttemptBadge}
           >
             {scheduledRetryContent}
@@ -2253,7 +2268,7 @@ export function IssueProperties({
           onOpenChange={setMonitorOpen}
           triggerContent={monitorTrigger}
           triggerClassName="min-w-0 max-w-full"
-          popoverClassName={cn("max-w-full", inline ? "w-full" : "w-80 sm:w-[32rem]")}
+          popoverClassName={cn("max-w-full", inline ? "w-full" : "w-80 sm:w-(--sz-32rem)")}
           extra={monitorAttemptBadge}
         >
           {monitorContent}
@@ -2342,23 +2357,38 @@ export function IssueProperties({
       ) : null}
 
       <PropertySection title={t("issueProperties.about", { defaultValue: "About" })}>
-        {(issue.createdByAgentId || issue.createdByUserId) && (
-          <PropertyRow label={t("issueProperties.createdBy", { defaultValue: "Created by" })}>
-            {issue.createdByAgentId ? (
+        {originatingActor ? (
+          <PropertyRow label={t("issueProperties.originating", { defaultValue: "Originating" })}>
+            {originatingActor.kind === "agent" ? (
               <Link
-                to={`/agents/${issue.createdByAgentId}`}
+                to={`/agents/${originatingActor.id}`}
                 className="hover:underline"
               >
-                <Identity name={agentName(issue.createdByAgentId) ?? issue.createdByAgentId.slice(0, 8)} size="sm" />
+                <Identity
+                  name={agentName(originatingActor.id) ?? originatingActor.id.slice(0, 8)}
+                  size="sm"
+                  shape="square"
+                />
               </Link>
             ) : (
-              <>
-                <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="text-sm truncate min-w-0">{creatorUserLabel ?? t("User", { defaultValue: "User" })}</span>
-              </>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <Identity
+                  name={actualUserLabel(originatingActor.id) ?? originatingUserProfile?.label ?? t("User", { defaultValue: "User" })}
+                  avatarUrl={originatingUserProfile?.image ?? null}
+                  size="sm"
+                />
+                {originatingViaAgentName ? (
+                  <span className="shrink-0 truncate text-xs text-muted-foreground">
+                    {t("issueProperties.viaAgent", {
+                      agentName: originatingViaAgentName,
+                      defaultValue: "via {{agentName}}",
+                    })}
+                  </span>
+                ) : null}
+              </span>
             )}
           </PropertyRow>
-        )}
+        ) : null}
         {issue.startedAt && (
           <PropertyRow label={t("issueProperties.started", { defaultValue: "Started" })}>
             <span className="text-sm">{formatDateTime(issue.startedAt)}</span>
@@ -2381,6 +2411,12 @@ export function IssueProperties({
           </PropertyRow>
         )}
       </PropertySection>
+
+      {/* Experimental Cases rail (PAP-12969) — self-gates on the flag and
+          renders nothing when no cases are linked. */}
+      <div className="pt-3">
+        <IssueCasesPanel issueId={issue.id} />
+      </div>
     </div>
   );
 }

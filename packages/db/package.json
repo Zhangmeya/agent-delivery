@@ -35,7 +35,7 @@
     "dist"
   ],
   "scripts": {
-    "check:migrations": "tsx src/check-migration-numbering.ts",
+    "check:migrations": "tsx src/check-migration-numbering.ts && tsx src/check-migration-safety.ts",
     "build": "pnpm run check:migrations && tsc && node ../../scripts/fs-ops.mjs cp src/migrations dist/migrations",
     "clean": "node ../../scripts/fs-ops.mjs rm dist",
     "typecheck": "pnpm run check:migrations && tsc --noEmit",

@@ -57,7 +57,7 @@ function HeroStat({ label, value, hint }: { label: string; value: string; hint?:
   return (
     <div className="min-w-0">
       <div className="text-2xl font-semibold tabular-nums sm:text-3xl">{value}</div>
-      <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
       {hint ? <div className="mt-0.5 text-xs text-muted-foreground/70">{hint}</div> : null}
     </div>
   );
@@ -68,10 +68,10 @@ function WindowColumn({ stats, t }: { stats: UserProfileWindowStats; t: ReturnTy
   return (
     <div className="flex min-w-0 flex-col gap-4 border-l border-border pl-5 first:border-l-0 first:pl-0">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">
           {windowStatsLabel(stats.key, t)}
         </h2>
-        <span className="text-[11px] text-muted-foreground tabular-nums">
+        <span className="text-(length:--text-micro) text-muted-foreground tabular-nums">
           {completionRate(stats)} {t("status.done", { defaultValue: "done" })}
         </span>
       </div>
@@ -101,7 +101,7 @@ function Metric({ value, label }: { value: string; label: string }) {
   return (
     <div className="min-w-0">
       <div className="truncate text-xl font-semibold tabular-nums">{value}</div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-0.5 text-(length:--text-micro) text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -127,7 +127,7 @@ function UsageChart({
           <span>{t("tokens total", { defaultValue: "tokens total" })}</span>
         </div>
       </div>
-      <div className="mt-6 grid grid-cols-[repeat(14,minmax(0,1fr))] items-end gap-1.5 sm:gap-2">
+      <div className="mt-6 grid grid-cols-(--gtc-57) items-end gap-1.5 sm:gap-2">
         {points.map((point) => {
           const tokens = totalTokens(point);
           const heightPct = tokens === 0 ? 0 : Math.max(2, Math.round((tokens / maxTokens) * 100));
@@ -156,19 +156,19 @@ function UsageChart({
           );
         })}
       </div>
-      <div className="mt-2 grid grid-cols-[repeat(14,minmax(0,1fr))] gap-1.5 text-[10px] tabular-nums text-muted-foreground sm:gap-2">
+      <div className="mt-2 grid grid-cols-(--gtc-57) gap-1.5 text-(length:--text-nano) tabular-nums text-muted-foreground sm:gap-2">
         {points.map((point, index) => (
           <div key={point.date} className="text-center">
             {index === 0 || index === 6 || index === 13 ? formatShortDate(point.date) : null}
           </div>
         ))}
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-4 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="mt-4 flex flex-wrap items-center gap-4 text-(length:--text-nano) uppercase tracking-wide text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2 w-2 bg-foreground/80" /> {t("userProfile.tokensPerDay", { defaultValue: "tokens / day" })}
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-[3px] w-4 rounded-full bg-emerald-500/80" /> {t("userProfile.completions", { defaultValue: "completions" })}
+          <span className="h-(--sz-3px) w-4 rounded-full bg-emerald-500/80" /> {t("userProfile.completions", { defaultValue: "completions" })}
         </span>
       </div>
     </section>
@@ -205,7 +205,7 @@ function UsageList({
       ) : (
         <ul className="divide-y divide-border">
           {rows.map((row) => (
-            <li key={row.key} className="grid gap-2 py-2.5 sm:grid-cols-[1fr_auto] sm:items-center">
+            <li key={row.key} className="grid gap-2 py-2.5 sm:grid-cols-(--gtc-17) sm:items-center">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{row.label}</div>
                 <div className="truncate text-xs text-muted-foreground">{row.sublabel}</div>
@@ -396,7 +396,7 @@ export function UserProfile() {
                 <li key={issue.id}>
                   <Link
                     to={issueUrl(issue)}
-                    className="grid gap-2 py-2.5 transition-colors hover:bg-accent/40 sm:grid-cols-[auto_1fr_auto] sm:items-center"
+                    className="grid gap-2 py-2.5 transition-colors hover:bg-accent/40 sm:grid-cols-(--gtc-58) sm:items-center"
                   >
                     <span className="font-mono text-xs text-muted-foreground">{issue.identifier ?? issue.id.slice(0, 8)}</span>
                     <span className="truncate text-sm">{issue.title}</span>
@@ -425,7 +425,7 @@ export function UserProfile() {
           ) : (
             <ul className="divide-y divide-border">
               {data.recentActivity.map((event) => (
-                <li key={event.id} className="grid gap-2 py-2.5 sm:grid-cols-[1fr_auto] sm:items-center">
+                <li key={event.id} className="grid gap-2 py-2.5 sm:grid-cols-(--gtc-17) sm:items-center">
                   <div className="min-w-0">
                     <div className="truncate text-sm">{formatActivityVerb(event.action, event.details)}</div>
                     <div className="truncate text-xs text-muted-foreground">

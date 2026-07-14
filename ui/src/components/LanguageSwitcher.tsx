@@ -114,7 +114,7 @@ export function LanguageSwitcher({
           contentClassName,
         )}
       >
-        <div className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        <div className="px-2.5 py-1 text-(length:--text-nano) font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
           {t("layout.languageSwitcherLabel")}
         </div>
         <div className="space-y-1">

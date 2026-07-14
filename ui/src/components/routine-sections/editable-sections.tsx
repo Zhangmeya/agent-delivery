@@ -149,10 +149,10 @@ export function OverviewSection({
             value={editDraft.assigneeAgentId}
             options={assigneeOptions}
             recentOptionIds={recentAssigneeIds}
-            placeholder={t("Assignee", { defaultValue: "Assignee" })}
-            noneLabel={t("issueChat.noAssignee", { defaultValue: "No assignee" })}
-            searchPlaceholder={t("issueChat.searchAssignees", { defaultValue: "Search assignees..." })}
-            emptyMessage={t("issueChat.noAssigneesFound", { defaultValue: "No assignees found." })}
+            placeholder={t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+            noneLabel={t("issueChat.noAssignee", { defaultValue: "No responsible" })}
+            searchPlaceholder={t("issueChat.searchAssignees", { defaultValue: "Search responsible..." })}
+            emptyMessage={t("issueChat.noAssigneesFound", { defaultValue: "No responsible found." })}
             onChange={(assigneeAgentId) =>
               setEditDraft((current) => ({ ...current, assigneeAgentId }))
             }
@@ -174,7 +174,9 @@ export function OverviewSection({
                   <span className="truncate">{option.label}</span>
                 )
               ) : (
-                <span className="text-muted-foreground">{t("Assignee", { defaultValue: "Assignee" })}</span>
+                <span className="text-muted-foreground">
+                  {t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+                </span>
               )
             }
             renderOption={(option) => {
@@ -207,7 +209,7 @@ export function OverviewSection({
                 <>
                   <span
                     className="h-3.5 w-3.5 shrink-0 rounded-sm"
-                    style={{ backgroundColor: currentProject.color ?? "#64748b" }}
+                    style={{ backgroundColor: currentProject.color ?? "var(--project-none)" }}
                   />
                   <span className="truncate">{option.label}</span>
                 </>
@@ -222,7 +224,7 @@ export function OverviewSection({
                 <>
                   <span
                     className="h-3.5 w-3.5 shrink-0 rounded-sm"
-                    style={{ backgroundColor: project?.color ?? "#64748b" }}
+                    style={{ backgroundColor: project?.color ?? "var(--project-none)" }}
                   />
                   <span className="truncate">{option.label}</span>
                 </>
@@ -272,7 +274,7 @@ export function OverviewSection({
               onChange={(description) => setEditDraft((current) => ({ ...current, description }))}
               placeholder={t("routineDetail.addInstructions", { defaultValue: "Add instructions..." })}
               bordered={false}
-              contentClassName="min-h-[120px] text-[15px] leading-7"
+              contentClassName="min-h-(--sz-120px) text-sm leading-7"
               mentions={mentionOptions}
               onSubmit={() => {
                 if (!saveRoutine.isPending && editDraft.title.trim()) {
@@ -288,7 +290,7 @@ export function OverviewSection({
             onChange={(description) => setEditDraft((current) => ({ ...current, description }))}
             placeholder={t("routineDetail.addInstructions", { defaultValue: "Add instructions..." })}
             bordered={false}
-            contentClassName="min-h-[120px] text-[15px] leading-7"
+            contentClassName="min-h-(--sz-120px) text-sm leading-7"
             mentions={mentionOptions}
             onSubmit={() => {
               if (!saveRoutine.isPending && editDraft.title.trim()) {
@@ -712,7 +714,7 @@ export function DeliverySection() {
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
           {t("routineDetail.concurrency", { defaultValue: "Concurrency" })}
         </p>
         <RadioCardGroup
@@ -725,7 +727,7 @@ export function DeliverySection() {
         />
       </div>
       <div className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
           {t("routineDetail.catchUp", { defaultValue: "Catch-up" })}
         </p>
         <RadioCardGroup
@@ -785,7 +787,7 @@ function NextFiresPreview({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">
         {t("routineDetail.nextFiveFires", { defaultValue: "Next 5 fires" })}
       </p>
       {preview ? (
@@ -805,7 +807,7 @@ function NextFiresPreview({
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground/60">
+          <p className="text-(length:--text-micro) text-muted-foreground/60">
             {t("routineDetail.previewAssumesPreviousRun", { defaultValue: "Preview assumes the previous run is still in flight when the next fires. Times shown in" })}{" "}
             {preview.timeZone}.
           </p>

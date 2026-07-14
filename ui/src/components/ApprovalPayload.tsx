@@ -77,7 +77,7 @@ function SkillList({ values }: { values: unknown }) {
         {items.map((item) => (
           <span
             key={item}
-            className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+            className="rounded bg-muted px-1.5 py-0.5 font-mono text-(length:--text-micro) text-muted-foreground"
           >
             {item}
           </span>
@@ -191,7 +191,7 @@ function BoardApprovalPayloadContent({ payload }: { payload: Record<string, unkn
     <div className="mt-4 space-y-3.5 text-sm">
       {title ? (
         <div className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">
             {t("Title", { defaultValue: "Title" })}
           </p>
           <p className="font-medium leading-6 text-foreground">{title}</p>
@@ -199,7 +199,7 @@ function BoardApprovalPayloadContent({ payload }: { payload: Record<string, unkn
       ) : null}
       {summary ? (
         <div className="space-y-1">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">
             {t("Summary", { defaultValue: "Summary" })}
           </p>
           <p className="leading-6 text-foreground/90">{summary}</p>
@@ -207,7 +207,7 @@ function BoardApprovalPayloadContent({ payload }: { payload: Record<string, unkn
       ) : null}
       {recommendedAction ? (
         <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3.5 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-amber-700 dark:text-amber-300">
+          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-amber-700 dark:text-amber-300">
             {t("approval.recommendedAction", { defaultValue: "Recommended action" })}
           </p>
           <p className="mt-1 leading-6 text-foreground">{recommendedAction}</p>
@@ -215,7 +215,7 @@ function BoardApprovalPayloadContent({ payload }: { payload: Record<string, unkn
       ) : null}
       {nextActionOnApproval ? (
         <div className="rounded-lg border border-border/60 bg-background/60 px-3.5 py-3">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">
             {t("approval.onApproval", { defaultValue: "On approval" })}
           </p>
           <p className="mt-1 leading-6 text-foreground">{nextActionOnApproval}</p>
@@ -223,7 +223,7 @@ function BoardApprovalPayloadContent({ payload }: { payload: Record<string, unkn
       ) : null}
       {risks.length > 0 ? (
         <div className="space-y-1.5">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">
             {t("Risks", { defaultValue: "Risks" })}
           </p>
           <ul className="space-y-1 text-sm text-muted-foreground">
@@ -238,7 +238,7 @@ function BoardApprovalPayloadContent({ payload }: { payload: Record<string, unkn
       ) : null}
       {proposedComment ? (
         <div className="space-y-1.5">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">
             {t("approval.proposedComment", { defaultValue: "Proposed comment" })}
           </p>
           <div className="rounded-lg border border-border/60 bg-muted/30 px-3.5 py-3 text-sm leading-6 text-foreground/90">

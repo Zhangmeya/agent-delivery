@@ -27,6 +27,7 @@ import { IssueRow } from "./IssueRow";
 import { Identity } from "./Identity";
 import { StatusIcon } from "./StatusIcon";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 interface BlockedInboxViewProps {
   companyId: string;
@@ -233,9 +234,9 @@ export function BlockedInboxView({
 
   if (allRows.length === 0) {
     return (
-      <div
+      <Card
         data-testid="blocked-inbox-empty"
-        className="flex flex-col items-center gap-3 rounded-lg border border-border/70 bg-card/40 px-6 py-10 text-center"
+        className="items-center gap-3 border-border/70 bg-card/40 px-6 py-10 text-center"
       >
         <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
           <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
@@ -250,19 +251,19 @@ export function BlockedInboxView({
             })}
           </p>
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (groups.length === 0) {
     return (
       <div className="space-y-3">
-        <div
+        <Card
           data-testid="blocked-inbox-no-search-results"
-          className="rounded-lg border border-border/70 bg-card/40 px-4 py-6 text-center text-sm text-muted-foreground"
+          className="block border-border/70 bg-card/40 px-4 py-6 text-center text-sm text-muted-foreground"
         >
           {t("blockedInbox.noSearchResults", { defaultValue: "No stopped items match your search." })}
-        </div>
+        </Card>
       </div>
     );
   }
@@ -384,7 +385,7 @@ function BlockedInboxRow({
   const desktopTrailing = (
     <span className="flex shrink-0 items-center gap-3 text-xs">
       <span
-        className="hidden w-[10.5rem] shrink-0 justify-start sm:inline-flex"
+        className="hidden w-(--sz-10_5rem) shrink-0 justify-start sm:inline-flex"
         data-testid="blocked-row-reason-column"
       >
         <BlockedReasonChip
@@ -397,7 +398,7 @@ function BlockedInboxRow({
         />
       </span>
       {ownerName ? (
-        <span className="hidden w-[150px] min-w-0 items-center text-muted-foreground sm:inline-flex">
+        <span className="hidden w-(--sz-150px) min-w-0 items-center text-muted-foreground sm:inline-flex">
           <Identity
             name={ownerName}
             size="xs"
@@ -405,10 +406,10 @@ function BlockedInboxRow({
           />
         </span>
       ) : (
-        <span className="hidden w-[150px] shrink-0 sm:inline-flex" aria-hidden="true" />
+        <span className="hidden w-(--sz-150px) shrink-0 sm:inline-flex" aria-hidden="true" />
       )}
       {showUpdatedColumn ? (
-        <span className="hidden w-[5.75rem] text-right text-muted-foreground sm:inline" data-testid="blocked-row-age">
+        <span className="hidden w-(--sz-5_75rem) text-right text-muted-foreground sm:inline" data-testid="blocked-row-age">
           {stoppedAge}
         </span>
       ) : null}
@@ -456,7 +457,7 @@ function BlockedInboxRow({
           label={reasonLabel}
           severityLabel={severityLabel}
           ariaLabel={reasonAriaLabel}
-          className="ml-2 max-w-[12rem] align-middle sm:hidden"
+          className="ml-2 max-w-(--sz-12rem) align-middle sm:hidden"
         />
       }
       mobileMeta={mobileMeta}

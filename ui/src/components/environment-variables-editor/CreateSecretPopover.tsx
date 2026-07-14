@@ -93,7 +93,7 @@ export function SecretPopoverForm({
       <div className="space-y-1">
         <PopoverTitle className="text-sm font-medium">{heading}</PopoverTitle>
         {mode === "store" ? (
-          <PopoverDescription className="text-[11px] text-muted-foreground">
+          <PopoverDescription className="text-(length:--text-micro) text-muted-foreground">
             {t("envVarEditor.storeAsSecretDescriptionPrefix", {
               defaultValue: "Moves the typed value into an encrypted company secret and binds",
             })}{" "}
@@ -106,7 +106,7 @@ export function SecretPopoverForm({
       </div>
 
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium text-muted-foreground">
+        <span className="text-(length:--text-micro) font-medium text-muted-foreground">
           {t("common.name", { defaultValue: "Name" })}
         </span>
         <input
@@ -126,11 +126,11 @@ export function SecretPopoverForm({
             }
           }}
         />
-        {nameError ? <span className="block text-[11px] text-destructive">{nameError}</span> : null}
+        {nameError ? <span className="block text-(length:--text-micro) text-destructive">{nameError}</span> : null}
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium text-muted-foreground">
+        <span className="text-(length:--text-micro) font-medium text-muted-foreground">
           {t("secrets.value", { defaultValue: "Value" })}
         </span>
         <div className="relative">
@@ -156,10 +156,10 @@ export function SecretPopoverForm({
             {reveal ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
         </div>
-        {valueError ? <span className="block text-[11px] text-destructive">{valueError}</span> : null}
+        {valueError ? <span className="block text-(length:--text-micro) text-destructive">{valueError}</span> : null}
       </label>
 
-      {error ? <p className="text-[11px] text-destructive">{error}</p> : null}
+      {error ? <p className="text-(length:--text-micro) text-destructive">{error}</p> : null}
 
       <div className="flex items-center justify-end gap-2 pt-0.5">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>

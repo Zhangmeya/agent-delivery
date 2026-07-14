@@ -99,6 +99,7 @@ describe("claude_local environment diagnostics", () => {
       companyId: "company-1",
       adapterType: "claude_local",
       config: {
+        engine: "cli",
         command: process.execPath,
         cwd: process.cwd(),
       },
@@ -124,6 +125,7 @@ describe("claude_local environment diagnostics", () => {
       companyId: "company-1",
       adapterType: "claude_local",
       config: {
+        engine: "cli",
         command: process.execPath,
         cwd: process.cwd(),
         env: {
@@ -151,6 +153,7 @@ describe("claude_local environment diagnostics", () => {
       companyId: "company-1",
       adapterType: "claude_local",
       config: {
+        engine: "cli",
         command: process.execPath,
         cwd: process.cwd(),
       },
@@ -178,6 +181,7 @@ describe("claude_local environment diagnostics", () => {
       companyId: "company-1",
       adapterType: "claude_local",
       config: {
+        engine: "cli",
         command: process.execPath,
         cwd: process.cwd(),
         env: {
@@ -208,6 +212,7 @@ describe("claude_local environment diagnostics", () => {
       companyId: "company-1",
       adapterType: "claude_local",
       config: {
+        engine: "cli",
         command: process.execPath,
         cwd: process.cwd(),
       },
@@ -232,6 +237,7 @@ describe("claude_local environment diagnostics", () => {
       companyId: "company-1",
       adapterType: "claude_local",
       config: {
+        engine: "cli",
         command: process.execPath,
         cwd,
       },
@@ -249,6 +255,7 @@ describe("claude_local environment diagnostics", () => {
       companyId: "company-1",
       adapterType: "claude_local",
       config: {
+        engine: "cli",
         command: process.execPath,
       },
       executionTarget: {
@@ -289,6 +296,7 @@ describe("claude_local environment diagnostics", () => {
       companyId: "company-1",
       adapterType: "claude_local",
       config: {
+        engine: "cli",
         command: "claude",
       },
       executionTarget: {
@@ -372,6 +380,7 @@ describe("claude_local environment diagnostics", () => {
         companyId: "company-1",
         adapterType: "claude_local",
         config: {
+          engine: "cli",
           command: "claude",
           env: { HOME: remoteHome },
         },
@@ -443,6 +452,7 @@ describe("claude_local environment diagnostics", () => {
         companyId: "company-1",
         adapterType: "claude_local",
         config: {
+          engine: "cli",
           command: "claude",
           effort: "low",
         },

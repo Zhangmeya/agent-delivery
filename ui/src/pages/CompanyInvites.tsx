@@ -11,6 +11,7 @@ import { useCompany } from "@/context/CompanyContext";
 import { useToast } from "@/context/ToastContext";
 import { Link } from "@/lib/router";
 import { queryKeys } from "@/lib/queryKeys";
+import { Badge } from "@/components/ui/badge";
 
 function getInviteRoleOptions(t: TFunction) {
   return [

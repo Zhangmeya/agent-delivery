@@ -23,6 +23,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface ArtifactsPanelProps {
   taskId: string;
@@ -148,7 +149,7 @@ export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitl
           <button
             key={f.value}
             className={cn(
-              "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+              "rounded-full px-2.5 py-0.5 text-(length:--text-micro) font-medium transition-colors",
               filter === f.value
                 ? "bg-foreground text-background"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
@@ -202,8 +203,8 @@ export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitl
                     {showGenerating ? (
                       <div className="mt-0.5 shrink-0">
                         <span className="relative flex h-4 w-4">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                          <span className="relative inline-flex rounded-full h-4 w-4 bg-cyan-500" />
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500" />
                         </span>
                       </div>
                     ) : (
@@ -217,22 +218,22 @@ export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitl
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-muted-foreground capitalize">
+                        <span className="text-(length:--text-nano) text-muted-foreground capitalize">
                           {workProductTypeLabel(wp.type, t)}
                         </span>
                         {showGenerating ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+                          <Badge variant="ghost" className="[&>svg]:size-2.5 text-(length:--text-nano) px-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400">
                             <Loader2 className="h-2.5 w-2.5 animate-spin" />
                             {t("artifactsPanel.generating", { defaultValue: "Generating..." })}
-                          </span>
+                          </Badge>
                         ) : (
-                          <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full", badge.className)}>
+                          <span className={cn("text-(length:--text-nano) font-medium px-1.5 py-0.5 rounded-full", badge.className)}>
                             {badge.labelKey ? t(badge.labelKey, { defaultValue: badge.defaultValue }) : badge.defaultValue}
                           </span>
                         )}
                       </div>
                       {wp.summary && (
-                        <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">
+                        <p className="text-(length:--text-micro) text-muted-foreground mt-1 line-clamp-2">
                           {wp.summary}
                         </p>
                       )}
@@ -308,7 +309,7 @@ function DocumentViewer({
       {/* Sticky action footer */}
       {needsAction && (
         <div className="border-t border-border px-4 py-3 bg-background shrink-0">
-          <p className="text-[11px] text-muted-foreground mb-2">{t("artifactsPanel.needsReview", { defaultValue: "This document needs your review." })}</p>
+          <p className="text-(length:--text-micro) text-muted-foreground mb-2">{t("artifactsPanel.needsReview", { defaultValue: "This document needs your review." })}</p>
           <div className="flex items-center gap-3">
             <Button size="lg" className="h-11 px-8 text-base font-semibold flex-1 rounded-lg bg-green-700 hover:bg-green-800 text-white border-0" onClick={onApprove}>
               {t("Approve", { defaultValue: "Approve" })}
@@ -326,7 +327,7 @@ function DocumentViewer({
         <div className="border-t border-green-500/30 bg-green-500/5 px-4 py-3 shrink-0">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <p className="text-[13px] font-medium text-green-700 dark:text-green-400">
+            <p className="text-(length:--text-compact) font-medium text-green-700 dark:text-green-400">
               {t("artifactsPanel.approvedHireTasksCreated", { defaultValue: "Approved — hire tasks created" })}
             </p>
           </div>
@@ -336,7 +337,7 @@ function DocumentViewer({
         <div className="border-t border-orange-500/30 bg-orange-500/5 px-4 py-3 shrink-0">
           <div className="flex items-center gap-2">
             <XCircle className="h-4 w-4 text-orange-500" />
-            <p className="text-[13px] font-medium text-orange-700 dark:text-orange-400">
+            <p className="text-(length:--text-compact) font-medium text-orange-700 dark:text-orange-400">
               {t("artifactsPanel.changesRequestedCeoRevising", { defaultValue: "Changes requested — CEO is revising" })}
             </p>
           </div>

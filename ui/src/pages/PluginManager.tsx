@@ -274,7 +274,8 @@ export function PluginManager() {
             {t("No bundled plugins were found in this checkout.")}
           </div>
         ) : (
-          <ul className="divide-y rounded-md border bg-card">
+          <Card className="block py-0">
+          <ul className="divide-y">
             {bundledPlugins.map((bundledPlugin) => {
               const installedPlugin = installedByPackageName.get(bundledPlugin.packageName);
               const installPending =
@@ -352,6 +353,7 @@ export function PluginManager() {
               );
             })}
           </ul>
+          </Card>
         )}
       </section>
 
@@ -372,7 +374,8 @@ export function PluginManager() {
             </CardContent>
           </Card>
         ) : (
-          <ul className="divide-y rounded-md border bg-card">
+          <Card className="block py-0">
+          <ul className="divide-y">
             {installedPlugins.map((plugin) => (
               <li key={plugin.id}>
                 <div className="flex items-start gap-4 px-4 py-3">
@@ -494,6 +497,7 @@ export function PluginManager() {
               </li>
             ))}
           </ul>
+          </Card>
         )}
       </section>
 
@@ -554,7 +558,7 @@ export function PluginManager() {
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">{t("Full error output")}</p>
-              <pre className="max-h-[50vh] overflow-auto rounded-md border bg-muted/40 p-3 text-xs leading-5 whitespace-pre-wrap break-words">
+              <pre className="max-h-(--sz-50vh) overflow-auto rounded-md border bg-muted/40 p-3 text-xs leading-5 whitespace-pre-wrap break-words">
                 {errorDetailsPlugin?.lastError ?? t("No stored error message.")}
               </pre>
             </div>

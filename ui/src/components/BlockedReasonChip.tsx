@@ -71,7 +71,7 @@ export function BlockedReasonChip({
       data-severity={severity}
       aria-label={ariaLabel ?? `Reason: ${displayLabel}, severity ${displaySeverity}`}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium leading-tight sm:text-[11px]",
+        "inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-(length:--text-nano) font-medium leading-tight sm:text-(length:--text-micro)",
         VARIANT_STYLES[variant],
         className,
       )}

@@ -244,7 +244,7 @@ function runStatusClass(status: string) {
     case "timed_out":
       return "text-orange-700 dark:text-orange-300";
     case "running":
-      return "text-cyan-700 dark:text-cyan-300";
+      return "text-blue-700 dark:text-blue-300";
     case "queued":
     case "pending":
       return "text-amber-700 dark:text-amber-300";
@@ -391,12 +391,12 @@ function CommentCard({
         )}
         <span className="flex items-center gap-1.5">
           {isQueued ? (
-            <span className="inline-flex items-center rounded-full border border-amber-400/60 bg-amber-100/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-amber-800 dark:border-amber-400/40 dark:bg-amber-500/20 dark:text-amber-200">
+            <span className="inline-flex items-center rounded-full border border-amber-400/60 bg-amber-100/70 px-2 py-0.5 text-(length:--text-nano) font-medium uppercase tracking-(--tracking-eyebrow) text-amber-800 dark:border-amber-400/40 dark:bg-amber-500/20 dark:text-amber-200">
               {t("commentThread.queued", { defaultValue: "Queued" })}
             </span>
           ) : null}
           {followUpRequested ? (
-            <Badge variant="outline" className="text-[10px] uppercase tracking-[0.14em]">
+            <Badge variant="outline" className="text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow)">
               {t("commentThread.followUp", { defaultValue: "Follow-up" })}
             </Badge>
           ) : null}
@@ -469,12 +469,12 @@ function CommentCard({
             comment.runAgentId ? (
               <Link
                 to={`/agents/${comment.runAgentId}/runs/${comment.runId}`}
-                className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-(length:--text-nano) font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
               >
                 run {comment.runId.slice(0, 8)}
               </Link>
             ) : (
-              <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+              <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-(length:--text-nano) font-mono text-muted-foreground">
                 run {comment.runId.slice(0, 8)}
               </span>
             )
@@ -486,12 +486,12 @@ function CommentCard({
           {comment.runAgentId ? (
             <Link
               to={`/agents/${comment.runAgentId}/runs/${comment.runId}`}
-              className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+              className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-(length:--text-nano) font-mono text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
             >
               run {comment.runId.slice(0, 8)}
             </Link>
           ) : (
-            <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+            <span className="inline-flex items-center rounded-md border border-border bg-accent/30 px-2 py-1 text-(length:--text-nano) font-mono text-muted-foreground">
               run {comment.runId.slice(0, 8)}
             </span>
           )}
@@ -542,7 +542,7 @@ function TimelineEventCard({
 
         {event.statusChange ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="w-14 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="w-14 text-(length:--text-nano) font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
               {t("Status", { defaultValue: "Status" })}
             </span>
             <span className="text-muted-foreground">
@@ -557,7 +557,7 @@ function TimelineEventCard({
 
         {event.assigneeChange ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="w-14 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="w-14 text-(length:--text-nano) font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
               {t("Assignee", { defaultValue: "Assignee" })}
             </span>
             <span className="text-muted-foreground">
@@ -572,7 +572,7 @@ function TimelineEventCard({
 
         {event.workspaceChange ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="w-14 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <span className="w-14 text-(length:--text-nano) font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
               {t("Workspace", { defaultValue: "Workspace" })}
             </span>
             <span className="text-muted-foreground">
@@ -703,7 +703,7 @@ const TimelineList = memo(function TimelineList({
                 </div>
               </div>
               {run.environment || run.environmentLease ? (
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-(length:--text-micro) text-muted-foreground">
                   {run.environment ? (
                     <span>
                       {t("commentThread.environment", { defaultValue: "Environment" })} <span className="text-foreground">{run.environment.name}</span>
@@ -1029,7 +1029,7 @@ export function CommentThread({
       {queuedComments.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">
+            <h4 className="text-xs font-semibold uppercase tracking-(--tracking-eyebrow) text-amber-700 dark:text-amber-300">
               {t("commentThread.queuedCommentsCount", {
                 defaultValue: "Queued Comments ({{count}})",
                 count: queuedComments.length,
@@ -1080,7 +1080,7 @@ export function CommentThread({
             mentions={mentions}
             onSubmit={handleSubmit}
             imageUploadHandler={imageUploadHandler}
-            contentClassName="min-h-[60px] text-sm"
+            contentClassName="min-h-(--sz-60px) text-sm"
           />
           <div className="flex items-center justify-end gap-3">
             {(imageUploadHandler || onAttachImage) && (
@@ -1104,17 +1104,23 @@ export function CommentThread({
               </div>
             )}
             {enableReassign && reassignOptions.length > 0 && (
-              <InlineEntitySelector
-                value={reassignTarget}
-                options={reassignOptions}
-                placeholder={t("Assignee", { defaultValue: "Assignee" })}
-                noneLabel={t("No assignee", { defaultValue: "No assignee" })}
-                searchPlaceholder={t("Search assignees...", { defaultValue: "Search assignees..." })}
-                emptyMessage={t("No assignees found.", { defaultValue: "No assignees found." })}
+                <InlineEntitySelector
+                  value={reassignTarget}
+                  options={reassignOptions}
+                placeholder={t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+                noneLabel={t("issueChat.noAssignee", { defaultValue: "No responsible" })}
+                searchPlaceholder={t("issueChat.searchAssignees", { defaultValue: "Search responsible..." })}
+                emptyMessage={t("issueChat.noAssigneesFound", { defaultValue: "No responsible found." })}
                 onChange={setReassignTarget}
                 className="text-xs h-8"
                 renderTriggerValue={(option) => {
-                  if (!option) return <span className="text-muted-foreground">{t("Assignee", { defaultValue: "Assignee" })}</span>;
+                  if (!option) {
+                    return (
+                      <span className="text-muted-foreground">
+                        {t("issueChat.assigneePlaceholder", { defaultValue: "Responsible" })}
+                      </span>
+                    );
+                  }
                   const agentId = option.id.startsWith("agent:") ? option.id.slice("agent:".length) : null;
                   const agent = agentId ? agentMap?.get(agentId) : null;
                   return (

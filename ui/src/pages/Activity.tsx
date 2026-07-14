@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { History } from "lucide-react";
+import { Card } from "@/components/ui/card";
 
 const ACTIVITY_PAGE_LIMIT = 200;
 
@@ -123,7 +124,7 @@ export function Activity() {
     <div className="space-y-4">
       <div className="flex items-center justify-end">
         <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-[140px] h-8 text-xs">
+          <SelectTrigger className="w-(--sz-140px) h-8 text-xs">
             <SelectValue placeholder={t("Filter by type", { defaultValue: "Filter by type" })} />
           </SelectTrigger>
           <SelectContent>
@@ -146,7 +147,7 @@ export function Activity() {
       )}
 
       {filtered && filtered.length > 0 && (
-        <div className="border border-border divide-y divide-border">
+        <Card className="block py-0 overflow-hidden divide-y divide-border">
           {filtered.map((event) => (
             <ActivityRow
               key={event.id}
@@ -157,7 +158,7 @@ export function Activity() {
               entityTitleMap={entityTitleMap}
             />
           ))}
-        </div>
+        </Card>
       )}
     </div>
   );

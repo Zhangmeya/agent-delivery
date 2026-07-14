@@ -17,6 +17,8 @@ import { ExternalLink } from "lucide-react";
 import { Identity } from "./Identity";
 import { RunChatSurface } from "./RunChatSurface";
 import { useLiveRunTranscripts } from "./transcript/useLiveRunTranscripts";
+import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
+import { Badge } from "@/components/ui/badge";
 
 function RunCardRecoveryChip({ action }: { action: IssueRecoveryAction }) {
   const { t } = useTranslation(undefined, { useSuspense: false });
@@ -30,20 +32,20 @@ function RunCardRecoveryChip({ action }: { action: IssueRecoveryAction }) {
     defaultValue: "{{label}} - open the source issue to act.",
   });
   return (
-    <span
+    <Badge variant="outline"
       data-testid="active-agent-run-recovery-indicator"
       data-recovery-state={state}
       role="status"
       aria-label={label}
       title={title}
       className={cn(
-        "inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+        "gap-0.5 px-1.5 text-(length:--text-nano)",
         tone.className,
       )}
     >
       <Icon className="h-2.5 w-2.5" aria-hidden />
       {label}
-    </span>
+    </Badge>
   );
 }
 
@@ -84,10 +86,20 @@ export function ActiveAgentsPanel({
   showMoreLink = true,
 }: ActiveAgentsPanelProps) {
   const { t } = useTranslation(undefined, { useSuspense: false });
-  const { data: liveRuns } = useQuery({
-    queryKey: [...queryKeys.liveRuns(companyId), queryScope, { minRunCount, fetchLimit }],
-    queryFn: () => heartbeatsApi.liveRunsForCompany(companyId, { minCount: minRunCount, limit: fetchLimit }),
+  const liveRunsQueryKey = [...queryKeys.liveRuns(companyId), queryScope, { minRunCount, fetchLimit }] as const;
+  const sharedLiveRuns = useSharedPollingQuery({
+    companyId,
+    resourceKey: `live-runs:${queryScope}:${minRunCount}:${fetchLimit ?? "default"}`,
+    queryKey: liveRunsQueryKey,
+    enabled: !!companyId,
+    leaderOnly: true,
   });
+  const { data: liveRuns, dataUpdatedAt: liveRunsUpdatedAt } = useQuery({
+    queryKey: liveRunsQueryKey,
+    queryFn: () => heartbeatsApi.liveRunsForCompany(companyId, { minCount: minRunCount, limit: fetchLimit }),
+    enabled: sharedLiveRuns.enabled,
+  });
+  usePublishSharedQueryData(sharedLiveRuns, liveRuns, liveRunsUpdatedAt);
 
   const runs = liveRuns ?? [];
   const visibleRuns = useMemo(() => runs.slice(0, cardLimit), [cardLimit, runs]);
@@ -180,9 +192,9 @@ const AgentRunCard = memo(function AgentRunCard({
   const { t } = useTranslation(undefined, { useSuspense: false });
   return (
     <div className={cn(
-      "flex h-[320px] flex-col overflow-hidden rounded-xl border shadow-sm",
+      "flex h-(--sz-320px) flex-col overflow-hidden rounded-xl border shadow-sm",
       isActive
-        ? "border-cyan-500/25 bg-cyan-500/[0.04] shadow-[0_16px_40px_rgba(6,182,212,0.08)]"
+        ? "border-blue-500/25 bg-blue-500/[0.04] shadow-(--shadow-extract-1)"
         : "border-border bg-background/70",
       className,
     )}>
@@ -192,15 +204,15 @@ const AgentRunCard = memo(function AgentRunCard({
             <div className="flex items-center gap-2">
               {isActive ? (
                 <span className="relative flex h-2.5 w-2.5 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-70" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyan-500" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-70" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-500" />
                 </span>
               ) : (
                 <span className="inline-flex h-2.5 w-2.5 rounded-full bg-muted-foreground/35" />
               )}
-              <Identity name={displaySeededName(run.agentName)} size="sm" className="[&>span:last-child]:!text-[11px]" />
+              <Identity name={displaySeededName(run.agentName)} size="sm" className="[&>span:last-child]:!text-(length:--text-micro)" />
             </div>
-            <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="mt-2 flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
               <span>
                 {isActive
                   ? t("Live now")
@@ -213,7 +225,7 @@ const AgentRunCard = memo(function AgentRunCard({
 
           <Link
             to={`/agents/${run.agentId}/runs/${run.id}`}
-            className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/70 px-2 py-1 text-(length:--text-nano) text-muted-foreground transition-colors hover:text-foreground"
           >
             <ExternalLink className="h-2.5 w-2.5" />
           </Link>
@@ -225,7 +237,7 @@ const AgentRunCard = memo(function AgentRunCard({
               to={`/issues/${issue?.identifier ?? run.issueId}`}
               className={cn(
                 "line-clamp-2 hover:underline",
-                isActive ? "text-cyan-700 dark:text-cyan-300" : "text-muted-foreground hover:text-foreground",
+                isActive ? "text-blue-700 dark:text-blue-300" : "text-muted-foreground hover:text-foreground",
               )}
               title={issue?.title ? `${issue?.identifier ?? run.issueId.slice(0, 8)} - ${issue.title}` : issue?.identifier ?? run.issueId.slice(0, 8)}
             >

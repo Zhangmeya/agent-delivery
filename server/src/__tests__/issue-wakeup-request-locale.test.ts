@@ -38,6 +38,7 @@ vi.mock("../services/index.js", () => ({
   companyService: () => ({
     getById: vi.fn(),
   }),
+  companySkillService: () => ({}),
   documentAnnotationService: () => ({
     remapOpenThreadsForDocument: vi.fn(async () => []),
   }),

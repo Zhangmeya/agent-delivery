@@ -2,13 +2,14 @@ import { memo, useState, useEffect, useRef, useCallback, useMemo, type ChangeEve
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { IssueWorkMode } from "@penclipai/shared";
+import type { AgentEnvConfig, EnvBinding, IssueWorkMode } from "@penclipai/shared";
 import { pickTextColorForSolidBg } from "@/lib/color-contrast";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { useAdapterCapabilities } from "../adapters/use-adapter-capabilities";
 import { executionWorkspacesApi } from "../api/execution-workspaces";
 import { issuesApi } from "../api/issues";
+import { MissingUserSecretsBanner } from "../pages/secrets/MissingUserSecretsBanner";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { projectsApi } from "../api/projects";
 import { agentsApi } from "../api/agents";
@@ -116,6 +117,7 @@ type StagedIssueFile = {
   title?: string | null;
 };
 
+import { Badge } from "@/components/ui/badge";
 import {
   buildAssigneeAdapterOverrides,
   ISSUE_OVERRIDE_ADAPTER_TYPES,
@@ -228,18 +230,46 @@ function buildStatusOptions(t: TFunction): ReadonlyArray<{ value: string; label:
       value: "backlog",
       label: t("status.backlog", { defaultValue: "Backlog" }),
       color: palette.backlog ?? issueStatusTextDefault,
-      description: t("newIssue.statusDescriptions.backlog", { defaultValue: "Parked - assignee will not be woken" }),
+      description: t("newIssue.statusDescriptions.backlog", { defaultValue: "Parked - responsible will not be woken" }),
     },
     {
       value: "todo",
       label: t("status.todo", { defaultValue: "Todo" }),
       color: palette.todo ?? issueStatusTextDefault,
-      description: t("newIssue.statusDescriptions.todo", { defaultValue: "Executable - assignee will be woken" }),
+      description: t("newIssue.statusDescriptions.todo", { defaultValue: "Executable - responsible will be woken" }),
     },
     { value: "in_progress", label: t("status.inProgress", { defaultValue: "In Progress" }), color: palette.in_progress ?? issueStatusTextDefault },
     { value: "in_review", label: t("status.inReview", { defaultValue: "In Review" }), color: palette.in_review ?? issueStatusTextDefault },
     { value: "done", label: t("status.done", { defaultValue: "Done" }), color: palette.done ?? issueStatusTextDefault },
   ];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isRequiredUserSecretBinding(value: unknown): value is Extract<EnvBinding, { type: "user_secret_ref" }> {
+  return isRecord(value)
+    && value.type === "user_secret_ref"
+    && typeof value.key === "string"
+    && value.key.trim().length > 0
+    && value.required !== false
+    && value.allowMissingOverride !== true;
+}
+
+function collectRequiredUserSecretKeysFromEnv(env: AgentEnvConfig | Record<string, unknown> | null | undefined): string[] {
+  if (!isRecord(env)) return [];
+  return Object.values(env).flatMap((binding) =>
+    isRequiredUserSecretBinding(binding) ? [binding.key.trim()] : [],
+  );
+}
+
+function uniqueRequiredUserSecretKeys(inputs: Array<AgentEnvConfig | Record<string, unknown> | null | undefined>): string[] {
+  return [...new Set(inputs.flatMap(collectRequiredUserSecretKeysFromEnv))];
+}
+
+function shouldWarnAboutRunUserSecrets(status: string, assigneeAgentId: string | null | undefined) {
+  return Boolean(assigneeAgentId) && (status === "todo" || status === "in_progress");
 }
 
 const priorities = [
@@ -288,6 +318,15 @@ function defaultExecutionWorkspaceModeForIssueDefaults(
   return typeof defaults.executionWorkspaceMode === "string" && defaults.executionWorkspaceMode.length > 0
     ? defaults.executionWorkspaceMode
     : defaultExecutionWorkspaceModeForProject(project);
+}
+
+function isWorkModePeriodShortcut(e: Pick<React.KeyboardEvent, "code" | "ctrlKey" | "key" | "metaKey">) {
+  const isPeriod = e.code === "Period" || e.key === ".";
+  return (e.metaKey || e.ctrlKey) && isPeriod;
+}
+
+function isWorkModeEscapeShortcut(e: Pick<KeyboardEvent, "key" | "metaKey">) {
+  return e.metaKey && e.key === "Escape";
 }
 
 const IssueTitleTextarea = memo(function IssueTitleTextarea({
@@ -391,7 +430,7 @@ const IssueDescriptionEditor = memo(function IssueDescriptionEditor({
       placeholder={t("newIssue.descriptionPlaceholder", { defaultValue: "Add description..." })}
       bordered={false}
       mentions={mentions}
-      contentClassName={cn("text-sm text-muted-foreground pb-12", expanded ? "min-h-[220px]" : "min-h-[120px]")}
+      contentClassName={cn("text-sm text-muted-foreground pb-12", expanded ? "min-h-(--sz-220px)" : "min-h-(--sz-120px)")}
       imageUploadHandler={imageUploadHandler}
     />
   );
@@ -1040,7 +1079,7 @@ export function NewIssueDialog() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.code === "Period") {
+    if (isWorkModePeriodShortcut(e)) {
       e.preventDefault();
       setWorkMode((current) => nextWorkMode(current));
       return;
@@ -1122,6 +1161,16 @@ export function NewIssueDialog() {
     : null;
   const currentAssigneeLowTrust = getTrustPreset(currentAssignee?.permissions) === "low_trust_review";
   const currentProject = orderedProjects.find((project) => project.id === projectId);
+  const neededUserSecretKeys = useMemo(
+    () => {
+      if (!shouldWarnAboutRunUserSecrets(status, selectedAssigneeAgentId)) return [];
+      return uniqueRequiredUserSecretKeys([
+        isRecord(currentAssignee?.adapterConfig) ? currentAssignee.adapterConfig.env as Record<string, unknown> : null,
+        currentProject?.env ?? null,
+      ]);
+    },
+    [currentAssignee?.adapterConfig, currentProject?.env, selectedAssigneeAgentId, status],
+  );
   const currentProjectExecutionWorkspacePolicy =
     experimentalSettings?.enableIsolatedWorkspaces === true
       ? currentProject?.executionWorkspacePolicy ?? null
@@ -1264,13 +1313,22 @@ export function NewIssueDialog() {
         aria-describedby={undefined}
         style={{ "--new-issue-dialog-height": MOBILE_DIALOG_HEIGHT } as CSSProperties}
         className={cn(
-          "flex h-[var(--new-issue-dialog-height)] max-h-[var(--new-issue-dialog-height)] flex-col gap-0 overflow-hidden p-0 sm:h-auto",
+          "flex h-(--new-issue-dialog-height) max-h-(--new-issue-dialog-height) flex-col gap-0 overflow-hidden p-0 sm:h-auto",
           expanded
-            ? "sm:max-w-2xl sm:h-[var(--new-issue-dialog-height)]"
+            ? "sm:max-w-2xl sm:h-(--new-issue-dialog-height)"
             : "sm:max-w-lg"
         )}
         onKeyDown={handleKeyDown}
         onEscapeKeyDown={(event) => {
+          if (event.defaultPrevented) return;
+          // iOS Safari maps command-period to Escape for hardware keyboards.
+          // Treat modifier-Escape as the same mode-cycle shortcut so the
+          // dialog does not dismiss before the shortcut can run.
+          if (isWorkModeEscapeShortcut(event)) {
+            event.preventDefault();
+            setWorkMode((current) => nextWorkMode(current));
+            return;
+          }
           if (createIssue.isPending) {
             event.preventDefault();
           }
@@ -1330,7 +1388,7 @@ export function NewIssueDialog() {
                   >
                     <span
                       className={cn(
-                        "px-1 py-0.5 rounded text-[10px] font-semibold leading-none",
+                        "px-1 py-0.5 rounded text-(length:--text-nano) font-semibold leading-none",
                         !c.brandColor && "bg-muted",
                       )}
                       style={
@@ -1392,6 +1450,17 @@ export function NewIssueDialog() {
               onChange={handleTitleChange}
             />
           </div>
+
+          {effectiveCompanyId ? (
+            <div className="px-4 pb-2">
+              {neededUserSecretKeys.length > 0 ? (
+                <MissingUserSecretsBanner
+                  companyId={effectiveCompanyId}
+                  definitionKeys={neededUserSecretKeys}
+                />
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="px-4 pb-2">
             <div className="overflow-x-auto overscroll-x-contain">
@@ -1475,7 +1544,7 @@ export function NewIssueDialog() {
                     <>
                       <span
                         className="h-3.5 w-3.5 shrink-0 rounded-sm"
-                        style={{ backgroundColor: currentProject.color ?? "#6366f1" }}
+                        style={{ backgroundColor: currentProject.color ?? "var(--project-seed)" }}
                       />
                       <span className="truncate">{option.label}</span>
                     </>
@@ -1490,7 +1559,7 @@ export function NewIssueDialog() {
                     <>
                       <span
                         className="h-3.5 w-3.5 shrink-0 rounded-sm"
-                        style={{ backgroundColor: project?.color ?? "#6366f1" }}
+                        style={{ backgroundColor: project?.color ?? "var(--project-seed)" }}
                       />
                       <span className="truncate">{option.label}</span>
                     </>
@@ -1770,7 +1839,7 @@ export function NewIssueDialog() {
             <div className="px-4 py-3 space-y-2">
             <div className="space-y-1.5">
               <div className="text-xs font-medium">{t("newIssue.executionWorkspaceTitle", { defaultValue: "Execution workspace" })}</div>
-              <div className="text-[11px] text-muted-foreground">
+              <div className="text-(length:--text-micro) text-muted-foreground">
                 {t("newIssue.executionWorkspaceHelp", { defaultValue: "Control whether this issue runs in the shared workspace, a new isolated workspace, or an existing one." })}
               </div>
               <select
@@ -1800,7 +1869,7 @@ export function NewIssueDialog() {
                 />
               )}
               {executionWorkspaceMode === "reuse_existing" && selectedReusableExecutionWorkspace && (
-                <div className="text-[11px] text-muted-foreground">
+                <div className="text-(length:--text-micro) text-muted-foreground">
                   {t("newIssue.reusingExecutionWorkspace", {
                     defaultValue: "Reusing {{name}} from {{source}}.",
                     name: selectedReusableExecutionWorkspace.name,
@@ -1809,7 +1878,7 @@ export function NewIssueDialog() {
                 </div>
               )}
               {showParentWorkspaceWarning ? (
-                <div className="rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-100">
+                <div className="rounded-md border border-amber-300/60 bg-amber-50 px-2 py-1.5 text-(length:--text-micro) text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-100">
                   {t("newIssue.executionWorkspace.parentWarning", {
                     defaultValue: "Warning: this sub-issue will no longer use the parent issue workspace{{suffix}}.",
                     suffix: parentExecutionWorkspaceLabel ? ` (${parentExecutionWorkspaceLabel})` : "",
@@ -1859,7 +1928,7 @@ export function NewIssueDialog() {
                     ))}
                   </div>
                   {assigneeModelLane === "cheap" && (
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-(length:--text-micro) text-muted-foreground">
                       {t("newIssue.modelLane.cheapSendsPrefix", { defaultValue: "Sends" })} <code>modelProfile: "cheap"</code>{" "}
                       {assigneeCheapProfile?.adapterConfig && typeof (assigneeCheapProfile.adapterConfig as Record<string, unknown>).model === "string"
                         ? <>{t("newIssue.modelLane.adapterDefaultPrefix", { defaultValue: "· adapter default" })} <code>{String((assigneeCheapProfile.adapterConfig as Record<string, unknown>).model)}</code></>
@@ -1869,10 +1938,10 @@ export function NewIssueDialog() {
                     </p>
                   )}
                   {assigneeModelLane === "primary" && (
-                    <p className="text-[11px] text-muted-foreground">{t("newIssue.modelLane.primaryDescription", { defaultValue: "Runs on the agent's primary model." })}</p>
+                    <p className="text-(length:--text-micro) text-muted-foreground">{t("newIssue.modelLane.primaryDescription", { defaultValue: "Runs on the agent's primary model." })}</p>
                   )}
                   {assigneeModelLane === "custom" && (
-                    <p className="text-[11px] text-muted-foreground">{t("newIssue.modelLane.customDescription", { defaultValue: "Override the model and effort for this issue only." })}</p>
+                    <p className="text-(length:--text-micro) text-muted-foreground">{t("newIssue.modelLane.customDescription", { defaultValue: "Override the model and effort for this issue only." })}</p>
                   )}
                 </div>
                 {assigneeModelLane === "custom" && (
@@ -1956,12 +2025,12 @@ export function NewIssueDialog() {
                       <div key={file.id} className="flex items-start justify-between gap-3 rounded-md border border-border/70 px-3 py-2">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                            <Badge variant="outline" className="border-border font-mono text-(length:--text-nano) uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
                               {file.documentKey}
-                            </span>
+                            </Badge>
                             <span className="truncate text-sm">{file.file.name}</span>
                           </div>
-                          <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                          <div className="mt-1 flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
                             <FileText className="h-3.5 w-3.5" />
                             <span>{file.title || file.file.name}</span>
                             <span>•</span>
@@ -1995,7 +2064,7 @@ export function NewIssueDialog() {
                             <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                             <span className="truncate text-sm">{file.file.name}</span>
                           </div>
-                          <div className="mt-1 text-[11px] text-muted-foreground">
+                          <div className="mt-1 text-(length:--text-micro) text-muted-foreground">
                             {file.file.type || "application/octet-stream"} • {formatFileSize(file.file)}
                           </div>
                         </div>
@@ -2043,7 +2112,7 @@ export function NewIssueDialog() {
                   <span className="flex flex-col text-left leading-tight">
                     <span>{s.label}</span>
                     {s.description ? (
-                      <span className="text-[10px] text-muted-foreground">{s.description}</span>
+                      <span className="text-(length:--text-nano) text-muted-foreground">{s.description}</span>
                     ) : null}
                   </span>
                 </button>
@@ -2167,7 +2236,7 @@ export function NewIssueDialog() {
             </PopoverTrigger>
             <PopoverContent className="w-44 p-1" align="start" data-testid="new-issue-more-menu">
               <div className="sm:hidden">
-                <div className="px-2 py-1 text-[10px] font-medium uppercase text-muted-foreground">
+                <div className="px-2 py-1 text-(length:--text-nano) font-medium uppercase text-muted-foreground">
                   {t("newIssue.priority", { defaultValue: "Priority" })}
                 </div>
                 {priorityOptions.map((p) => (
@@ -2206,11 +2275,11 @@ export function NewIssueDialog() {
           <div
             data-testid="new-issue-assigned-backlog-note"
             className="mx-4 mb-2 flex items-start gap-2 rounded-md border border-amber-300/70 bg-amber-50/90 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100"
-          >
-            <Flag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
-            <span className="leading-snug">
-              {t("newIssue.assignedBacklogNote.beforeBacklog", { defaultValue: "Assigning implies executable intent - leave status as" })} <span className="font-medium">{t("status.backlog", { defaultValue: "Backlog" })}</span> {t("newIssue.assignedBacklogNote.afterBacklog", { defaultValue: "only to deliberately park this. The assignee will not be woken until status moves to" })} <span className="font-medium">{t("status.todo", { defaultValue: "Todo" })}</span> {t("newIssue.assignedBacklogNote.or", { defaultValue: "or" })} <span className="font-medium">{t("status.inProgress", { defaultValue: "In Progress" })}</span>.
-            </span>
+            >
+              <Flag className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
+              <span className="leading-snug">
+              {t("newIssue.assignedBacklogNote.beforeBacklog", { defaultValue: "Assigning implies executable intent - leave status as" })} <span className="font-medium">{t("status.backlog", { defaultValue: "Backlog" })}</span> {t("newIssue.assignedBacklogNote.afterBacklog", { defaultValue: "only to deliberately park this. The responsible will not be woken until status moves to" })} <span className="font-medium">{t("status.todo", { defaultValue: "Todo" })}</span> {t("newIssue.assignedBacklogNote.or", { defaultValue: "or" })} <span className="font-medium">{t("status.inProgress", { defaultValue: "In Progress" })}</span>.
+              </span>
           </div>
         ) : null}
 
@@ -2250,7 +2319,7 @@ export function NewIssueDialog() {
             </div>
             <Button
               size="sm"
-              className="min-w-[8.5rem] disabled:opacity-100"
+              className="min-w-(--sz-8_5rem) disabled:opacity-100"
               disabled={!titleHasText || createIssue.isPending}
               onClick={handleSubmit}
               aria-busy={createIssue.isPending}

@@ -3,6 +3,7 @@ import {
   AGENT_ICON_NAMES,
   AGENT_ROLES,
   MAX_COMPANY_ATTACHMENT_MAX_BYTES,
+  PERMISSION_KEYS,
   PROJECT_STATUSES,
 } from "../constants.js";
 import {
@@ -76,6 +77,10 @@ export const portabilityAgentManifestEntrySchema = z.object({
   adapterConfig: z.record(z.string(), z.unknown()),
   runtimeConfig: z.record(z.string(), z.unknown()),
   permissions: z.record(z.string(), z.unknown()),
+  permissionGrants: z.array(z.object({
+    permissionKey: z.enum(PERMISSION_KEYS),
+    scope: z.record(z.string(), z.unknown()).nullable().default(null),
+  })).default([]),
   budgetMonthlyCents: z.number().int().nonnegative(),
   metadata: z.record(z.string(), z.unknown()).nullable(),
 });

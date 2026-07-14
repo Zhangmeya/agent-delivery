@@ -67,6 +67,11 @@ export const DEFAULT_SANDBOX_CALLBACK_BRIDGE_ROUTE_ALLOWLIST: readonly SandboxCa
   { method: "PATCH", path: /^\/api\/issues\/[^/]+$/ },
   { method: "GET", path: /^\/api\/issues\/[^/]+\/approvals$/ },
 
+  // Work products: publish branch/commit/artifact metadata for completed work.
+  { method: "GET", path: /^\/api\/issues\/[^/]+\/work-products$/ },
+  { method: "POST", path: /^\/api\/issues\/[^/]+\/work-products$/ },
+  { method: "PATCH", path: /^\/api\/work-products\/[^/]+$/ },
+
   // Issue-thread interactions (suggest tasks, ask questions, request confirmation)
   { method: "GET", path: /^\/api\/issues\/[^/]+\/interactions(?:\/[^/]+)?$/ },
   { method: "POST", path: /^\/api\/issues\/[^/]+\/interactions$/ },
@@ -501,22 +506,23 @@ export function createCommandManagedSandboxCallbackBridgeQueueClient(input: {
     },
     writeTextFile: async (remotePath, body) => {
       const remoteDir = path.posix.dirname(remotePath);
-      const tempPath = `${remotePath}.paperclip-upload.b64`;
+      const encodedTempPath = `${remotePath}.paperclip-upload.b64`;
+      const decodedTempPath = `${remotePath}.paperclip-upload.tmp`;
       await runChecked(
         `prepare upload ${remotePath}`,
-        `mkdir -p ${shellQuote(remoteDir)} && rm -f ${shellQuote(tempPath)} && : > ${shellQuote(tempPath)}`,
+        `mkdir -p ${shellQuote(remoteDir)} && rm -f ${shellQuote(encodedTempPath)} ${shellQuote(decodedTempPath)} && : > ${shellQuote(encodedTempPath)}`,
       );
       const base64Body = toBuffer(Buffer.from(body, "utf8")).toString("base64");
       for (const chunk of base64Chunks(base64Body)) {
         await runChecked(
           `append upload chunk ${remotePath}`,
-          `cat >> ${shellQuote(tempPath)}`,
+          `cat >> ${shellQuote(encodedTempPath)}`,
           chunk,
         );
       }
       await runChecked(
         `finalize upload ${remotePath}`,
-        `base64 -d < ${shellQuote(tempPath)} > ${shellQuote(remotePath)} && rm -f ${shellQuote(tempPath)}`,
+        `base64 -d < ${shellQuote(encodedTempPath)} > ${shellQuote(decodedTempPath)} && mv ${shellQuote(decodedTempPath)} ${shellQuote(remotePath)} && rm -f ${shellQuote(encodedTempPath)}`,
       );
     },
     writeResponseFile: async (responsePath, body, options = {}) => {

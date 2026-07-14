@@ -142,7 +142,7 @@ export function SecretBindingPicker({
           {value ? (
             <button
               type="button"
-              className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+              className="text-(length:--text-micro) text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
               onClick={() => onChange(null)}
               disabled={disabled}
             >
@@ -230,7 +230,7 @@ export function SecretBindingPicker({
       </div>
 
       {selectedSecret ? (
-        <p className={cn("text-[11px] text-muted-foreground", statusTone(selectedSecret.status))}>
+        <p className={cn("text-(length:--text-micro) text-muted-foreground", statusTone(selectedSecret.status))}>
           {selectedSecret.status !== "active"
             ? t("secretBindingPicker.statusPrefix", {
                 status: translateStatusLabel(t, selectedSecret.status),
@@ -244,14 +244,14 @@ export function SecretBindingPicker({
           })}
         </p>
       ) : selectedMissing ? (
-        <p className="text-[11px] text-destructive flex items-center gap-1">
+        <p className="text-(length:--text-micro) text-destructive flex items-center gap-1">
           <AlertCircle className="h-3 w-3" />
           {t("secretBindingPicker.selectedSecretMissing", {
             defaultValue: "The previously selected secret is no longer available. Pick another or remove the binding.",
           })}
         </p>
       ) : (filteredSecrets.length === 0 && !secretsQuery.isPending) ? (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-(length:--text-micro) text-muted-foreground">
           {emptyHint ?? t("secretBindingPicker.emptyHint", {
             defaultValue: "No matching secrets. Create one to bind it here.",
           })}
@@ -284,7 +284,7 @@ export function SecretBindingPicker({
                 placeholder={t("secretBindingPicker.valuePlaceholder", { defaultValue: "Paste the secret value" })}
                 className="font-mono text-xs"
               />
-              <p className="text-[11px] text-muted-foreground mt-1">
+              <p className="text-(length:--text-micro) text-muted-foreground mt-1">
                 {t("secretBindingPicker.valueHelp", {
                   defaultValue: "The value is stored once and never re-displayed. Rotate to replace.",
                 })}

@@ -1,10 +1,15 @@
 import type { Request, Response, NextFunction } from "express";
+import type { Db } from "@penclipai/db";
 import { ZodError } from "zod";
 import { trackErrorHandlerCrash } from "@penclipai/shared/telemetry";
 import { HttpError } from "../errors.js";
 import { translate as translateServer } from "../i18n.js";
 import { getTelemetryClient } from "../telemetry.js";
 import { COMPANY_IMPORT_API_PATH } from "../routes/company-import-paths.js";
+import { logger } from "./logger.js";
+import {
+  recordResponsibleUserDenialOnActiveRun,
+} from "../services/responsible-user-denial-run-outcomes.js";
 
 export interface ErrorContext {
   error: { message: string; stack?: string; name?: string; details?: unknown; raw?: unknown };
@@ -32,6 +37,36 @@ function attachErrorContext(
   if (rawError) {
     (res as any).err = rawError;
   }
+}
+
+function getPaperclipDb(req: Request): Db | null {
+  const locals = req.app?.locals as { paperclipDb?: Db; db?: Db } | undefined;
+  return locals?.paperclipDb ?? locals?.db ?? null;
+}
+
+function recordResponsibleUserDenialFromHttpError(
+  req: Request,
+  details: Record<string, unknown> | null,
+) {
+  if (req.actor?.type !== "agent") return;
+  const db = getPaperclipDb(req);
+  if (!db) return;
+
+  void recordResponsibleUserDenialOnActiveRun(db, {
+    runId: req.actor.runId ?? null,
+    agentId: req.actor.agentId ?? null,
+    companyId: req.actor.companyId ?? null,
+    code: details?.code,
+  }).catch((recordErr) => {
+    logger.warn(
+      {
+        err: recordErr,
+        runId: req.actor?.runId ?? null,
+        agentId: req.actor?.type === "agent" ? req.actor.agentId ?? null : null,
+      },
+      "failed to record responsible-user denial on heartbeat run",
+    );
+  });
 }
 
 export function errorHandler(
@@ -71,6 +106,7 @@ export function errorHandler(
     const details = err.details && typeof err.details === "object" && !Array.isArray(err.details)
       ? err.details as Record<string, unknown>
       : null;
+    recordResponsibleUserDenialFromHttpError(req, details);
     if (err.status >= 500) {
       attachErrorContext(
         req,
@@ -84,6 +120,7 @@ export function errorHandler(
     res.status(err.status).json({
       error: translatedMessage,
       ...(typeof details?.code === "string" ? { code: details.code } : {}),
+      ...(typeof details?.remediation === "string" ? { remediation: details.remediation } : {}),
       ...(err.details ? { details: err.details } : {}),
     });
     return;

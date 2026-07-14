@@ -178,7 +178,7 @@ async function readExistingManifest(packageDir: string): Promise<CatalogManifest
 
 async function loadCatalogSkills(packageDir: string, errors: string[]): Promise<CatalogSkillSummary[]> {
   try {
-    const catalogPackageName = "@paperclipai/skills-catalog";
+    const catalogPackageName = "@penclipai/skills-catalog";
     const catalog = await import(catalogPackageName) as { catalogSkills: CatalogSkillSummary[] };
     const skills = catalog.catalogSkills as CatalogSkillSummary[];
     return skills.map((skill) => ({ id: skill.id, key: skill.key, slug: skill.slug }));
@@ -188,7 +188,7 @@ async function loadCatalogSkills(packageDir: string, errors: string[]): Promise<
       const manifest = JSON.parse(await fs.readFile(siblingManifestPath, "utf8")) as { skills?: CatalogSkillSummary[] };
       return (manifest.skills ?? []).map((skill) => ({ id: skill.id, key: skill.key, slug: skill.slug }));
     } catch (error) {
-      errors.push(`Could not load @paperclipai/skills-catalog for skill requirement validation: ${errorMessage(error)}`);
+      errors.push(`Could not load @penclipai/skills-catalog for skill requirement validation: ${errorMessage(error)}`);
       return [];
     }
   }
@@ -608,7 +608,7 @@ function resolveSkillRequirement(
     };
   }
 
-  errors.push(`${prefix} skill reference "${ref}" does not resolve to a local team skill or @paperclipai/skills-catalog skill.`);
+  errors.push(`${prefix} skill reference "${ref}" does not resolve to a local team skill or @penclipai/skills-catalog skill.`);
   return {
     type: "catalog",
     ref,

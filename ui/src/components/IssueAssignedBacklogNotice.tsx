@@ -22,7 +22,7 @@ export function IssueAssignedBacklogNotice({
   if (issueStatus !== "backlog") return null;
   if (!assigneeAgent && !assigneeUserId) return null;
 
-  const assigneeLabel = assigneeAgent?.name ?? t("issueAssignedBacklogNotice.assignee", { defaultValue: "the assignee" });
+  const assigneeLabel = assigneeAgent?.name ?? t("issueAssignedBacklogNotice.assignee", { defaultValue: "the responsible" });
 
   return (
     <div
@@ -40,14 +40,14 @@ export function IssueAssignedBacklogNotice({
             {t("issueAssignedBacklogNotice.bodyAfterAssignee", {
               defaultValue: "will not be woken until status changes to",
             })}{" "}
-            <code className="rounded bg-amber-100 px-1 py-0.5 text-[12px] dark:bg-amber-400/15">todo</code>{" "}
+            <code className="rounded bg-amber-100 px-1 py-0.5 text-xs dark:bg-amber-400/15">todo</code>{" "}
             {t("issueAssignedBacklogNotice.or", { defaultValue: "or" })}{" "}
-            <code className="rounded bg-amber-100 px-1 py-0.5 text-[12px] dark:bg-amber-400/15">in_progress</code>.
+            <code className="rounded bg-amber-100 px-1 py-0.5 text-xs dark:bg-amber-400/15">in_progress</code>.
           </p>
           {assigneeAgent ? (
             <p className="text-xs leading-5 text-amber-800 dark:text-amber-200">
               {t("issueAssignedBacklogNotice.commentsStillWake", {
-                defaultValue: "Comments still wake the assignee for questions or triage. Leave this parked only if the work is intentionally on hold.",
+                defaultValue: "Comments still wake the responsible for questions or triage. Leave this parked only if the work is intentionally on hold.",
               })}
             </p>
           ) : null}

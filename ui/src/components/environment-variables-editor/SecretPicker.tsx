@@ -25,7 +25,7 @@ const FOLDER_VALUE_PREFIX = "__secret_folder__:";
 function statusBadge(status: SecretStatus | undefined) {
   if (!status || status === "active") return null;
   return (
-    <Badge variant="outline" className="ml-auto text-[10px] font-normal text-muted-foreground">
+    <Badge variant="outline" className="ml-auto text-(length:--text-nano) font-normal text-muted-foreground">
       {status}
     </Badge>
   );
@@ -272,7 +272,7 @@ export function SecretPicker({
       searchPlaceholder={t("envVarEditor.searchSecrets", { defaultValue: "Search secrets…" })}
       emptyMessage={t("envVarEditor.noMatchingSecrets", { defaultValue: "No matching secrets" })}
       triggerClassName={cn(
-        "h-[34px] min-h-[34px] font-mono text-sm",
+        "h-(--sz-34px) min-h-(--sz-34px) font-mono text-sm",
         boundMissing && "border-destructive text-destructive",
         boundSecret && boundSecret.status !== "active" && "border-amber-500/60",
         triggerClassName,
@@ -311,7 +311,7 @@ export function SecretPicker({
               <span className="flex min-w-0 flex-col">
                 <span className={cn("truncate text-sm", selected && "font-medium")}>{option.label}</span>
                 {option.pathHint ? (
-                  <span className="truncate font-mono text-[11px] text-muted-foreground">{option.pathHint}</span>
+                  <span className="truncate font-mono text-(length:--text-micro) text-muted-foreground">{option.pathHint}</span>
                 ) : null}
               </span>
             </span>
@@ -329,7 +329,7 @@ export function SecretPicker({
                 {option.label}
               </span>
               {option.pathHint && option.pathHint !== option.label ? (
-                <span className="truncate font-mono text-[11px] text-muted-foreground">{option.pathHint}</span>
+                <span className="truncate font-mono text-(length:--text-micro) text-muted-foreground">{option.pathHint}</span>
               ) : null}
             </span>
             {statusBadge(option.status)}

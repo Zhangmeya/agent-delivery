@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useNavigate } from "@/lib/router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -19,6 +19,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AgentStatusBadge } from "./StatusBadge";
 import { agentsApi } from "../api/agents";
 import { ApiError } from "../api/client";
@@ -166,6 +176,8 @@ export function AgentActionButtons({
   workActionsDisabledReason,
   navigateToRunOnInvoke = true,
   onActionError,
+  pauseConfirm,
+  hideTerminate = false,
   children,
   className,
 }: {
@@ -179,6 +191,13 @@ export function AgentActionButtons({
   workActionsDisabled?: boolean;
   workActionsDisabledReason?: string;
   navigateToRunOnInvoke?: boolean;
+  /**
+   * When set, pausing prompts a confirmation dialog first (e.g. for built-in
+   * agents that power a feature). Omit for the immediate-pause default.
+   */
+  pauseConfirm?: { title: string; description: ReactNode };
+  /** Hide the Terminate action (e.g. built-in agents are undeletable). */
+  hideTerminate?: boolean;
   /**
    * Optional inline error reporter. When provided it is used instead of a toast
    * for action failures (preserves the detail page's inline error banner). When
@@ -195,6 +214,7 @@ export function AgentActionButtons({
   const { openNewIssue } = useDialogActions();
   const { pushToast } = useToastActions();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [pauseConfirmOpen, setPauseConfirmOpen] = useState(false);
 
   const resolvedCompanyId = companyId ?? agent.companyId;
   const canonicalAgentRef = agentRouteRef(agent);
@@ -339,11 +359,29 @@ export function AgentActionButtons({
       ) : (
         <PauseResumeButton
           isPaused={isPaused}
-          onPause={() => agentAction.mutate("pause")}
+          onPause={() => (pauseConfirm ? setPauseConfirmOpen(true) : agentAction.mutate("pause"))}
           onResume={() => agentAction.mutate("resume")}
           disabled={pauseResumeDisabled}
           size={size}
         />
+      )}
+      {pauseConfirm && (
+        <AlertDialog open={pauseConfirmOpen} onOpenChange={setPauseConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{pauseConfirm.title}</AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div>{pauseConfirm.description}</div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+              <AlertDialogAction onClick={() => agentAction.mutate("pause")}>
+                {t("agentAction.pauseAnyway")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
       {showStatus && (
         <span className="hidden sm:inline">

@@ -1,6 +1,6 @@
 ---
 name: paperclip-cn-fork-maintenance
-description: Maintain the long-lived Paperclip CN fork by focusing on zh-CN localization completeness, Windows compatibility, Electron packaging health, external adapter boundaries, and rebrand boundary discipline. Prefer short command-style invocations such as `$paperclip-cn-fork-maintenance sync-fork`, `review-drift`, `audit-i18n`, `audit-windows`, `audit-electron`, `audit-adapters`, or `audit-rebrand`. Use when reviewing `origin/master..private/master`, preparing upstream syncs, checking untranslated UI text, auditing Windows command/path/junction behavior, validating desktop packaging, preserving external-only adapter installs such as Hermes, or normalizing `paperclipai` to `penclip` without over-changing command surfaces.
+description: Maintain the Paperclip CN fork's zh-CN localization, Windows and Electron health, external-adapter boundaries, and rebrand discipline. Use for sync-fork, review-drift, i18n/Windows/Electron/adapter/rebrand audits, upstream syncs, and Hermes external-only checks.
 ---
 
 # Paperclip CN Fork Maintenance

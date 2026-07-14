@@ -238,7 +238,7 @@ This keeps the core fast and resilient. If you need pre-commit validation (e.g.,
 
 ```typescript
 // modules/observability/src/hooks.ts
-import type { Db } from "@paperclipai/db";
+import type { Db } from "@penclipai/db";
 import { tokenMetrics } from "./schema.js";
 
 export function createHeartbeatHandler(db: Db) {
@@ -629,7 +629,7 @@ pnpm paperclipai store export                  # export current company as templ
 
 ### Phase 1: Core infrastructure
 
-Add to `@paperclipai/server`:
+Add to `@penclipai/server`:
 
 1. **HookBus** — Event emitter with `register()` and `emit()`, using `Promise.allSettled`
 2. **Module loader** — Scans `modules/`, validates manifests, calls `register(api)`
@@ -638,7 +638,7 @@ Add to `@paperclipai/server`:
 5. **Module migration runner** — Extends `db:migrate` to discover and run module migrations
 6. **Emit hooks from core services** — Add `hookBus.emit()` calls to existing CRUD operations
 
-Add to `@paperclipai/ui`:
+Add to `@penclipai/ui`:
 
 7. **Module page loader** — Reads module manifests, generates lazy routes
 8. **Dashboard widget slots** — Render module-contributed widgets on the Dashboard page
