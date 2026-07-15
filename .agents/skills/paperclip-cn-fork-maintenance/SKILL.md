@@ -1,6 +1,6 @@
 ---
 name: paperclip-cn-fork-maintenance
-description: Maintain the Paperclip CN fork's zh-CN localization, Windows and Electron health, external-adapter boundaries, and rebrand discipline. Use for upstream syncs, interrupted sync recovery, fork drift review, static or browser i18n audits, Windows/Electron/adapter/rebrand audits, PR handoff, and explicit merge-to-latest release coordination.
+description: Maintain the Paperclip CN fork's zh-CN localization, Windows/Electron health, external-adapter boundaries, and rebrand policy. Use for upstream sync or recovery, fork drift and i18n audits, platform/adapter reviews, PR handoff, and explicit merge-to-latest coordination.
 ---
 
 # Paperclip CN Fork Maintenance
