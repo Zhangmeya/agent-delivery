@@ -15,6 +15,7 @@ import {
 import { DocumentAnnotationLayer, type PendingAnchor } from "./DocumentAnnotationLayer";
 import { DocumentAnnotationPanel } from "./DocumentAnnotationPanel";
 import type { CompanyUserProfile } from "@/lib/company-members";
+import { translateInstant } from "@/i18n";
 
 const DESKTOP_ANNOTATION_PANEL_WIDTH = 360;
 const DESKTOP_ANNOTATION_PANEL_MIN_WIDTH = 280;
@@ -449,14 +450,23 @@ export function DocumentAnnotationsCountChip({
       onClick={onToggle}
       data-testid={`document-annotation-count-${docKey}`}
       aria-label={openCount === 0
-        ? `Open comments on ${docKey}`
-        : `Open ${openCount} unresolved comments on ${docKey}`}
+        ? translateInstant("documentAnnotations.openCommentsOn", {
+          docKey,
+          defaultValue: "Open comments on {{docKey}}",
+        })
+        : translateInstant("documentAnnotations.openUnresolvedCommentsOn", {
+          count: openCount,
+          docKey,
+          defaultValue: "Open {{count}} unresolved comments on {{docKey}}",
+        })}
       aria-expanded={panelOpen}
     >
       <MessageSquare className="h-3 w-3" aria-hidden="true" />
       <span className="tabular-nums">{openCount}</span>
       <span className="hidden sm:inline">
-        {openCount === 1 ? "comment" : "comments"}
+        {openCount === 1
+          ? translateInstant("common.comment", { defaultValue: "Comment" }).toLocaleLowerCase()
+          : translateInstant("documentAnnotations.comments", { defaultValue: "comments" })}
       </span>
     </Button>
   );

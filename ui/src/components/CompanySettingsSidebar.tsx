@@ -154,7 +154,7 @@ export function CompanySettingsSidebar() {
           />
           <SidebarNavItem
             to={`${INSTANCE_SETTINGS_PATH_PREFIX}/environments`}
-            label="Environments"
+            label={t("Environments", { defaultValue: "Environments" })}
             icon={MonitorCog}
             end
           />

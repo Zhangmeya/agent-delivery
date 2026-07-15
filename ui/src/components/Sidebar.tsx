@@ -217,10 +217,10 @@ export function Sidebar() {
           {showDecisions ? (
             <SidebarNavItem
               to="/decisions"
-              label="Decisions"
+              label={t("whatNeedsMe.title", { defaultValue: "Decisions" })}
               icon={ListChecks}
               badge={attentionCount}
-              badgeLabel="decisions"
+              badgeLabel={t("whatNeedsMe.badgeLabel", { defaultValue: "decisions" })}
             />
           ) : null}
           {conferenceRoomChatEnabled ? (

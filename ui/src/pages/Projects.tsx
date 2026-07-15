@@ -212,6 +212,12 @@ export function Projects() {
                     const starPending = pending && membershipMutation.variables?.starred !== undefined;
                     const joinLeavePending = pending && membershipMutation.variables?.starred === undefined;
                     const starred = isStarred(membershipsQuery.data, "project", project.id);
+                    const taskCount = project.taskCount ?? 0;
+                    const taskCountLabel = t("projects.taskCount", {
+                      count: taskCount,
+                      formattedCount: formatNumber(taskCount),
+                      defaultValue: taskCount === 1 ? "{{formattedCount}} task" : "{{formattedCount}} tasks",
+                    });
                     return (
                       <EntityRow
                         key={project.id}
@@ -225,9 +231,9 @@ export function Projects() {
                           <div className="flex items-center gap-3">
                             <span
                               className="hidden text-xs text-muted-foreground tabular-nums sm:inline"
-                              title={`${formatNumber(project.taskCount ?? 0)} task${(project.taskCount ?? 0) === 1 ? "" : "s"}`}
+                              title={taskCountLabel}
                             >
-                              {formatNumber(project.taskCount ?? 0)} task{(project.taskCount ?? 0) === 1 ? "" : "s"}
+                              {taskCountLabel}
                             </span>
                             {project.budget && (
                               <span className="hidden text-xs text-muted-foreground tabular-nums sm:inline">

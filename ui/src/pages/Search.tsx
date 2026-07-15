@@ -644,7 +644,10 @@ export function Search() {
                 <button
                   key={suggestion.token}
                   type="button"
-                  aria-label={`Insert operator ${suggestion.token}`}
+                  aria-label={t("searchPage.insertOperator", {
+                    defaultValue: "Insert operator {{token}}",
+                    token: suggestion.token,
+                  })}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     setDraftQuery(applySearchOperatorSuggestion(draftQuery, suggestion.token));
@@ -653,7 +656,9 @@ export function Search() {
                   className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 hover:bg-accent/60"
                 >
                   <span className="font-mono text-(length:--text-micro)">{suggestion.token}</span>
-                  <span className="hidden text-(length:--text-micro) sm:inline">{suggestion.description}</span>
+                  <span className="hidden text-(length:--text-micro) sm:inline">
+                    {t(suggestion.description, { defaultValue: suggestion.description })}
+                  </span>
                 </button>
               ))}
             </div>

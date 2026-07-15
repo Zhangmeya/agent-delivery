@@ -2245,6 +2245,7 @@ function ExpiredRequestConfirmationActivity({
     externalReferences,
   } = useContext(IssueChatCtx);
   const [expanded, setExpanded] = useState(false);
+  const { t } = useTranslation();
   const hasResolvedActor = Boolean(interaction.resolvedByAgentId || interaction.resolvedByUserId);
   const actorAgentId = hasResolvedActor
     ? interaction.resolvedByAgentId ?? null
@@ -2268,7 +2269,7 @@ function ExpiredRequestConfirmationActivity({
     <div className="min-w-0 flex-1">
       <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs", isCurrentUser && "justify-end")}>
         <span className="font-medium text-foreground">{actorName}</span>
-        <span className="text-muted-foreground">updated this task</span>
+        <span className="text-muted-foreground">{t("updated this task")}</span>
         <a
           href={anchorId ? `#${anchorId}` : undefined}
           className="text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
@@ -2283,7 +2284,7 @@ function ExpiredRequestConfirmationActivity({
           onClick={() => setExpanded((current) => !current)}
         >
           <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} />
-          {expanded ? "Hide confirmation" : "Expired confirmation"}
+          {expanded ? t("issueChat.hideConfirmation") : t("issueChat.expiredConfirmation")}
         </button>
       </div>
       {expanded ? (
@@ -3474,9 +3475,10 @@ function IssueChatDeletedComment({
   message: ThreadMessage;
   deletedAt: string;
 }) {
+  const { t } = useTranslation();
   const custom = issueChatMessageCustom(message);
   const anchorId = typeof custom.anchorId === "string" ? custom.anchorId : undefined;
-  const authorName = typeof custom.authorName === "string" ? custom.authorName : "Comment";
+  const authorName = typeof custom.authorName === "string" ? custom.authorName : t("Comment", { defaultValue: "Comment" });
   const deletedDate = new Date(deletedAt);
   const deletedDateLabel = Number.isNaN(deletedDate.getTime()) ? "" : formatDateTime(deletedDate);
 
@@ -3487,7 +3489,7 @@ function IssueChatDeletedComment({
       </div>
       <div className="min-w-0 rounded-md border border-dashed border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
         <span className="font-medium text-foreground/80">{authorName}</span>
-        <span> deleted this comment</span>
+        <span>{t("issueChat.deletedCommentSuffix", { defaultValue: " deleted this comment" })}</span>
         {deletedDateLabel ? <span className="text-xs"> · {deletedDateLabel}</span> : null}
       </div>
     </div>

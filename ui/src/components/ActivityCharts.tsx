@@ -30,15 +30,39 @@ const runSegmentColors = {
 
 // Compact per-day tooltip that also attributes failures to their error class.
 function runDayTooltip(entry: DashboardRunActivityDay): string {
-  const lines = [`${entry.date}: ${entry.total} run${entry.total === 1 ? "" : "s"}`];
-  if (entry.succeeded > 0) lines.push(`  succeeded: ${entry.succeeded}`);
-  if (entry.recovered > 0) lines.push(`  recovered: ${entry.recovered} (retry succeeded)`);
+  const lines = [
+    translateInstant("dashboard.runDayTooltipTotal", {
+      date: entry.date,
+      count: entry.total,
+      defaultValue: "{{date}}: {{count}} runs",
+    }),
+  ];
+  if (entry.succeeded > 0) {
+    lines.push(translateInstant("dashboard.runDayTooltipSucceeded", {
+      count: entry.succeeded,
+      defaultValue: "  succeeded: {{count}}",
+    }));
+  }
+  if (entry.recovered > 0) {
+    lines.push(translateInstant("dashboard.runDayTooltipRecovered", {
+      count: entry.recovered,
+      defaultValue: "  recovered: {{count}} (retry succeeded)",
+    }));
+  }
   if (entry.failed > 0) {
-    lines.push(`  failed: ${entry.failed}`);
+    lines.push(translateInstant("dashboard.runDayTooltipFailed", {
+      count: entry.failed,
+      defaultValue: "  failed: {{count}}",
+    }));
     const codes = Object.entries(entry.failedByErrorCode ?? {}).sort((a, b) => b[1] - a[1]);
     for (const [code, count] of codes) lines.push(`    ${code}: ${count}`);
   }
-  if (entry.other > 0) lines.push(`  other: ${entry.other}`);
+  if (entry.other > 0) {
+    lines.push(translateInstant("dashboard.runDayTooltipOther", {
+      count: entry.other,
+      defaultValue: "  other: {{count}}",
+    }));
+  }
   return lines.join("\n");
 }
 
@@ -134,10 +158,10 @@ export function RunActivityChart(props: RunChartProps) {
   }
 
   const legendItems = [
-    { color: runSegmentColors.succeeded, label: "Succeeded" },
-    ...(hasRecovered ? [{ color: runSegmentColors.recovered, label: "Recovered" }] : []),
-    { color: runSegmentColors.failed, label: "Failed" },
-    { color: runSegmentColors.other, label: "Other" },
+    { color: runSegmentColors.succeeded, label: translateInstant("status.succeeded", { defaultValue: "Succeeded" }) },
+    ...(hasRecovered ? [{ color: runSegmentColors.recovered, label: translateInstant("status.recovered", { defaultValue: "Recovered" }) }] : []),
+    { color: runSegmentColors.failed, label: translateInstant("status.failed", { defaultValue: "Failed" }) },
+    { color: runSegmentColors.other, label: translateInstant("Other", { defaultValue: "Other" }) },
   ];
 
   return (
@@ -202,7 +226,15 @@ export function PriorityChart({ issues }: { issues: { priority: string; createdA
           const total = Object.values(entry).reduce((a, b) => a + b, 0);
           const heightPct = (total / maxValue) * 100;
           return (
-            <div key={day} className="flex-1 h-full flex flex-col justify-end" title={`${day}: ${total} issues`}>
+            <div
+              key={day}
+              className="flex-1 h-full flex flex-col justify-end"
+              title={translateInstant("dashboard.issuesDayTooltip", {
+                date: day,
+                count: total,
+                defaultValue: "{{date}}: {{count}} issues",
+              })}
+            >
               {total > 0 ? (
                 <div className="flex flex-col-reverse gap-px overflow-hidden" style={{ height: `${heightPct}%`, minHeight: 2 }}>
                   {priorityOrder.map(p => entry[p] > 0 ? (
@@ -274,7 +306,15 @@ export function IssueStatusChart({ issues }: { issues: { status: string; created
           const total = Object.values(entry).reduce((a, b) => a + b, 0);
           const heightPct = (total / maxValue) * 100;
           return (
-            <div key={day} className="flex-1 h-full flex flex-col justify-end" title={`${day}: ${total} issues`}>
+            <div
+              key={day}
+              className="flex-1 h-full flex flex-col justify-end"
+              title={translateInstant("dashboard.issuesDayTooltip", {
+                date: day,
+                count: total,
+                defaultValue: "{{date}}: {{count}} issues",
+              })}
+            >
               {total > 0 ? (
                 <div className="flex flex-col-reverse gap-px overflow-hidden" style={{ height: `${heightPct}%`, minHeight: 2 }}>
                   {statusOrder.map(s => (entry[s] ?? 0) > 0 ? (

@@ -19,6 +19,7 @@ import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { collectLiveIssueIds } from "../lib/liveIssueIds";
 import { getRecentAssigneeIds, sortAgentsByRecency, trackRecentAssignee } from "../lib/recent-assignees";
 import { getRecentProjectIds, trackRecentProject } from "../lib/recent-projects";
+import { translateInstant } from "../i18n";
 import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
 import { EmptyState } from "../components/EmptyState";
 import { IssuesList } from "../components/IssuesList";
@@ -190,7 +191,7 @@ export function buildRoutineSections(
     .filter((group) => group.items.length > 0)
     .map((group) => (
       builtInRoutines.length > 0 && groupByValue === "none" && group.key === "__all"
-        ? { ...group, label: "Custom routines" }
+        ? { ...group, label: translateInstant("routines.customRoutines", { defaultValue: "Custom routines" }) }
         : group
     ));
 
@@ -200,7 +201,7 @@ export function buildRoutineSections(
     ...customGroups,
     {
       key: builtInRoutineGroupKey,
-      label: "Built-in routines",
+      label: translateInstant("routines.builtInRoutines", { defaultValue: "Built-in routines" }),
       items: builtInRoutines,
     },
   ];

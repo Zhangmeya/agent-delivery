@@ -234,12 +234,19 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
           // svg present (expanded) it was already 12px but without it (rail) it fell
           // back to 8px — a 4px horizontal jump on collapse (PAP-10676).
           className="h-9 flex-1 justify-start gap-2 px-3 text-left"
-          aria-label={selectedCompany ? `Open ${selectedCompany.name} company switcher` : "Open company switcher"}
+          aria-label={
+            selectedCompany
+              ? t("sidebar.openCompanySwitcherFor", {
+                  defaultValue: "Open {{name}} company switcher",
+                  name: selectedCompany.name,
+                })
+              : t("sidebar.openCompanySwitcher", { defaultValue: "Open company switcher" })
+          }
         >
           <span className="flex min-w-0 flex-1 items-center gap-2">
             {selectedCompany ? <WorkspaceIcon company={selectedCompany} /> : null}
             <span className={cn("truncate text-sm font-bold text-foreground", rail && SIDEBAR_RAIL_HIDDEN_LABEL)}>
-              {selectedCompany?.name ?? "Select company"}
+              {selectedCompany?.name ?? t("sidebar.selectCompany", { defaultValue: "Select company" })}
             </span>
           </span>
           {!rail && <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />}
@@ -248,7 +255,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
       <DropdownMenuContent align="start" sideOffset={8} className="w-64 p-1">
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <DropdownMenuLabel className="p-0 text-(length:--text-micro) font-semibold uppercase text-muted-foreground">
-            Switch company
+            {t("sidebar.switchCompany", { defaultValue: "Switch company" })}
           </DropdownMenuLabel>
           <button
             type="button"
