@@ -1,4 +1,4 @@
 interface:
   display_name: "Paperclip CN Fork Maintenance"
-  short_description: "Guard zh-CN, Windows, Electron, and rebrand drift"
-  default_prompt: "Use $paperclip-cn-fork-maintenance sync-fork to run an upstream merge workflow for this Paperclip CN fork."
+  short_description: "Resume CN syncs and guard release boundaries"
+  default_prompt: "Use $paperclip-cn-fork-maintenance sync-fork to reconcile current fork state, preserve CN boundaries, and continue through any explicitly requested PR or latest stage."

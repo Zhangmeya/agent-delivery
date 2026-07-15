@@ -20,10 +20,11 @@ Before making changes, read in this order:
 `doc/SPEC.md` is long-horizon product context.
 `doc/SPEC-implementation.md` is the concrete V1 build contract.
 
-For upstream merge work, also read:
+For upstream merge or Paperclip CN localization work, use the repository skill as the authority:
 
-1. `doc/UPSTREAM-MERGE-RUNBOOK.md`
-2. `doc/UI-LOCALIZATION.md`
+1. `.agents/skills/paperclip-cn-fork-maintenance/SKILL.md`
+2. `.agents/skills/paperclip-cn-fork-maintenance/references/sync-fork-state-machine.md` for sync, resume, PR, merge, or latest lifecycle work
+3. `.agents/skills/paperclip-cn-fork-maintenance/references/ui-localization-policy.md` for localization architecture, terminology, wording, and key policy
 
 ## 3. Repo Map
 
@@ -184,47 +185,17 @@ A change is done when all are true:
 4. Docs updated when behavior or commands change
 5. PR description follows the [PR template](.github/PULL_REQUEST_TEMPLATE.md) with all sections filled in (including Model Used)
 
-## 11. Fork-Specific: HenkDz/paperclip
+## 12. Fork-Specific: Paperclip CN
 
-This is a fork of `paperclipai/paperclip` with QoL patches and a **built-in** Hermes adapter story on branch `feat/externalize-hermes-adapter` ([tree](https://github.com/HenkDz/paperclip/tree/feat/externalize-hermes-adapter)).
+The Paperclip CN fork preserves five long-lived concerns: zh-CN-first localization, Windows compatibility, Electron packaging, external adapter boundaries, and visible rebrand policy. The `paperclip-cn-fork-maintenance` skill and its direct references are the authority for those concerns.
 
-### Branch Strategy
+### External Adapters
 
-- `feat/externalize-hermes-adapter` now ships `hermes_local` and `hermes_gateway` as built-in core adapters.
-- Older fork branches may still document plugin-only Hermes; treat this file as authoritative for the current branch.
-
-### Hermes (built-in)
-
-- `hermes_local` is available without Adapter manager installation and runs the local Hermes CLI.
-- `hermes_gateway` is available without Adapter manager installation and calls an already-running Hermes API server.
-- Operators may still install external Hermes packages through Adapter manager to override/shadow the built-ins.
-- Optional: `file:` entry in `~/.paperclip/adapter-plugins.json` remains useful for local development of override packages.
-
-### Local Dev
-
-- Fork runs on port 3101+ (auto-detects if 3100 is taken by upstream instance)
-- `npx vite build` hangs on NTFS — use `node node_modules/vite/bin/vite.js build` instead
-- Server startup from NTFS takes 30-60s — don't assume failure immediately
-- Kill ALL paperclip processes before starting: `pkill -f "paperclip"; pkill -f "tsx.*index.ts"`
-- Vite cache survives `rm -rf dist` — delete both: `rm -rf ui/dist ui/node_modules/.vite`
-
-### Fork QoL Patches (not in upstream)
-
-These are local modifications in the fork's UI. If re-copying source, these must be re-applied:
-
-1. **stderr_group** — amber accordion for MCP init noise in `RunTranscriptView.tsx`
-2. **tool_group** — accordion for consecutive non-terminal tools (write, read, search, browser)
-3. **Dashboard excerpt** — `LatestRunCard` strips markdown, shows first 3 lines/280 chars
-
-### Plugin System
-
-PR #2218 (`feat/external-adapter-phase1`) adds external adapter support. See root `AGENTS.md` for full details.
-
-- Adapters can be loaded as external plugins via `~/.paperclip/adapter-plugins.json`
-- The plugin-loader should have ZERO hardcoded adapter imports — pure dynamic loading
-- `createServerAdapter()` must include ALL optional fields (especially `detectModel`)
-- Built-in UI adapters can shadow external plugin parsers; external override pause/resume should restore the built-in parser.
-- Reference external adapters: Droid (npm); Hermes can also be tested as an override package.
+- Hermes, Droid, and similar third-party adapters remain external-only unless product strategy explicitly changes.
+- Install them through Adapter Manager or explicit external package paths.
+- Keep core server and UI workspaces free of adapter-specific imports, built-in registrations, and dependencies.
+- Keep plugin loading and host UI generic around raw package names and adapter type identifiers.
+- External overrides must restore shadowed built-in behavior when disabled, paused, removed, or replaced.
 
 ## Design system
 
