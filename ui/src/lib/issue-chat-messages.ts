@@ -20,6 +20,7 @@ import {
   summarizeNotice,
 } from "./transcriptPresentation";
 import { BRAND_NAME } from "./branding";
+import { translateInstant } from "../i18n";
 
 type JsonValue = null | string | number | boolean | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };
@@ -696,18 +697,37 @@ export function formatDurationWords(ms: number | null) {
   if (ms === null || !Number.isFinite(ms) || ms <= 0) return null;
   const totalSeconds = Math.max(1, Math.round(ms / 1000));
   if (totalSeconds < 60) {
-    return `${totalSeconds} second${totalSeconds === 1 ? "" : "s"}`;
+    return translateInstant(totalSeconds === 1 ? "durationWords.second" : "durationWords.seconds", {
+      count: totalSeconds,
+      defaultValue: totalSeconds === 1 ? "{{count}} second" : "{{count}} seconds",
+    });
   }
   const totalMinutes = Math.round(totalSeconds / 60);
   if (totalMinutes < 60) {
-    return `${totalMinutes} minute${totalMinutes === 1 ? "" : "s"}`;
+    return translateInstant(totalMinutes === 1 ? "durationWords.minute" : "durationWords.minutes", {
+      count: totalMinutes,
+      defaultValue: totalMinutes === 1 ? "{{count}} minute" : "{{count}} minutes",
+    });
   }
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   if (minutes === 0) {
-    return `${hours} hour${hours === 1 ? "" : "s"}`;
+    return translateInstant(hours === 1 ? "durationWords.hour" : "durationWords.hours", {
+      count: hours,
+      defaultValue: hours === 1 ? "{{count}} hour" : "{{count}} hours",
+    });
   }
-  return `${hours} hour${hours === 1 ? "" : "s"} ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  return translateInstant("durationWords.hoursMinutes", {
+    hours,
+    minutes,
+    hourWord: translateInstant(hours === 1 ? "durationWords.hourWord" : "durationWords.hoursWord", {
+      defaultValue: hours === 1 ? "hour" : "hours",
+    }),
+    minuteWord: translateInstant(minutes === 1 ? "durationWords.minuteWord" : "durationWords.minutesWord", {
+      defaultValue: minutes === 1 ? "minute" : "minutes",
+    }),
+    defaultValue: "{{hours}} {{hourWord}} {{minutes}} {{minuteWord}}",
+  });
 }
 
 function runDurationLabel(run: {
@@ -725,24 +745,36 @@ function runDurationLabel(run: {
   const stopReason = typeof run.resultJson?.stopReason === "string" ? run.resultJson.stopReason : null;
   switch (run.status) {
     case "succeeded":
-      return durationText ? `Worked for ${durationText}` : "Finished work";
+      return durationText
+        ? translateInstant("Worked for {{duration}}", { duration: durationText, defaultValue: "Worked for {{duration}}" })
+        : translateInstant("Finished work", { defaultValue: "Finished work" });
     case "failed":
     case "error":
-      return durationText ? `Failed after ${durationText}` : "Run failed";
+      return durationText
+        ? translateInstant("Failed after {{duration}}", { duration: durationText, defaultValue: "Failed after {{duration}}" })
+        : translateInstant("Run failed", { defaultValue: "Run failed" });
     case "timed_out":
-      return durationText ? `Timed out after ${durationText}` : "Run timed out";
+      return durationText
+        ? translateInstant("Timed out after {{duration}}", { duration: durationText, defaultValue: "Timed out after {{duration}}" })
+        : translateInstant("Run timed out", { defaultValue: "Run timed out" });
     case "cancelled":
       if (isOperatorInterruptedRun(run.resultJson, run.errorCode)) {
-        return durationText ? `Interrupted by board after ${durationText}` : "Interrupted by board";
+        return durationText
+          ? translateInstant("Interrupted by board after {{duration}}", { duration: durationText, defaultValue: "Interrupted by board after {{duration}}" })
+          : translateInstant("Interrupted by board", { defaultValue: "Interrupted by board" });
       }
       if (stopReason === "paused") {
-        return durationText ? `Paused by board after ${durationText}` : "Paused by board";
+        return durationText
+          ? translateInstant("Paused by board after {{duration}}", { duration: durationText, defaultValue: "Paused by board after {{duration}}" })
+          : translateInstant("Paused by board", { defaultValue: "Paused by board" });
       }
-      return durationText ? `Cancelled after ${durationText}` : "Run cancelled";
+      return durationText
+        ? translateInstant("Cancelled after {{duration}}", { duration: durationText, defaultValue: "Cancelled after {{duration}}" })
+        : translateInstant("Run cancelled", { defaultValue: "Run cancelled" });
     case "queued":
-      return "Queued";
+      return translateInstant("Queued", { defaultValue: "Queued" });
     case "running":
-      return "Working...";
+      return translateInstant("Working...", { defaultValue: "Working..." });
     default:
       return formatStatusLabel(run.status);
   }

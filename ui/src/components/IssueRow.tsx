@@ -296,7 +296,7 @@ export function IssueRow({
               aria-label={t("Dismiss from inbox", { defaultValue: "Dismiss from inbox" })}
             >
               <Archive className="h-3.5 w-3.5" />
-              Archive
+              <span className="sr-only">{t("Dismiss from inbox", { defaultValue: "Dismiss from inbox" })}</span>
             </button>
           ) : null}
           {externalObjectSummary ? (
@@ -332,7 +332,7 @@ export function IssueRow({
               "inline-flex h-4 w-4 items-center justify-center rounded-full transition-colors",
               selected ? "hover:bg-muted/80" : "hover:bg-blue-500/20",
             )}
-            aria-label="Mark as read"
+            aria-label={t("Mark as read")}
           >
             <span
               className={cn(

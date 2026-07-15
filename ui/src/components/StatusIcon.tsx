@@ -1,15 +1,14 @@
 import { useState } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import type { IssueBlockerAttention } from "@penclipai/shared";
 import { cn } from "../lib/utils";
+import { translateStatusLabel } from "../lib/i18n-labels";
 import { StatusGlyph, type StatusGlyphSize } from "./StatusGlyph";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 
 const allStatuses = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled", "blocked"];
-
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 interface StatusIconProps {
   status: string;
@@ -21,46 +20,90 @@ interface StatusIconProps {
   size?: StatusGlyphSize;
 }
 
-function blockedAttentionLabel(blockerAttention: IssueBlockerAttention | null | undefined) {
-  if (!blockerAttention || blockerAttention.state === "none") return "Blocked";
+function blockedAttentionLabel(t: TFunction, blockerAttention: IssueBlockerAttention | null | undefined) {
+  if (!blockerAttention || blockerAttention.state === "none") return translateStatusLabel(t, "blocked");
 
   if (blockerAttention.reason === "active_child") {
     const count = blockerAttention.coveredBlockerCount;
     if (count === 1 && blockerAttention.sampleBlockerIdentifier) {
-      return `Blocked · waiting on active sub-task ${blockerAttention.sampleBlockerIdentifier}`;
+      return t("statusIcon.blocked.waitingOnActiveSubIssueNamed", {
+        identifier: blockerAttention.sampleBlockerIdentifier,
+        defaultValue: "Blocked · waiting on active sub-task {{identifier}}",
+      });
     }
-    if (count === 1) return "Blocked · waiting on 1 active sub-task";
-    return `Blocked · waiting on ${count} active sub-tasks`;
+    if (count === 1) {
+      return t("statusIcon.blocked.waitingOnOneActiveSubIssue", {
+        defaultValue: "Blocked · waiting on 1 active sub-task",
+      });
+    }
+    return t("statusIcon.blocked.waitingOnActiveSubIssues", {
+      count,
+      defaultValue: "Blocked · waiting on {{count}} active sub-tasks",
+    });
   }
 
   if (blockerAttention.reason === "active_dependency") {
     const count = blockerAttention.coveredBlockerCount;
     if (count === 1 && blockerAttention.sampleBlockerIdentifier) {
-      return `Blocked · covered by active dependency ${blockerAttention.sampleBlockerIdentifier}`;
+      return t("statusIcon.blocked.coveredByActiveDependencyNamed", {
+        identifier: blockerAttention.sampleBlockerIdentifier,
+        defaultValue: "Blocked · covered by active dependency {{identifier}}",
+      });
     }
-    if (count === 1) return "Blocked · covered by 1 active dependency";
-    return `Blocked · covered by ${count} active dependencies`;
+    if (count === 1) {
+      return t("statusIcon.blocked.coveredByOneActiveDependency", {
+        defaultValue: "Blocked · covered by 1 active dependency",
+      });
+    }
+    return t("statusIcon.blocked.coveredByActiveDependencies", {
+      count,
+      defaultValue: "Blocked · covered by {{count}} active dependencies",
+    });
   }
 
   if (blockerAttention.reason === "stalled_review") {
     const count = blockerAttention.stalledBlockerCount;
     const leaf = blockerAttention.sampleStalledBlockerIdentifier ?? blockerAttention.sampleBlockerIdentifier;
-    if (count === 1 && leaf) return `Blocked · review stalled on ${leaf}`;
-    if (count === 1) return "Blocked · review stalled with no clear next step";
-    return `Blocked · ${count} reviews stalled with no clear next step`;
+    if (count === 1 && leaf) {
+      return t("statusIcon.blocked.reviewStalledOn", {
+        identifier: leaf,
+        defaultValue: "Blocked · review stalled on {{identifier}}",
+      });
+    }
+    if (count === 1) {
+      return t("statusIcon.blocked.oneReviewStalled", {
+        defaultValue: "Blocked · review stalled with no clear next step",
+      });
+    }
+    return t("statusIcon.blocked.reviewsStalled", {
+      count,
+      defaultValue: "Blocked · {{count}} reviews stalled with no clear next step",
+    });
   }
 
   if (blockerAttention.reason === "attention_required") {
     const count = blockerAttention.attentionBlockerCount || blockerAttention.unresolvedBlockerCount;
-    const attentionCopy = `${count} ${count === 1 ? "blocker needs" : "blockers need"} attention`;
+    const attention = count === 1
+      ? t("statusIcon.blocked.oneBlockerNeedsAttention", { defaultValue: "1 blocker needs attention" })
+      : t("statusIcon.blocked.blockersNeedAttention", {
+        count,
+        defaultValue: "{{count}} blockers need attention",
+      });
     const coveredCount = blockerAttention.coveredBlockerCount;
     if (coveredCount > 0) {
-      return `Blocked · ${attentionCopy}; ${coveredCount} covered by active work`;
+      return t("statusIcon.blocked.attentionAndCovered", {
+        attention,
+        coveredCount,
+        defaultValue: "Blocked · {{attention}}; {{coveredCount}} covered by active work",
+      });
     }
-    return `Blocked · ${attentionCopy}`;
+    return t("statusIcon.blocked.attention", {
+      attention,
+      defaultValue: "Blocked · {{attention}}",
+    });
   }
 
-  return "Blocked";
+  return translateStatusLabel(t, "blocked");
 }
 
 /**
@@ -76,9 +119,11 @@ function blockedAttentionLabel(blockerAttention: IssueBlockerAttention | null | 
  * still rides on the accessible label.
  */
 export function StatusIcon({ status, blockerAttention, onChange, className, showLabel, size = "md" }: StatusIconProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const isCoveredBlocked = status === "blocked" && blockerAttention?.state === "covered";
-  const ariaLabel = status === "blocked" ? blockedAttentionLabel(blockerAttention) : statusLabel(status);
+  const label = translateStatusLabel(t, status);
+  const ariaLabel = status === "blocked" ? blockedAttentionLabel(t, blockerAttention) : label;
   const glyphStatus = isCoveredBlocked ? "in_queue" : status;
 
   const glyph = (
@@ -94,7 +139,7 @@ export function StatusIcon({ status, blockerAttention, onChange, className, show
     return showLabel ? (
       <span className="inline-flex items-center gap-1.5">
         {glyph}
-        <span className="text-sm">{statusLabel(status)}</span>
+        <span className="text-sm">{label}</span>
       </span>
     ) : (
       glyph
@@ -104,7 +149,7 @@ export function StatusIcon({ status, blockerAttention, onChange, className, show
   const trigger = showLabel ? (
     <button className="inline-flex min-h-5 items-center gap-1.5 cursor-pointer hover:bg-accent/50 rounded px-1 -mx-1 py-0.5 transition-colors">
       {glyph}
-      <span className="text-sm">{statusLabel(status)}</span>
+      <span className="text-sm">{label}</span>
     </button>
   ) : (
     glyph
@@ -126,7 +171,7 @@ export function StatusIcon({ status, blockerAttention, onChange, className, show
             }}
           >
             <StatusIcon status={s} size="lg" />
-            {statusLabel(s)}
+            {translateStatusLabel(t, s)}
           </Button>
         ))}
       </PopoverContent>

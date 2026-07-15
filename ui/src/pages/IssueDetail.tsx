@@ -511,7 +511,23 @@ function AttributionAvatar({
   actor: AttributionActor;
   via?: string | null;
 }) {
-  const accessibleLabel = via ? `${label}: ${actor.name} · via ${via}` : `${label}: ${actor.name}`;
+  const { t } = useTranslation();
+  const translatedLabel =
+    label === "Assignee"
+      ? t("issueDetail.attribution.assignee", { defaultValue: "Assignee" })
+      : t("issueDetail.attribution.originating", { defaultValue: "Originating" });
+  const accessibleLabel = via
+    ? t("issueDetail.attribution.viaLabel", {
+        defaultValue: "{{label}}: {{name}} · via {{via}}",
+        label: translatedLabel,
+        name: actor.name,
+        via,
+      })
+    : t("issueDetail.attribution.label", {
+        defaultValue: "{{label}}: {{name}}",
+        label: translatedLabel,
+        name: actor.name,
+      });
   const testIdLabel = label.toLowerCase();
 
   return (
@@ -541,10 +557,12 @@ function AttributionAvatar({
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <div className="text-(length:--text-nano) font-medium uppercase leading-none text-background/70">{label}</div>
+            <div className="text-(length:--text-nano) font-medium uppercase leading-none text-background/70">{translatedLabel}</div>
             <div className="max-w-48 truncate text-xs font-medium leading-4 text-background">{actor.name}</div>
             {via ? (
-              <div className="max-w-48 truncate text-(length:--text-nano) leading-3 text-background/60">via {via}</div>
+              <div className="max-w-48 truncate text-(length:--text-nano) leading-3 text-background/60">
+                {t("issueDetail.attribution.via", { defaultValue: "via {{via}}", via })}
+              </div>
             ) : null}
           </div>
         </div>
@@ -564,6 +582,7 @@ function IssueAttributionByline({
   userProfileMap: ReadonlyMap<string, import("../lib/company-members").CompanyUserProfile>;
   userLabelMap: ReadonlyMap<string, string>;
 }) {
+  const { t } = useTranslation();
   const assignee: AttributionActor | null = issue.assigneeAgentId
     ? {
         kind: "agent",
@@ -605,7 +624,11 @@ function IssueAttributionByline({
 
   return (
     <TooltipProvider>
-      <AvatarGroup className="-space-x-1.5" aria-label="Task people" data-testid="issue-attribution-avatar-stack">
+      <AvatarGroup
+        className="-space-x-1.5"
+        aria-label={t("issueDetail.attribution.taskPeople", { defaultValue: "Task people" })}
+        data-testid="issue-attribution-avatar-stack"
+      >
         {assignee ? <AttributionAvatar label="Assignee" actor={assignee} /> : null}
         {originator ? <AttributionAvatar label="Originating" actor={originator} via={originatorVia} /> : null}
       </AvatarGroup>
@@ -1663,8 +1686,11 @@ export function IssueDetail() {
     }
   }, [hasLiveRuns, locallyQueuedCommentRunIds.size]);
   const sourceBreadcrumb = useMemo(
-    () => readIssueDetailBreadcrumb(issueId, location.state, location.search) ?? { label: "Tasks", href: "/issues" },
-    [issueId, location.state, location.search],
+    () => readIssueDetailBreadcrumb(issueId, location.state, location.search) ?? {
+      label: t("sidebar.issues", { defaultValue: "Tasks" }),
+      href: "/issues",
+    },
+    [issueId, location.state, location.search, t],
   );
 
   const { data: rawChildIssues = [], isLoading: childIssuesLoading } = useQuery({
@@ -4558,7 +4584,7 @@ export function IssueDetail() {
             searchFilters={{ descendantOf: issue.id, includeBlockedBy: true }}
             searchWithinLoadedIssues
             baseCreateIssueDefaults={buildSubIssueDefaultsForViewer(issue, currentUserId)}
-            createIssueLabel="Sub-task"
+            createIssueLabel={t("Sub-task", { defaultValue: "Sub-task" })}
             defaultSortField="workflow"
             showProgressSummary
             parentIssueIdForCostSummary={issue.id}
@@ -4569,7 +4595,10 @@ export function IssueDetail() {
         <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
           <Button variant="outline" size="sm" onClick={openNewSubIssue} className="shrink-0 shadow-none">
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            New Sub-task
+            {t("New {{label}}", {
+              label: t("Sub-task", { defaultValue: "Sub-task" }),
+              defaultValue: "New Sub-task",
+            })}
           </Button>
         </div>
       )}
@@ -4702,15 +4731,15 @@ export function IssueDetail() {
         <TabsList variant="line" className="w-full justify-start gap-1">
           <TabsTrigger value="chat" className="gap-1.5">
             <MessageSquare className="h-3.5 w-3.5" />
-            Chat
+            {t("Chat", { defaultValue: "Chat" })}
           </TabsTrigger>
           <TabsTrigger value="activity" className="gap-1.5">
             <ActivityIcon className="h-3.5 w-3.5" />
-            Activity
+            {t("Activity", { defaultValue: "Activity" })}
           </TabsTrigger>
           <TabsTrigger value="related-work" className="gap-1.5">
             <ListTree className="h-3.5 w-3.5" />
-            Related work
+            {t("Related work", { defaultValue: "Related work" })}
           </TabsTrigger>
           {issuePluginTabItems.map((item) => (
             <TabsTrigger key={item.value} value={item.value}>
