@@ -482,7 +482,7 @@ describe("claude execute", () => {
       expect(zero.argv).not.toContain("--strict-mcp-config");
       expect(zero.mcpConfigPath).toBeNull();
       expect(zero.mcpConfigContents).toBeNull();
-      expect(alpha.mcpConfigPath).toContain("/agents/agent-alpha/");
+      expect(alpha.mcpConfigPath).toContain(`${path.join("agents", "agent-alpha")}${path.sep}`);
     } finally {
       restore();
       await fs.rm(root, { recursive: true, force: true });

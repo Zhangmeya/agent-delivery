@@ -17,6 +17,7 @@ import { FilterBar, type FilterValue } from "../FilterBar";
 import { LiveRunWidget } from "../LiveRunWidget";
 import { RoutineHistoryTab } from "../RoutineHistoryTab";
 import { RoutineActivityRow } from "../RoutineActivityRow";
+import { formatRoutineRunStatus } from "../RoutineList";
 import { useRoutineDetail } from "./context";
 
 const DATE_WINDOW_OPTIONS: { value: string; label: string; ms: number | null }[] = [
@@ -38,6 +39,21 @@ function dateWindowLabel(value: string, t: ReturnType<typeof useTranslation>["t"
       return t("routineDetail.filter.last30d", { defaultValue: "Last 30d" });
     default:
       return value;
+  }
+}
+
+function routineRunSourceLabel(value: string, t: ReturnType<typeof useTranslation>["t"]) {
+  switch (value) {
+    case "manual":
+      return t("routineDetail.source.manual", { defaultValue: "Manual" });
+    case "schedule":
+      return t("routineDetail.source.schedule", { defaultValue: "Schedule" });
+    case "api":
+      return t("routineDetail.source.api", { defaultValue: "API" });
+    case "webhook":
+      return t("routineDetail.source.webhook", { defaultValue: "Webhook" });
+    default:
+      return value.replaceAll("_", " ");
   }
 }
 
@@ -73,9 +89,9 @@ export function RunsSection() {
 
   const activeFilters = useMemo<FilterValue[]>(() => {
     const list: FilterValue[] = [];
-    if (sourceFilter !== "any") list.push({ key: "source", label: t("routineDetail.filter.source", { defaultValue: "Source" }), value: sourceFilter });
+    if (sourceFilter !== "any") list.push({ key: "source", label: t("routineDetail.filter.source", { defaultValue: "Source" }), value: routineRunSourceLabel(sourceFilter, t) });
     if (statusFilter !== "any") {
-      list.push({ key: "status", label: t("routineDetail.filter.status", { defaultValue: "Status" }), value: statusFilter.replaceAll("_", " ") });
+      list.push({ key: "status", label: t("routineDetail.filter.status", { defaultValue: "Status" }), value: formatRoutineRunStatus(statusFilter, t) ?? statusFilter });
     }
     if (dateFilter !== "any") {
       const label = DATE_WINDOW_OPTIONS.find((option) => option.value === dateFilter)
@@ -125,7 +141,7 @@ export function RunsSection() {
                   <SelectItem value="any">{t("Any", { defaultValue: "Any" })}</SelectItem>
                   {sourceOptions.map((source) => (
                     <SelectItem key={source} value={source}>
-                      {source}
+                      {routineRunSourceLabel(source, t)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -139,7 +155,7 @@ export function RunsSection() {
                   <SelectItem value="any">{t("Any", { defaultValue: "Any" })}</SelectItem>
                   {statusOptions.map((status) => (
                     <SelectItem key={status} value={status}>
-                      {status.replaceAll("_", " ")}
+                      {formatRoutineRunStatus(status, t)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -172,20 +188,20 @@ export function RunsSection() {
             <div className="rounded-lg border border-border">
               {filtered.map((run) => {
                 const label = dedupedTriggerLabel(run.trigger);
-                const title = run.linkedIssue?.title ?? label ?? "Run";
+                const title = run.linkedIssue?.title ?? label ?? t("Run", { defaultValue: "Run" });
                 return (
                   <EntityRow
                     key={run.id}
                     leading={
                       <>
                         <Badge variant="outline" className="shrink-0">
-                          {run.source}
+                          {routineRunSourceLabel(run.source, t)}
                         </Badge>
                         <Badge
                           variant={run.status === "failed" ? "destructive" : "secondary"}
                           className="shrink-0"
                         >
-                          {run.status.replaceAll("_", " ")}
+                          {formatRoutineRunStatus(run.status, t)}
                         </Badge>
                       </>
                     }
@@ -217,6 +233,7 @@ export function RunsSection() {
 }
 
 export function ActivitySection() {
+  const { t } = useTranslation();
   const ctx = useRoutineDetail();
   const { activity } = ctx;
   const events = activity ?? [];
@@ -224,7 +241,7 @@ export function ActivitySection() {
   const groups = useMemo(() => {
     const byDay = new Map<string, typeof events>();
     for (const event of events) {
-      let label = "Earlier";
+      let label = t("Earlier", { defaultValue: "Earlier" });
       try {
         label = new Date(event.createdAt).toLocaleDateString(undefined, {
           weekday: "short",
@@ -239,10 +256,10 @@ export function ActivitySection() {
       byDay.set(label, bucket);
     }
     return Array.from(byDay.entries());
-  }, [events]);
+  }, [events, t]);
 
   if (events.length === 0) {
-    return <EmptyState icon={ActivityIcon} message="No activity yet." />;
+    return <EmptyState icon={ActivityIcon} message={t("routineDetail.noActivityYet", { defaultValue: "No activity yet." })} />;
   }
 
   return (

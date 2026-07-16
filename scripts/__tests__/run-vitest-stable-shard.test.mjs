@@ -76,6 +76,24 @@ test("general-server shard runner uses the fork server package scope", () => {
   assert.doesNotMatch(source, /"--project",\s*"@paperclipai\/server"/);
 });
 
+test("the unsharded general-server command uses a bounded complete exclude set", () => {
+  const plan = dryRunJson(["--mode", "general", "--group", "general-server"]);
+  const patterns = plan.generalServerExcludePatterns;
+
+  assert.ok(patterns.includes("src/**/*route*.test.ts"));
+  assert.ok(patterns.includes("src/**/*authz*.test.ts"));
+  assert.ok(patterns.length < 50, `exclude list must stay below Windows command limits, got ${patterns.length}`);
+
+  for (const repoPath of plan.selectedSerializedSuites) {
+    const serverPath = repoPath.replace(/^server\//, "");
+    const coveredByCategoryGlob = /[^/]*(?:route|routes|authz)[^/]*\.test\.ts$/.test(repoPath);
+    assert.ok(
+      coveredByCategoryGlob || patterns.includes(serverPath),
+      `serialized suite must be excluded from the general-server command: ${repoPath}`,
+    );
+  }
+});
+
 test("workspace groups use fork project names without duplicating the CLI", () => {
   const groupA = dryRunJson(["--mode", "general", "--group", "general-workspaces-a"]);
   const groupB = dryRunJson(["--mode", "general", "--group", "general-workspaces-b"]);

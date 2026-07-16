@@ -67,6 +67,10 @@ const serializedServerVitestArgs = [
   "--no-file-parallelism",
   "--maxWorkers=1",
 ];
+const routeTestExcludePatterns = [
+  "src/**/*route*.test.ts",
+  "src/**/*authz*.test.ts",
+];
 
 function quoteCmdArg(value) {
   if (/^[A-Za-z0-9_/:=.,@+-]+$/.test(value)) return value;
@@ -269,6 +273,13 @@ function selectSerializedSuites(routeTests, shardIndex, shardCount) {
   return routeTests.filter((_, index) => index % shardCount === shardIndex);
 }
 
+function buildGeneralServerExcludePatterns() {
+  const explicitPatterns = [...additionalSerializedServerTests]
+    .map((file) => file.replace(/^server\//, ""))
+    .filter((file) => !routeTestPattern.test(file));
+  return [...routeTestExcludePatterns, ...explicitPatterns].sort((a, b) => a.localeCompare(b));
+}
+
 function runVitest(args, label) {
   console.log(`\n[test:run] ${label}`);
   invocationIndex += 1;
@@ -339,7 +350,7 @@ function runGeneralGroup(routeTests, groupName, shardIndex = null, shardCount = 
       return;
     }
 
-    const excludeRouteArgs = routeTests.flatMap((file) => ["--exclude", file.serverPath]);
+    const excludeRouteArgs = generalServerExcludePatterns.flatMap((file) => ["--exclude", file]);
     runVitest(
       [
         "--project",
@@ -405,6 +416,7 @@ const generalServerTestFiles = walk(serverSrcDir)
   .filter((repoPath) => repoPath.endsWith(".test.ts"))
   .filter((repoPath) => !isRouteOrAuthzTest(repoPath))
   .sort((a, b) => a.localeCompare(b));
+const generalServerExcludePatterns = buildGeneralServerExcludePatterns();
 
 const options = parseCliOptions(process.argv.slice(2));
 if (options.dryRun) {
@@ -423,6 +435,7 @@ if (options.dryRun) {
         serializedSuiteCount: routeTests.length,
         selectedSerializedSuites: serializedSuites.map((routeTest) => routeTest.repoPath),
         generalServerSuiteCount: generalServerTestFiles.length,
+        generalServerExcludePatterns,
         selectedGeneralServerSuites:
           options.mode === generalModeName &&
           options.group === generalServerGroupName &&
