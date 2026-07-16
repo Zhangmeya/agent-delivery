@@ -242,6 +242,14 @@ const OUTCOME_LABEL: Record<IssueRecoveryActionOutcome, { key: string; defaultVa
     key: "issueRecoveryAction.outcome.restored",
     defaultValue: "restored",
   },
+  handed_back: {
+    key: "issueRecoveryAction.outcome.handedBack",
+    defaultValue: "handed back to original owner",
+  },
+  owner_completed: {
+    key: "issueRecoveryAction.outcome.ownerCompleted",
+    defaultValue: "completed by recovery owner",
+  },
   delegated: {
     key: "issueRecoveryAction.outcome.delegated",
     defaultValue: "delegated to follow-up",

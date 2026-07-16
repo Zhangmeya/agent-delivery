@@ -2927,6 +2927,21 @@ registry.registerPath({
   responses: { 200: r.ok(), 401: r.unauthorized },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/api/companies/{companyId}/recovery-observability",
+  tags: ["dashboard"],
+  summary: "Get recovery observability report",
+  request: {
+    params: z.object({ companyId: z.string() }),
+    query: z.object({
+      weeks: z.string().optional(),
+      threshold: z.string().optional(),
+    }),
+  },
+  responses: { 200: r.ok(), 401: r.unauthorized },
+});
+
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
 registry.registerPath({
@@ -5142,6 +5157,7 @@ registerCurrentRoute({
 for (const route of [
   ["get", "/api/companies/import/jobs/{jobId}", "Get company import job status"],
   ["get", "/api/companies/{companyId}/search", "Search company data"],
+  ["get", "/api/companies/{companyId}/search/extract", "Extract company search matches"],
   ["get", "/api/companies/{companyId}/issues/count", "Count issues in a company"],
 ] as const) {
   registerCurrentRoute({
