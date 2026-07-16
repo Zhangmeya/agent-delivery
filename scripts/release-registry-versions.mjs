@@ -28,7 +28,11 @@ if (!Number.isInteger(CONCURRENCY) || CONCURRENCY < 1) {
 
 function npmView(args) {
   return new Promise((resolve) => {
-    execFile("npm", ["view", ...args], { encoding: "utf8" }, (error, stdout) => {
+    const command = process.platform === "win32" ? (process.env.ComSpec || "cmd.exe") : "npm";
+    const commandArgs = process.platform === "win32"
+      ? ["/d", "/s", "/c", "npm", "view", ...args]
+      : ["view", ...args];
+    execFile(command, commandArgs, { encoding: "utf8" }, (error, stdout) => {
       if (error) {
         resolve(null);
         return;

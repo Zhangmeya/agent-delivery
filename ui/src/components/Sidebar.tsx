@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Pin,
+  AppWindow,
   MessagesSquare,
   GanttChartSquare,
 } from "lucide-react";
@@ -81,6 +82,7 @@ export function Sidebar() {
   usePublishSharedQueryData(sharedLiveRuns, liveRuns, liveRunsUpdatedAt);
   const liveRunCount = liveRuns?.length ?? 0;
   const showWorkspacesLink = experimentalSettings?.enableIsolatedWorkspaces === true;
+  const showApps = experimentalSettings?.enableApps === true;
   const showPipelines = experimentalSettings?.enablePipelines === true;
   const goalsLinkPending = experimentalSettings === undefined;
   const showGoalsLink = experimentalSettings?.enableGoalsSidebarLink === true;
@@ -290,6 +292,7 @@ export function Sidebar() {
           collapsible={{ open: companyOpen, onOpenChange: setCompanyOpen }}
         >
           <SidebarNavItem to="/org" label={t("sidebar.org", { defaultValue: "Org" })} icon={Network} />
+          {showApps ? <SidebarNavItem to="/apps" label={t("sidebar.apps", { defaultValue: "Apps" })} icon={AppWindow} /> : null}
           <SidebarNavItem to="/timeline" label={t("sidebar.timeline", { defaultValue: "Timeline" })} icon={GanttChartSquare} />
           <SidebarNavItem to="/costs" label={t("sidebar.costs", { defaultValue: "Costs" })} icon={DollarSign} />
           <SidebarNavItem to="/activity" label={t("sidebar.activity", { defaultValue: "Activity" })} icon={History} />

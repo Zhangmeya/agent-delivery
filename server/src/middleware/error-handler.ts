@@ -20,6 +20,10 @@ export interface ErrorContext {
   reqQuery?: unknown;
 }
 
+function isRedactedSkillPolicyDenial(details: Record<string, unknown> | null) {
+  return details?.code === "skill_policy_denied";
+}
+
 function attachErrorContext(
   req: Request,
   res: Response,
@@ -106,6 +110,7 @@ export function errorHandler(
     const details = err.details && typeof err.details === "object" && !Array.isArray(err.details)
       ? err.details as Record<string, unknown>
       : null;
+    const redactedSkillPolicyDenial = isRedactedSkillPolicyDenial(details);
     recordResponsibleUserDenialFromHttpError(req, details);
     if (err.status >= 500) {
       attachErrorContext(
@@ -120,8 +125,9 @@ export function errorHandler(
     res.status(err.status).json({
       error: translatedMessage,
       ...(typeof details?.code === "string" ? { code: details.code } : {}),
+      ...(redactedSkillPolicyDenial && typeof details?.reason === "string" ? { reason: details.reason } : {}),
       ...(typeof details?.remediation === "string" ? { remediation: details.remediation } : {}),
-      ...(err.details ? { details: err.details } : {}),
+      ...(!redactedSkillPolicyDenial && err.details ? { details: err.details } : {}),
     });
     return;
   }

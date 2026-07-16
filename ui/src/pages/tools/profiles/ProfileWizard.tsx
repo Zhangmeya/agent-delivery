@@ -1,0 +1,730 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { Check, ChevronDown, Loader2 } from "lucide-react";
+import type { ToolProfileWithDetails } from "@penclipai/shared";
+import { useNavigate } from "@/lib/router";
+import { toolsApi, type ToolProfileBindingInput } from "@/api/tools";
+import { queryKeys } from "@/lib/queryKeys";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { AgentMultiSelect, type AgentMultiSelectOption } from "@/components/AgentMultiSelect";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useToast } from "@/context/ToastContext";
+import { LoadingState } from "../shared";
+import {
+  buildEntries,
+  countAllowedTools,
+  parseEntries,
+  templateSelections,
+  TEMPLATES,
+  type AdvancedRule,
+  type TemplateKey,
+  type WizardSelections,
+} from "./profile-model";
+import { useProfilesData } from "./useProfilesData";
+import { WizardToolsStep } from "./WizardToolsStep";
+import { readWizardMeta, resumeStep, withWizardMeta, type WizardStep } from "./wizard-draft";
+import { translateInstant } from "@/i18n";
+
+function slugifyProfileKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._:-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 160);
+}
+
+const STEP_LABELS: Array<{ step: WizardStep; labelKey: string; defaultLabel: string }> = [
+  { step: 1, labelKey: "tools.profiles.wizard.steps.name", defaultLabel: "Name" },
+  { step: 2, labelKey: "tools.profiles.wizard.steps.chooseTools", defaultLabel: "Choose tools" },
+  { step: 3, labelKey: "tools.profiles.wizard.steps.assign", defaultLabel: "Assign" },
+];
+
+const TEMPLATE_TRANSLATIONS: Record<TemplateKey, { titleKey: string; descriptionKey: string }> = {
+  read_only: { titleKey: "tools.profiles.templates.readOnly.title", descriptionKey: "tools.profiles.templates.readOnly.description" },
+  everyday: { titleKey: "tools.profiles.templates.everyday.title", descriptionKey: "tools.profiles.templates.everyday.description" },
+  full_access: { titleKey: "tools.profiles.templates.fullAccess.title", descriptionKey: "tools.profiles.templates.fullAccess.description" },
+  scratch: { titleKey: "tools.profiles.templates.scratch.title", descriptionKey: "tools.profiles.templates.scratch.description" },
+  copy: { titleKey: "tools.profiles.templates.copy.title", descriptionKey: "tools.profiles.templates.copy.description" },
+};
+
+export function ProfileWizard({
+  companyId,
+  profileId,
+  initialTemplate,
+  initialStep,
+}: {
+  companyId: string;
+  profileId?: string;
+  initialTemplate?: TemplateKey;
+  initialStep?: WizardStep;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { pushToast } = useToast();
+  const data = useProfilesData(companyId);
+  const { appGroups, catalog, profiles, agents } = data;
+
+  const allProfiles = profiles.data?.profiles ?? [];
+  const existing = profileId ? allProfiles.find((p) => p.id === profileId) ?? null : null;
+
+  const [step, setStep] = useState<WizardStep>(1);
+  const [draftId, setDraftId] = useState<string | null>(profileId ?? null);
+  const [template, setTemplate] = useState<TemplateKey | null>(initialTemplate ?? null);
+  const [copyFromId, setCopyFromId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [profileKey, setProfileKey] = useState("");
+  const [keyEdited, setKeyEdited] = useState(false);
+  const [selections, setSelections] = useState<WizardSelections>({});
+  const [advancedRules, setAdvancedRules] = useState<AdvancedRule[]>([]);
+  const [newToolsAction, setNewToolsAction] = useState<"deny" | "allow">("deny");
+  const [selectedAgentIds, setSelectedAgentIds] = useState<Set<string>>(new Set());
+  const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(new Set());
+  const [selectedRoutineIds, setSelectedRoutineIds] = useState<Set<string>>(new Set());
+  const [companyDefault, setCompanyDefault] = useState(false);
+
+  const toggleIn = (setter: typeof setSelectedAgentIds) => (id: string) =>
+    setter((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  // Hydrate once when resuming an existing draft and its catalog is loaded.
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (hydrated.current || !existing || appGroups.length === 0) return;
+    if (existing.id !== profileId) return;
+    hydrated.current = true;
+    setName(existing.name);
+    setDescription(existing.description ?? "");
+    setProfileKey(existing.profileKey);
+    setKeyEdited(true);
+    setNewToolsAction(existing.defaultAction);
+    const parsed = parseEntries(appGroups, existing.entries);
+    setSelections(parsed.selections);
+    setAdvancedRules(parsed.advancedRules);
+    const meta = readWizardMeta(existing);
+    setTemplate(meta?.template ?? null);
+    // Drafts resume at the first unfinished step; a finished profile being
+    // edited starts at step 1 so the admin can review the whole thing.
+    setStep(initialStep ?? (existing.status === "draft" ? resumeStep(meta) : 1));
+    const targetIds = (type: string) =>
+      new Set(existing.bindings.filter((b) => b.targetType === type).map((b) => b.targetId));
+    setSelectedAgentIds(targetIds("agent"));
+    setSelectedProjectIds(targetIds("project"));
+    setSelectedRoutineIds(targetIds("routine"));
+    setCompanyDefault(existing.bindings.some((b) => b.targetType === "company"));
+  }, [existing, appGroups, profileId, initialStep]);
+
+  // Key auto-derives from the name until the admin overrides it in Advanced.
+  useEffect(() => {
+    if (!keyEdited) setProfileKey(slugifyProfileKey(name));
+  }, [name, keyEdited]);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.tools.profiles(companyId) });
+  };
+
+  const live = useMemo(
+    () => countAllowedTools(appGroups, selections, newToolsAction, catalog.length),
+    [appGroups, selections, newToolsAction, catalog.length],
+  );
+
+  // Map step-1 template choice onto concrete per-app selections (needs the catalog).
+  const seedSelections = (): WizardSelections => {
+    if (template === "copy" && copyFromId) {
+      const source = allProfiles.find((p) => p.id === copyFromId);
+      if (source) return parseEntries(appGroups, source.entries).selections;
+    }
+    if (template && template !== "copy") return templateSelections(template, appGroups);
+    return selections;
+  };
+
+  const saveDraft = useMutation({
+    mutationFn: async (input: {
+      goToStep: WizardStep;
+      completedStep: WizardStep;
+      seed?: WizardSelections;
+    }) => {
+      const effSelections = input.seed ?? selections;
+      const entries = buildEntries(appGroups, effSelections, advancedRules, newToolsAction);
+      const metadata = withWizardMeta(existing?.metadata ?? null, {
+        lastCompletedStep: input.completedStep,
+        template,
+      });
+      if (!draftId) {
+        const created = await toolsApi.createProfile(companyId, {
+          profileKey: profileKey || slugifyProfileKey(name) || "profile",
+          name: name.trim() || t("tools.profiles.wizard.untitled", { defaultValue: "Untitled profile" }),
+          description: description.trim() || null,
+          status: "draft",
+          defaultAction: newToolsAction,
+          entries,
+          metadata,
+        });
+        return { created, goToStep: input.goToStep, seed: input.seed };
+      }
+      const updated = await toolsApi.updateProfile(draftId, {
+        profileKey: profileKey || undefined,
+        name: name.trim() || t("tools.profiles.wizard.untitled", { defaultValue: "Untitled profile" }),
+        description: description.trim() || null,
+        defaultAction: newToolsAction,
+        entries,
+        metadata,
+      });
+      return { created: updated, goToStep: input.goToStep, seed: input.seed };
+    },
+    onSuccess: ({ created, goToStep, seed }) => {
+      setDraftId(created.id);
+      if (seed) setSelections(seed);
+      setStep(goToStep);
+      invalidate();
+    },
+    onError: (error: unknown) =>
+      pushToast({ title: t("tools.profiles.toast.saveFailed", { defaultValue: "Could not save" }), body: String((error as Error)?.message ?? error), tone: "error" }),
+  });
+
+  const finish = useMutation({
+    mutationFn: async () => {
+      if (!draftId) throw new Error(t("tools.profiles.wizard.noDraft", { defaultValue: "No draft to finish" }));
+      const entries = buildEntries(appGroups, selections, advancedRules, newToolsAction);
+      const profile = await toolsApi.updateProfile(draftId, {
+        defaultAction: newToolsAction,
+        entries,
+        metadata: withWizardMeta(existing?.metadata ?? null, { lastCompletedStep: 3, template }),
+      });
+      await reconcileBindings(companyId, profile, {
+        agentIds: [...selectedAgentIds],
+        projectIds: [...selectedProjectIds],
+        routineIds: [...selectedRoutineIds],
+        companyDefault,
+      });
+      return toolsApi.updateProfile(draftId, { status: "active" });
+    },
+    onSuccess: (profile) => {
+      pushToast({ title: t("tools.profiles.detail.saved", { defaultValue: "Profile saved" }), tone: "success" });
+      invalidate();
+      navigate(`/apps/advanced/profiles/${profile.id}${selectedAgentIds.size === 0 && !companyDefault ? "?created=1" : ""}`);
+    },
+    onError: (error: unknown) =>
+      pushToast({ title: t("tools.profiles.toast.saveProfileFailed", { defaultValue: "Could not save profile" }), body: String((error as Error)?.message ?? error), tone: "error" }),
+  });
+
+  const saveAndExit = () => {
+    const completed: WizardStep = step;
+    saveDraft.mutate(
+      { goToStep: step, completedStep: completed },
+      {
+        onSuccess: () => {
+          pushToast({
+            title: t("tools.profiles.toast.draftSaved", { defaultValue: "Draft saved" }),
+            body: t("tools.profiles.toast.resumeFromList", { defaultValue: "Pick it back up from the profiles list." }),
+            tone: "success",
+          });
+          navigate("/apps/advanced/profiles");
+        },
+      },
+    );
+  };
+
+  const busy = saveDraft.isPending || finish.isPending;
+  const step1Valid = name.trim().length > 0 && (template !== "copy" || Boolean(copyFromId));
+
+  if (profileId && profiles.isLoading) return <LoadingState label={t("tools.profiles.wizard.loadingDraft", { defaultValue: "Loading draft…" })} />;
+
+  return (
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 pb-24">
+      <Stepper current={step} />
+
+      <div className="min-h-(--sz-320px)">
+        {step === 1 ? (
+          <StepName
+            template={template}
+            onTemplate={setTemplate}
+            copyFromId={copyFromId}
+            onCopyFrom={setCopyFromId}
+            copyOptions={allProfiles.filter((p) => p.status !== "archived" && p.id !== profileId)}
+            name={name}
+            onName={setName}
+            description={description}
+            onDescription={setDescription}
+            profileKey={profileKey}
+            onProfileKey={(v) => {
+              setKeyEdited(true);
+              setProfileKey(v);
+            }}
+          />
+        ) : null}
+
+        {step === 2 ? (
+          <WizardToolsStep
+            appGroups={appGroups}
+            catalogLoading={data.catalogLoading}
+            selections={selections}
+            onSelectionsChange={setSelections}
+            advancedRules={advancedRules}
+            onAdvancedRulesChange={setAdvancedRules}
+            newToolsAction={newToolsAction}
+            onNewToolsActionChange={setNewToolsAction}
+          />
+        ) : null}
+
+        {step === 3 ? (
+          <StepAssign
+            agents={(agents.data ?? []).map((a) => ({ id: a.id, name: a.name, title: a.title, icon: a.icon }))}
+            projects={(data.projects.data ?? []).map((p) => ({ id: p.id, name: p.name }))}
+            routines={(data.routines.data ?? []).map((r) => ({ id: r.id, name: r.title }))}
+            profiles={allProfiles}
+            selectedAgentIds={selectedAgentIds}
+            onToggleAgent={toggleIn(setSelectedAgentIds)}
+            selectedProjectIds={selectedProjectIds}
+            onToggleProject={toggleIn(setSelectedProjectIds)}
+            selectedRoutineIds={selectedRoutineIds}
+            onToggleRoutine={toggleIn(setSelectedRoutineIds)}
+            companyDefault={companyDefault}
+            onCompanyDefault={setCompanyDefault}
+          />
+        ) : null}
+      </div>
+
+      {/* Sticky footer: live count + navigation. */}
+      <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            {step >= 2 ? (
+              <span>
+                {t("tools.profiles.wizard.allowedCount", {
+                  defaultValue: "Allows {{allowed}} of {{total}} tools",
+                  allowed: live.allowed,
+                  total: live.total,
+                })}
+              </span>
+            ) : null}
+            {draftId ? (
+              <button
+                type="button"
+                onClick={saveAndExit}
+                disabled={busy}
+                className="font-medium text-primary hover:underline disabled:opacity-50"
+              >
+                {t("tools.profiles.wizard.saveForLater", { defaultValue: "Save & finish later" })}
+              </button>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {step > 1 ? (
+              <Button variant="outline" disabled={busy} onClick={() => setStep((s) => (s - 1) as WizardStep)}>
+                {t("tools.common.back", { defaultValue: "Back" })}
+              </Button>
+            ) : (
+              <Button variant="ghost" disabled={busy} onClick={() => navigate("/apps/advanced/profiles")}>
+                {t("tools.common.cancel", { defaultValue: "Cancel" })}
+              </Button>
+            )}
+
+            {step === 1 ? (
+              <Button
+                disabled={!step1Valid || busy}
+                onClick={() =>
+                  saveDraft.mutate({ goToStep: 2, completedStep: 1, seed: seedSelections() })
+                }
+              >
+                {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                {t("tools.common.continue", { defaultValue: "Continue" })}
+              </Button>
+            ) : null}
+
+            {step === 2 ? (
+              <Button
+                disabled={busy}
+                onClick={() => saveDraft.mutate({ goToStep: 3, completedStep: 2 })}
+              >
+                {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                {t("tools.common.continue", { defaultValue: "Continue" })}
+              </Button>
+            ) : null}
+
+            {step === 3 ? (
+              <Button disabled={busy} onClick={() => finish.mutate()}>
+                {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                {t("tools.profiles.wizard.saveProfile", { defaultValue: "Save profile" })}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Reconcile the profile's assignments against the wizard's step-3 choices. */
+async function reconcileBindings(
+  companyId: string,
+  profile: ToolProfileWithDetails,
+  desired: { agentIds: string[]; projectIds: string[]; routineIds: string[]; companyDefault: boolean },
+) {
+  const want = new Map<string, ToolProfileBindingInput>();
+  if (desired.companyDefault) want.set(`company:${companyId}`, { targetType: "company", targetId: companyId });
+  for (const id of desired.agentIds) want.set(`agent:${id}`, { targetType: "agent", targetId: id });
+  for (const id of desired.projectIds) want.set(`project:${id}`, { targetType: "project", targetId: id });
+  for (const id of desired.routineIds) want.set(`routine:${id}`, { targetType: "routine", targetId: id });
+
+  // Only the target types the wizard manages are reconciled — leave any
+  // issue-scoped or other bindings untouched.
+  const managed = new Set(["company", "agent", "project", "routine"]);
+  const have = new Set(profile.bindings.map((b) => `${b.targetType}:${b.targetId}`));
+
+  const operations = [
+    ...[...want.entries()]
+      .filter(([key]) => !have.has(key))
+      .map(([key, input]) => ({
+        key,
+        apply: () => toolsApi.bindProfile(companyId, profile.id, input),
+        rollback: () => toolsApi.unbindProfile(companyId, profile.id, input),
+      })),
+    ...profile.bindings
+      .filter((binding) => managed.has(binding.targetType) && !want.has(`${binding.targetType}:${binding.targetId}`))
+      .map((binding) => {
+        const input = { targetType: binding.targetType, targetId: binding.targetId } as ToolProfileBindingInput;
+        return {
+          key: `${binding.targetType}:${binding.targetId}`,
+          apply: () => toolsApi.unbindProfile(companyId, profile.id, input),
+          rollback: () => toolsApi.bindProfile(companyId, profile.id, input),
+        };
+      }),
+  ];
+  const completed: typeof operations = [];
+  for (const operation of operations) {
+    try {
+      await operation.apply();
+      completed.push(operation);
+    } catch (error) {
+      const rollbacks = await Promise.allSettled(completed.reverse().map((done) => done.rollback()));
+      const rollbackFailures = rollbacks.filter((result) => result.status === "rejected").length;
+      const suffix = rollbackFailures > 0
+        ? translateInstant("tools.profiles.wizard.rollbackFailures", {
+            defaultValue: "; {{count}} rollback operation(s) also failed",
+            count: rollbackFailures,
+          })
+        : "";
+      throw new Error(translateInstant("tools.profiles.wizard.assignmentUpdateFailed", {
+        defaultValue: "Could not update assignment {{key}}{{suffix}}",
+        key: operation.key,
+        suffix,
+      }), { cause: error });
+    }
+  }
+}
+
+function Stepper({ current }: { current: WizardStep }) {
+  const { t } = useTranslation();
+  return (
+    <ol className="flex items-center gap-2 text-sm">
+      {STEP_LABELS.map(({ step, labelKey, defaultLabel }, idx) => {
+        const done = current > step;
+        const active = current === step;
+        return (
+          <li key={step} className="flex items-center gap-2">
+            <span
+              className={cn(
+                "inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold",
+                active && "bg-primary text-primary-foreground",
+                done && "bg-primary/20 text-primary",
+                !active && !done && "bg-muted text-muted-foreground",
+              )}
+            >
+              {done ? <Check className="h-3.5 w-3.5" /> : step}
+            </span>
+            <span className={cn("font-medium", active ? "text-foreground" : "text-muted-foreground")}>
+              {t(labelKey, { defaultValue: defaultLabel })}
+            </span>
+            {idx < STEP_LABELS.length - 1 ? <span className="mx-1 text-muted-foreground">→</span> : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export function StepName({
+  template,
+  onTemplate,
+  copyFromId,
+  onCopyFrom,
+  copyOptions,
+  name,
+  onName,
+  description,
+  onDescription,
+  profileKey,
+  onProfileKey,
+}: {
+  template: TemplateKey | null;
+  onTemplate: (key: TemplateKey) => void;
+  copyFromId: string | null;
+  onCopyFrom: (id: string) => void;
+  copyOptions: ToolProfileWithDetails[];
+  name: string;
+  onName: (v: string) => void;
+  description: string;
+  onDescription: (v: string) => void;
+  profileKey: string;
+  onProfileKey: (v: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground">{t("tools.profiles.wizard.startFrom", { defaultValue: "Start from" })}</h3>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {TEMPLATES.map((templateOption) => (
+            <button
+              key={templateOption.key}
+              type="button"
+              onClick={() => onTemplate(templateOption.key)}
+              className={cn(
+                "flex flex-col items-start gap-1 rounded-md border px-4 py-3 text-left transition-colors",
+                template === templateOption.key
+                  ? "border-primary bg-primary/5 ring-1 ring-primary"
+                  : "border-border hover:border-primary/40 hover:bg-accent/40",
+              )}
+            >
+              <span className="text-sm font-medium text-foreground">{t(TEMPLATE_TRANSLATIONS[templateOption.key].titleKey, { defaultValue: templateOption.title })}</span>
+              <span className="text-xs text-muted-foreground">{t(TEMPLATE_TRANSLATIONS[templateOption.key].descriptionKey, { defaultValue: templateOption.description })}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {template === "copy" ? (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-foreground">{t("tools.profiles.wizard.whichProfile", { defaultValue: "Which profile?" })}</h3>
+          {copyOptions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("tools.profiles.wizard.noCopySource", { defaultValue: "You don't have another profile to copy yet." })}</p>
+          ) : (
+            <div className="space-y-1.5">
+              {copyOptions.map((p) => (
+                <label
+                  key={p.id}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-md border border-border px-3 py-2"
+                >
+                  <input
+                    type="radio"
+                    name="copy-from"
+                    checked={copyFromId === p.id}
+                    onChange={() => onCopyFrom(p.id)}
+                  />
+                  <span className="text-sm font-medium text-foreground">{p.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="profile-name">{t("tools.common.name", { defaultValue: "Name" })}</Label>
+          <Input
+            id="profile-name"
+            value={name}
+            onChange={(e) => onName(e.target.value)}
+            placeholder={t("tools.profiles.wizard.namePlaceholder", { defaultValue: "e.g. Everyday work" })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="profile-description">{t("tools.profiles.wizard.descriptionOptional", { defaultValue: "Description (optional)" })}</Label>
+          <Textarea
+            id="profile-description"
+            value={description}
+            onChange={(e) => onDescription(e.target.value)}
+            placeholder={t("tools.profiles.wizard.descriptionPlaceholder", { defaultValue: "What is this profile for?" })}
+            rows={2}
+          />
+        </div>
+      </div>
+
+      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <CollapsibleTrigger className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ChevronDown className={cn("h-4 w-4 transition-transform", advancedOpen && "rotate-180")} />
+          {t("tools.common.advanced", { defaultValue: "Advanced" })}
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="profile-key">{t("tools.common.identifier", { defaultValue: "Identifier" })}</Label>
+            <Input
+              id="profile-key"
+              value={profileKey}
+              onChange={(e) => onProfileKey(e.target.value)}
+              className="font-mono text-xs"
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("tools.profiles.wizard.identifierHelp", { defaultValue: "Used in exports and the API. Auto-filled from the name." })}
+            </p>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
+
+interface TargetOption {
+  id: string;
+  name: string;
+}
+
+export function StepAssign({
+  agents,
+  projects = [],
+  routines = [],
+  profiles,
+  selectedAgentIds,
+  onToggleAgent,
+  selectedProjectIds,
+  onToggleProject,
+  selectedRoutineIds,
+  onToggleRoutine,
+  companyDefault,
+  onCompanyDefault,
+}: {
+  agents: AgentMultiSelectOption[];
+  projects?: TargetOption[];
+  routines?: TargetOption[];
+  profiles: ToolProfileWithDetails[];
+  selectedAgentIds: Set<string>;
+  onToggleAgent: (id: string) => void;
+  selectedProjectIds?: Set<string>;
+  onToggleProject?: (id: string) => void;
+  selectedRoutineIds?: Set<string>;
+  onToggleRoutine?: (id: string) => void;
+  companyDefault: boolean;
+  onCompanyDefault: (v: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  // Per-agent overlap context from already-loaded bindings — no extra fetch.
+  const contextByAgent = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const p of profiles) {
+      for (const b of p.bindings) {
+        if (b.targetType === "agent") {
+          const list = map.get(b.targetId) ?? [];
+          list.push(p.name);
+          map.set(b.targetId, list);
+        }
+      }
+    }
+    return map;
+  }, [profiles]);
+
+  const defaultProfileName = profiles.find((p) => p.summary.isCompanyDefault)?.name ?? null;
+
+  return (
+    <div className="space-y-5">
+      <label className="flex items-start gap-3 rounded-lg border border-border p-4">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={companyDefault}
+          onChange={(e) => onCompanyDefault(e.target.checked)}
+        />
+        <span className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium text-foreground">{t("tools.profiles.assign.makeDefault", { defaultValue: "Make this the company default" })}</span>
+          <span className="text-xs text-muted-foreground">
+            {t("tools.profiles.assign.defaultDescription", { defaultValue: "Every agent without its own profile uses this one." })}
+            {defaultProfileName
+              ? ` ${t("tools.profiles.assign.replaces", { defaultValue: "Replaces “{{name}}”.", name: defaultProfileName })}`
+              : ""}
+          </span>
+        </span>
+      </label>
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground">{t("tools.profiles.assign.toAgents", { defaultValue: "Assign to agents" })}</h3>
+        <AgentMultiSelect
+          agents={agents}
+          selectedAgentIds={selectedAgentIds}
+          onChange={(nextAgentIds) => {
+            for (const agent of agents) {
+              if (selectedAgentIds.has(agent.id) !== nextAgentIds.has(agent.id)) onToggleAgent(agent.id);
+            }
+          }}
+          getDescription={(agent) => {
+            const context = contextByAgent.get(agent.id) ?? [];
+            const bits = [...context];
+            if (defaultProfileName) bits.push(t("tools.profiles.assign.companyDefault", { defaultValue: "company default" }));
+            return bits.length > 0
+              ? t("tools.profiles.assign.alreadyHas", { defaultValue: "already has: {{profiles}}", profiles: bits.join(" · ") })
+              : t("tools.profiles.assign.noProfiles", { defaultValue: "no profiles yet" });
+          }}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t("tools.profiles.assign.overlapHelp", { defaultValue: "If an agent has several profiles, it can use anything any of them allows." })}
+        </p>
+      </div>
+
+      {(projects.length > 0 || routines.length > 0) && onToggleProject && onToggleRoutine ? (
+        <Collapsible open={moreOpen} onOpenChange={setMoreOpen} className="rounded-lg border border-border">
+          <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-left">
+            <span className="text-sm font-medium text-foreground">{t("tools.profiles.assign.moreTargets", { defaultValue: "More targets" })}</span>
+            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", moreOpen && "rotate-180")} />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 border-t border-border px-4 py-3">
+            <p className="text-xs text-muted-foreground">
+              {t("tools.profiles.assign.moreTargetsHelp", { defaultValue: "Assign this profile to a whole project or a scheduled routine instead of (or as well as) individual agents." })}
+            </p>
+            <TargetChecklist
+              label={t("tools.common.projects", { defaultValue: "Projects" })}
+              options={projects}
+              selected={selectedProjectIds ?? new Set()}
+              onToggle={onToggleProject}
+            />
+            <TargetChecklist
+              label={t("tools.common.routines", { defaultValue: "Routines" })}
+              options={routines}
+              selected={selectedRoutineIds ?? new Set()}
+              onToggle={onToggleRoutine}
+            />
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+    </div>
+  );
+}
+
+function TargetChecklist({
+  label,
+  options,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  options: TargetOption[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  if (options.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      <h4 className="text-xs font-medium text-muted-foreground">{label}</h4>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {options.map((option) => (
+          <label key={option.id} className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
+            <input type="checkbox" checked={selected.has(option.id)} onChange={() => onToggle(option.id)} />
+            {option.name}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}

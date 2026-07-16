@@ -38,6 +38,10 @@ import { Identity } from "../components/Identity";
 import { AgentIcon } from "../components/AgentIconPicker";
 import { useAdapterCapabilities } from "../adapters/use-adapter-capabilities";
 import {
+  SkillPolicyDenialNotice,
+  useSkillPolicyDenial,
+} from "@/components/skill-studio/SkillPolicySurfaces";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -56,12 +60,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { buildLineDiff, type DiffRow } from "../lib/line-diff";
 import { cn, relativeTime } from "../lib/utils";
@@ -86,6 +86,7 @@ import {
   type SkillCreateDraft,
 } from "../lib/skill-create";
 import { SkillCardIcon } from "../components/SkillCardIcon";
+import { ImportSkillsFromProjectDialog } from "./skills/ImportSkillsFromProjectDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -106,6 +107,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  FolderSearch,
   GitFork,
   Github,
   Globe,
@@ -929,6 +931,7 @@ export function DiscoveryGrid({
   totalCount,
   onCreate,
   onImport,
+  onImportFromProject,
   onBrowseCatalog,
   onScan,
   scanPending,
@@ -952,6 +955,7 @@ export function DiscoveryGrid({
   totalCount: number;
   onCreate: () => void;
   onImport: () => void;
+  onImportFromProject: () => void;
   onBrowseCatalog: () => void;
   onScan: () => void;
   scanPending: boolean;
@@ -1068,7 +1072,7 @@ export function DiscoveryGrid({
           <Button asChild variant="outline" size="sm">
             <Link to="/skills/studio">
               <FlaskConical className="h-3.5 w-3.5" />
-              Studio
+              {t("companySkills.studio", { defaultValue: "Studio" })}
             </Link>
           </Button>
           <DropdownMenu>
@@ -1091,6 +1095,10 @@ export function DiscoveryGrid({
               <DropdownMenuItem onSelect={onImport}>
                 <Globe className="mr-2 h-4 w-4" />
                 {t("companySkills.importFromPathOrUrl")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onImportFromProject}>
+                <FolderSearch className="mr-2 h-4 w-4" />
+                {t("companySkills.importFromProject", { defaultValue: "Import skills from project" })}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1365,7 +1373,7 @@ function NewSkillWizard({
             <Input
               value={categoryDraft}
               onChange={(event) => patchDraft({ categories: splitCategoryDraft(event.target.value) })}
-              placeholder="engineering, review, memory"
+              placeholder={t("companySkills.categoriesPlaceholder", { defaultValue: "engineering, review, memory" })}
               className="h-9"
             />
           </div>
@@ -1974,8 +1982,6 @@ function AttachAgentsPopover({
     }
   }, [open, attachedAgentIds, selectedVersionId]);
 
-  // Checked agents float to the top of the list (PAP-10907); within each group
-  // we keep a stable alphabetical order.
   const filtered = agents
     .filter((agent) => agent.name.toLowerCase().includes(filter.toLowerCase()))
     .sort((a, b) => {
@@ -2722,10 +2728,10 @@ export function SkillDetailPage({
                   variant="outline"
                   size="sm"
                   onClick={onFork}
-                  title={skill.editableReason ?? "Fork this skill to edit it."}
+                  title={skill.editableReason ?? t("companySkills.forkToEdit", { defaultValue: "Fork this skill to edit it." })}
                 >
                   <GitFork className="mr-1.5 h-3.5 w-3.5" />
-                  Fork
+                  {t("companySkills.fork", { defaultValue: "Fork" })}
                 </Button>
               ) : null}
             </div>
@@ -2989,7 +2995,7 @@ export function SkillDetailPage({
             <Button variant="outline" size="sm" asChild>
               <Link to={resolvedStudioHref}>
                 <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
-                Open in Studio
+                {t("companySkills.openInStudio", { defaultValue: "Open in Studio" })}
               </Link>
             </Button>
             {!detail.editable ? (
@@ -3410,7 +3416,7 @@ function SkillPane({
             <Button variant="outline" size="sm" asChild>
               <Link to={skillStudioRoute(detail.id)}>
                 <FlaskConical className="mr-1.5 h-3.5 w-3.5" />
-                Open in Studio
+                {t("companySkills.openInStudio", { defaultValue: "Open in Studio" })}
               </Link>
             </Button>
             <Button
@@ -3646,6 +3652,19 @@ export function CompanySkills() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const { pushToast } = useToastActions();
   const adapterCaps = useAdapterCapabilities();
+  const policyDenial = useSkillPolicyDenial();
+  // Route a failed skill mutation to the persistent policy banner when it is an
+  // explicit-policy (State B) or platform-safety (State C) denial; otherwise keep
+  // the existing transient error toast. This is the core "actionable denial only
+  // for real restrictions" behavior from §9.10 (PAP-13865).
+  const reportSkillError = (error: unknown, title: string, fallbackBody: string, actionLabel?: string) => {
+    if (policyDenial.capture(error, actionLabel)) return;
+    pushToast({
+      tone: "error",
+      title,
+      body: error instanceof Error && error.message ? error.message : fallbackBody,
+    });
+  };
   const [skillFilter, setSkillFilter] = useState("");
   const [source, setSource] = useState("");
   const [emptySourceHelpOpen, setEmptySourceHelpOpen] = useState(false);
@@ -3679,6 +3698,7 @@ export function CompanySkills() {
   const [discoverySort, setDiscoverySort] = useState<DiscoverySort>("agents");
   const [createError, setCreateError] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importFromProjectOpen, setImportFromProjectOpen] = useState(false);
   const parsedRoute = useMemo(() => parseSkillRoute(routePath), [routePath]);
   const isStudioNew = routePath === "studio/new";
   const routeSkillToken = isStudioNew ? null : parsedRoute.skillToken;
@@ -3939,11 +3959,12 @@ export function CompanySkills() {
       setSource("");
     },
     onError: (error) => {
-      pushToast({
-        tone: "error",
-        title: t("companySkills.skillImportFailed"),
-        body: error instanceof Error ? error.message : t("companySkills.skillImportFailedBody"),
-      });
+      reportSkillError(
+        error,
+        t("companySkills.skillImportFailed"),
+        t("companySkills.skillImportFailedBody"),
+        t("companySkills.importingSkills", { defaultValue: "Importing skills" }),
+      );
     },
   });
 
@@ -3978,11 +3999,12 @@ export function CompanySkills() {
     },
     onError: (error) => {
       setScanStatusMessage(null);
-      pushToast({
-        tone: "error",
-        title: t("companySkills.projectSkillScanFailed"),
-        body: error instanceof Error ? error.message : t("companySkills.projectSkillScanFailedBody"),
-      });
+      reportSkillError(
+        error,
+        t("companySkills.projectSkillScanFailed"),
+        t("companySkills.projectSkillScanFailedBody"),
+        t("companySkills.scanningProjectsForSkills", { defaultValue: "Scanning projects for skills" }),
+      );
     },
   });
 
@@ -4002,11 +4024,12 @@ export function CompanySkills() {
     onError: (error) => {
       const message = error instanceof Error ? error.message : t("companySkills.createSkillFailedBody");
       setCreateError(message);
-      pushToast({
-        tone: "error",
-        title: t("companySkills.skillCreationFailed"),
-        body: message,
-      });
+      reportSkillError(
+        error,
+        t("companySkills.skillCreationFailed"),
+        t("companySkills.createSkillFailedBody"),
+        t("companySkills.creatingSkill", { defaultValue: "Creating a skill" }),
+      );
     },
   });
 
@@ -4113,11 +4136,12 @@ export function CompanySkills() {
       });
     },
     onError: (error) => {
-      pushToast({
-        tone: "error",
-        title: t("companySkills.updateFailed"),
-        body: error instanceof Error ? error.message : t("companySkills.installUpdateFailedBody"),
-      });
+      reportSkillError(
+        error,
+        t("companySkills.updateFailed"),
+        t("companySkills.installUpdateFailedBody"),
+        t("companySkills.updatingSkill", { defaultValue: "Updating this skill" }),
+      );
     },
   });
 
@@ -4257,6 +4281,9 @@ export function CompanySkills() {
     onError: (error) => {
       const message = error instanceof Error ? error.message : t("companySkills.installCatalogFailedBody");
       setInstallDialogState((current) => ({ ...current, error: message }));
+      // Also surface explicit-policy / platform denials in the persistent banner
+      // so the reason stays visible after the dialog closes.
+      policyDenial.capture(error, t("companySkills.installingSkill", { defaultValue: "Installing this skill" }));
     },
   });
 
@@ -4387,11 +4414,12 @@ export function CompanySkills() {
       });
     },
     onError: (error) => {
-      pushToast({
-        tone: "error",
-        title: t("companySkills.removeFailed"),
-        body: error instanceof Error ? error.message : t("companySkills.removeSkillFailedBody"),
-      });
+      reportSkillError(
+        error,
+        t("companySkills.removeFailed"),
+        t("companySkills.removeSkillFailedBody"),
+        t("companySkills.removingSkill", { defaultValue: "Removing this skill" }),
+      );
     },
   });
 
@@ -4441,6 +4469,11 @@ export function CompanySkills() {
 
   return (
     <>
+      {policyDenial.denial ? (
+        <div className="px-4 pt-4">
+          <SkillPolicyDenialNotice denial={policyDenial.denial} onDismiss={policyDenial.reset} />
+        </div>
+      ) : null}
       <Dialog open={deleteOpen} onOpenChange={closeDeleteDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -4601,6 +4634,18 @@ export function CompanySkills() {
         </DialogContent>
       </Dialog>
 
+      {selectedCompanyId ? (
+        <ImportSkillsFromProjectDialog
+          open={importFromProjectOpen}
+          onOpenChange={setImportFromProjectOpen}
+          companyId={selectedCompanyId}
+          onImportFromPath={() => {
+            setImportFromProjectOpen(false);
+            setImportDialogOpen(true);
+          }}
+        />
+      ) : null}
+
       {isStudioNew ? (
         <div className="min-h-(--sz-calc-30)">
           <div className="border-b border-border px-4 py-5">
@@ -4609,7 +4654,7 @@ export function CompanySkills() {
               className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground no-underline transition-colors hover:text-foreground"
             >
               <ChevronLeft className="h-4 w-4" />
-              Back
+              {t("Back", { defaultValue: "Back" })}
             </Link>
             <h1 className="text-2xl font-semibold">{studioTitle}</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{studioDescription}</p>
@@ -4619,7 +4664,10 @@ export function CompanySkills() {
               {studioForkFromId && studioForkDetailQuery.isLoading ? (
                 <PageSkeleton variant="detail" />
               ) : studioForkFromId && !studioForkDetailQuery.data ? (
-                <EmptyState icon={Boxes} message="Fork source skill not found." />
+                <EmptyState
+                  icon={Boxes}
+                  message={t("companySkills.forkSourceNotFound", { defaultValue: "Fork source skill not found." })}
+                />
               ) : (
                 <NewSkillWizard
                   initialDraft={studioDraft}
@@ -4652,6 +4700,7 @@ export function CompanySkills() {
           totalCount={discoveryCards.length}
           onCreate={() => navigate(skillStudioNewRoute())}
           onImport={() => setImportDialogOpen(true)}
+          onImportFromProject={() => setImportFromProjectOpen(true)}
           onBrowseCatalog={() => setDiscoveryTab("catalog")}
           onScan={() => scanProjects.mutate()}
           scanPending={scanProjects.isPending}

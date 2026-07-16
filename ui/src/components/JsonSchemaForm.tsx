@@ -8,7 +8,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { isUuidLike } from "@penclipai/shared";
+import { isUuidLike, type EnvSecretRefBinding } from "@penclipai/shared";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -109,6 +109,8 @@ export interface JsonSchemaFormProps {
   disabled?: boolean;
   /** Additional CSS class for the root container. */
   className?: string;
+  /** Custom label or locale key for the disclosure that hides advanced fields. */
+  advancedLabel?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +201,15 @@ export function validateField(
 
   // Skip further validation if empty and not required
   if (value === undefined || value === null || value === "") return null;
+
+  if (type === "secret-ref" && isSecretRefBinding(value)) {
+    return null;
+  }
+  if (type === "secret-ref" && typeof value === "object") {
+    return translateInstant("jsonSchemaForm.error.invalidSecretReference", {
+      defaultValue: "Invalid secret reference",
+    });
+  }
 
   if (type === "string" || type === "secret-ref") {
     const str = String(value);
@@ -501,6 +512,16 @@ BooleanField.displayName = "BooleanField";
  */
 const ENUM_UNSET_VALUE = "__paperclip_unset__";
 
+function isSecretRefBinding(value: unknown): value is EnvSecretRefBinding {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as { type?: unknown }).type === "secret_ref" &&
+    typeof (value as { secretId?: unknown }).secretId === "string"
+  );
+}
+
 /**
  * Specialized field for enum (select) values.
  */
@@ -614,9 +635,11 @@ const SecretField = React.memo(({
   const { t } = useTranslation();
   const isTextArea = maxLength != null && maxLength > TEXTAREA_THRESHOLD;
 
+  const secretRefValue = isSecretRefBinding(value) ? value : null;
   const stringValue = typeof value === "string" ? value : "";
   const trimmed = stringValue.trim();
-  const isBoundToSecret = trimmed.length > 0 && isUuidLike(trimmed);
+  const legacySecretId = trimmed.length > 0 && isUuidLike(trimmed) ? trimmed : null;
+  const isBoundToSecret = secretRefValue !== null || legacySecretId !== null;
   const hasRawValue = stringValue.length > 0 && !isBoundToSecret;
 
   const [showRawInput, setShowRawInput] = useState(hasRawValue);
@@ -629,14 +652,20 @@ const SecretField = React.memo(({
     if (hasRawValue) setShowRawInput(true);
   }, [hasRawValue]);
 
-  const bindingValue: SecretBindingValue | null = isBoundToSecret
-    ? { secretId: trimmed }
-    : null;
+  const bindingValue: SecretBindingValue | null = secretRefValue
+    ? { secretId: secretRefValue.secretId, version: secretRefValue.version }
+    : legacySecretId
+      ? { secretId: legacySecretId }
+      : null;
 
   const handlePickerChange = useCallback(
     (next: SecretBindingValue | null) => {
       if (next) {
-        onChange(next.secretId);
+        onChange({
+          type: "secret_ref",
+          secretId: next.secretId,
+          version: next.version ?? "latest",
+        });
         setShowRawInput(false);
         setIsVisible(false);
       } else {
@@ -1262,9 +1291,13 @@ export function JsonSchemaForm({
   errors = {},
   disabled,
   className,
+  advancedLabel,
 }: JsonSchemaFormProps) {
   const type = resolveType(schema);
   const { t } = useTranslation();
+  const translatedAdvancedLabel = advancedLabel
+    ? t(advancedLabel, { defaultValue: advancedLabel })
+    : t("jsonSchemaForm.advancedOptions", { defaultValue: "Advanced options" });
 
   const handleRootScalarChange = useCallback((newVal: unknown) => {
     // If root is a scalar, values IS the value
@@ -1409,7 +1442,7 @@ export function JsonSchemaForm({
             aria-expanded={isAdvancedOpen}
           >
             <span className="text-sm font-medium">
-              {t("jsonSchemaForm.advancedOptions", { defaultValue: "Advanced options" })}
+              {translatedAdvancedLabel}
             </span>
             {isAdvancedOpen ? (
               <ChevronDown className="h-4 w-4 text-muted-foreground" />

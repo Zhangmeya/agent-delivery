@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const repoRoot = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
+const repoRoot = fileURLToPath(new URL("..", import.meta.url)).replace(/[\\/]$/, "");
+const bashRepoRoot = execFileSync("bash", ["-c", "pwd"], {
+  cwd: repoRoot,
+  encoding: "utf8",
+}).trim();
 const scriptPath = join(repoRoot, "scripts", "release-registry-versions.mjs");
 
 function writeExecutable(path, body) {
@@ -14,35 +19,45 @@ function writeExecutable(path, body) {
 
 function makeFixture() {
   const fixtureDir = mkdtempSync(join(tmpdir(), "paperclip-release-registry-"));
+  const bashFixtureDir = execFileSync("bash", ["-c", "pwd"], {
+    cwd: fixtureDir,
+    encoding: "utf8",
+  }).trim();
   const binDir = join(fixtureDir, "bin");
   const callLog = join(fixtureDir, "calls.log");
   mkdirSync(binDir);
   writeFileSync(callLog, "");
 
-  writeExecutable(
-    join(binDir, "npm"),
-    `#!/usr/bin/env bash
-set -euo pipefail
-printf 'npm %s\\n' "$*" >> "$FAKE_CALL_LOG"
-target="$2"
-case "$target" in
-  "@paperclipai/present@"*)
-    printf '%s\\n' "\${target##*@}"
-    ;;
-  "@paperclipai/absent@"*)
-    exit 1
-    ;;
-  "@paperclipai/present")
-    echo '["1.0.0","2026.707.0","2026.707.1","2026.707.1-canary.4"]'
-    ;;
-  *)
-    exit 1
-    ;;
-esac
+  writeFileSync(
+    join(binDir, "npm.cjs"),
+    `const { appendFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+appendFileSync(process.env.FAKE_CALL_LOG, \`npm \${args.join(" ")}\\n\`);
+const target = args[1] ?? "";
+if (target.startsWith("@paperclipai/present@")) {
+  process.stdout.write(\`\${target.slice(target.lastIndexOf("@") + 1)}\\n\`);
+} else if (target.startsWith("@paperclipai/absent@")) {
+  process.exitCode = 1;
+} else if (target === "@paperclipai/present") {
+  process.stdout.write('["1.0.0","2026.707.0","2026.707.1","2026.707.1-canary.4"]\\n');
+} else {
+  process.exitCode = 1;
+}
 `,
   );
+  writeExecutable(join(binDir, "npm"), '#!/usr/bin/env bash\nexec node "$(dirname "$0")/npm.cjs" "$@"\n');
+  if (process.platform === "win32") {
+    writeFileSync(join(binDir, "npm.cmd"), '@echo off\r\nnode "%~dp0npm.cjs" %*\r\n');
+  }
 
-  return { fixtureDir, binDir, callLog };
+  return {
+    fixtureDir,
+    bashFixtureDir,
+    binDir,
+    bashBinDir: `${bashFixtureDir}/bin`,
+    callLog,
+    bashCallLog: `${bashFixtureDir}/calls.log`,
+  };
 }
 
 function runScript(args, { binDir, callLog }, extraEnv = {}) {
@@ -54,7 +69,7 @@ function runScript(args, { binDir, callLog }, extraEnv = {}) {
       encoding: "utf8",
       env: {
         ...process.env,
-        PATH: `${binDir}:${process.env.PATH}`,
+        PATH: `${binDir}${delimiter}${process.env.PATH}`,
         FAKE_CALL_LOG: callLog,
         ...extraEnv,
       },
@@ -68,10 +83,32 @@ function runScript(args, { binDir, callLog }, extraEnv = {}) {
   return { status, stdout, stderr, calls: readFileSync(callLog, "utf8") };
 }
 
-function runReleaseLibHelper(fnCall, { binDir, callLog }, extraEnv = {}) {
+function runReleaseLibHelper(
+  fnCall,
+  { fixtureDir, bashFixtureDir, bashBinDir, callLog, bashCallLog },
+  extraEnv = {},
+) {
+  const bashExtraEnv = Object.fromEntries(
+    Object.entries(extraEnv).map(([key, value]) => [
+      key,
+      typeof value === "string" && value.startsWith(fixtureDir)
+        ? `${bashFixtureDir}${value.slice(fixtureDir.length).replaceAll("\\", "/")}`
+        : value,
+    ]),
+  );
+  const shellQuote = (value) => `'${String(value).replaceAll("'", `'"'"'`)}'`;
+  const exportLines = Object.entries({
+    FAKE_CALL_LOG: bashCallLog,
+    REPO_ROOT: bashRepoRoot,
+    ...bashExtraEnv,
+  })
+    .map(([key, value]) => `export ${key}=${shellQuote(value)}`)
+    .join("\n");
   const script = `
 set -euo pipefail
-source "${repoRoot}/scripts/release-lib.sh"
+${exportLines}
+export PATH="${bashBinDir}:$PATH"
+source "${bashRepoRoot}/scripts/release-lib.sh"
 ${fnCall}
 `;
   let status = 0;
@@ -79,13 +116,6 @@ ${fnCall}
   try {
     output = execFileSync("bash", ["-c", script], {
       encoding: "utf8",
-      env: {
-        ...process.env,
-        PATH: `${binDir}:${process.env.PATH}`,
-        FAKE_CALL_LOG: callLog,
-        REPO_ROOT: repoRoot,
-        ...extraEnv,
-      },
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (error) {

@@ -49,6 +49,7 @@ import {
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { useOptionalToastActions } from "../context/ToastContext";
+import { classifySkillDenial } from "@/lib/skill-policy-denial";
 import { agentsApi } from "@/api/agents";
 import { companySkillsApi } from "@/api/companySkills";
 import { issuesApi } from "@/api/issues";
@@ -189,6 +190,16 @@ function useMutationErrorToast() {
   const { t } = useTranslation();
   return useCallback(
     (title: string) => (error: unknown) => {
+      // Under the open default there is no permission chrome. When an action is
+      // actually denied — by an explicit company policy (State B) or a platform
+      // safety invariant (State C) — show the actionable denial title/remediation
+      // instead of a generic "try again" error (§9.10, PAP-13865). Transient
+      // failures keep the plain error toast.
+      const denial = classifySkillDenial(error);
+      if (denial) {
+        toast?.pushToast({ tone: "warn", title: denial.title, body: denial.remediation });
+        return;
+      }
       const body =
         error instanceof Error && error.message
           ? error.message
