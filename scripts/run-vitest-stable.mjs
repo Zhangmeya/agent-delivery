@@ -71,6 +71,9 @@ const routeTestExcludePatterns = [
   "src/**/*route*.test.ts",
   "src/**/*authz*.test.ts",
 ];
+// cmd.exe limits a command line to 8,191 characters, and pnpm wraps the
+// Vitest invocation again. Reserve roughly half the ceiling for that expansion.
+const windowsGeneralServerCommandBudget = 4_000;
 
 function quoteCmdArg(value) {
   if (/^[A-Za-z0-9_/:=.,@+-]+$/.test(value)) return value;
@@ -280,6 +283,32 @@ function buildGeneralServerExcludePatterns() {
   return [...routeTestExcludePatterns, ...explicitPatterns].sort((a, b) => a.localeCompare(b));
 }
 
+function measurePnpmVitestCommand(args) {
+  return ["pnpm", "exec", "vitest", "run", ...args].map(quoteCmdArg).join(" ").length;
+}
+
+function buildCommandBudgetChunks(files, baseArgs, commandBudget) {
+  const chunks = [];
+  let current = [];
+
+  for (const file of files) {
+    const candidate = [...current, file];
+    if (measurePnpmVitestCommand([...baseArgs, ...candidate]) <= commandBudget) {
+      current = candidate;
+      continue;
+    }
+
+    if (current.length === 0) {
+      fail(`Suite path exceeds the Windows command budget (${commandBudget}): ${file}`);
+    }
+    chunks.push(current);
+    current = [file];
+  }
+
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
 function runVitest(args, label) {
   console.log(`\n[test:run] ${label}`);
   invocationIndex += 1;
@@ -350,6 +379,22 @@ function runGeneralGroup(routeTests, groupName, shardIndex = null, shardCount = 
       return;
     }
 
+    if (process.platform === "win32") {
+      console.log(
+        `\n[test:run] general-server running ${generalServerTestFiles.length} suites in ${windowsGeneralServerCommandChunks.length} sequential Windows chunks`,
+      );
+      for (const [index, chunkFiles] of windowsGeneralServerCommandChunks.entries()) {
+        runVitest(
+          [
+            ...generalServerBaseArgs,
+            ...chunkFiles,
+          ],
+          `${groupName} Windows chunk ${index + 1}/${windowsGeneralServerCommandChunks.length}`,
+        );
+      }
+      return;
+    }
+
     const excludeRouteArgs = generalServerExcludePatterns.flatMap((file) => ["--exclude", file]);
     runVitest(
       [
@@ -417,6 +462,16 @@ const generalServerTestFiles = walk(serverSrcDir)
   .filter((repoPath) => !isRouteOrAuthzTest(repoPath))
   .sort((a, b) => a.localeCompare(b));
 const generalServerExcludePatterns = buildGeneralServerExcludePatterns();
+const generalServerBaseArgs = [
+  "--project",
+  "@penclipai/server",
+  ...serializedServerVitestArgs,
+];
+const windowsGeneralServerCommandChunks = buildCommandBudgetChunks(
+  generalServerTestFiles,
+  generalServerBaseArgs,
+  windowsGeneralServerCommandBudget,
+);
 
 const options = parseCliOptions(process.argv.slice(2));
 if (options.dryRun) {
@@ -436,6 +491,16 @@ if (options.dryRun) {
         selectedSerializedSuites: serializedSuites.map((routeTest) => routeTest.repoPath),
         generalServerSuiteCount: generalServerTestFiles.length,
         generalServerExcludePatterns,
+        windowsGeneralServerCommandBudget,
+        windowsGeneralServerCommandChunks:
+          options.mode === generalModeName &&
+          options.group === generalServerGroupName &&
+          options.shardCount === null
+            ? windowsGeneralServerCommandChunks.map((files) => ({
+                files,
+                commandLength: measurePnpmVitestCommand([...generalServerBaseArgs, ...files]),
+              }))
+            : null,
         selectedGeneralServerSuites:
           options.mode === generalModeName &&
           options.group === generalServerGroupName &&

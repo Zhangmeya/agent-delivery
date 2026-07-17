@@ -146,6 +146,7 @@ describe("IssueBlockedNotice", () => {
         successfulRunHandoff={{
           state: "required",
           required: true,
+          hasLiveContinuation: false,
           sourceRunId: "12345678-aaaa-bbbb-cccc-123456789abc",
           correctiveRunId: null,
           assigneeAgentId: "agent-1",
@@ -175,6 +176,7 @@ describe("IssueBlockedNotice", () => {
         successfulRunHandoff={{
           state: "required",
           required: true,
+          hasLiveContinuation: false,
           sourceRunId: "12345678-aaaa-bbbb-cccc-123456789abc",
           correctiveRunId: null,
           assigneeAgentId: "agent-1",
@@ -209,6 +211,7 @@ describe("IssueBlockedNotice", () => {
         successfulRunHandoff={{
           state: "required",
           required: true,
+          hasLiveContinuation: false,
           sourceRunId: "12345678-aaaa-bbbb-cccc-123456789abc",
           correctiveRunId: null,
           assigneeAgentId: "agent-1",

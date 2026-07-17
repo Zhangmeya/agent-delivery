@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "@/lib/router";
 import { ArrowUpDown, Check, ChevronDown, ChevronRight, Layers, Plus, Repeat } from "lucide-react";
 import { routinesApi } from "../api/routines";
+import { foldersApi } from "../api/folders";
 import { agentsApi } from "../api/agents";
 import { projectsApi } from "../api/projects";
 import { issuesApi } from "../api/issues";
@@ -13,6 +14,7 @@ import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useToastActions } from "../context/ToastContext";
 import { buildMarkdownMentionOptions } from "../lib/company-members";
+import { cn } from "../lib/utils";
 import { queryKeys } from "../lib/queryKeys";
 import { groupBy } from "../lib/groupBy";
 import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
@@ -48,6 +50,22 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import type { RoutineListItem, RoutineVariable } from "@penclipai/shared";
+import type { FolderListItem } from "@penclipai/shared";
+import {
+  AllUnfiledBanner,
+  BulkBar,
+  DeleteFolderDialog,
+  FolderChip,
+  FolderFormDialog,
+  FolderRail,
+  FolderSwatch,
+  MobileFolderSheet,
+  MoveToMenu,
+  folderSearchValue,
+  normalizeFolderSelection,
+  selectedFolderFromList,
+  type FolderSelection,
+} from "../components/folders/FolderControls";
 
 const concurrencyPolicies = ["coalesce_if_active", "always_enqueue", "skip_if_active"];
 const catchUpPolicies = ["skip_missed", "enqueue_missed_with_cap"];
@@ -68,7 +86,7 @@ function autoResizeTextarea(element: HTMLTextAreaElement | null) {
 }
 
 type RoutinesTab = "routines" | "runs";
-type RoutineGroupBy = "none" | "project" | "assignee";
+type RoutineGroupBy = "folder" | "none" | "project" | "assignee";
 type RoutineSortField = "updated" | "created" | "title" | "lastRun";
 type RoutineSortDir = "asc" | "desc";
 
@@ -90,7 +108,7 @@ const builtInRoutineGroupKey = "__built_in_routines";
 const defaultRoutineViewState: RoutineViewState = {
   sortField: "title",
   sortDir: "asc",
-  groupBy: "project",
+  groupBy: "folder",
   collapsedGroups: [],
 };
 
@@ -122,6 +140,7 @@ function buildRoutineMutationPayload(input: {
   title: string;
   description: string;
   projectId: string;
+  folderId: string | null;
   assigneeAgentId: string;
   priority: string;
   concurrencyPolicy: string;
@@ -132,6 +151,7 @@ function buildRoutineMutationPayload(input: {
     ...input,
     description: input.description.trim() || null,
     projectId: input.projectId || null,
+    folderId: input.folderId || null,
     assigneeAgentId: input.assigneeAgentId || null,
   };
 }
@@ -142,7 +162,7 @@ export function buildRoutineGroups(
   projectById: Map<string, { name: string }>,
   agentById: Map<string, { name: string }>,
 ): RoutineGroup[] {
-  if (groupByValue === "none") {
+  if (groupByValue === "none" || groupByValue === "folder") {
     return [{ key: "__all", label: null, items: routines }];
   }
 
@@ -150,13 +170,19 @@ export function buildRoutineGroups(
     const groups = groupBy(routines, (routine) => routine.projectId ?? "__no_project");
     return Object.keys(groups)
       .sort((left, right) => {
-        const leftLabel = left === "__no_project" ? "No project" : (projectById.get(left)?.name ?? "Unknown project");
-        const rightLabel = right === "__no_project" ? "No project" : (projectById.get(right)?.name ?? "Unknown project");
+        const leftLabel = left === "__no_project"
+          ? translateInstant("No project")
+          : (projectById.get(left)?.name ?? translateInstant("Unknown project"));
+        const rightLabel = right === "__no_project"
+          ? translateInstant("No project")
+          : (projectById.get(right)?.name ?? translateInstant("Unknown project"));
         return leftLabel.localeCompare(rightLabel);
       })
       .map((key) => ({
         key,
-        label: key === "__no_project" ? "No project" : (projectById.get(key)?.name ?? "Unknown project"),
+        label: key === "__no_project"
+          ? translateInstant("No project")
+          : (projectById.get(key)?.name ?? translateInstant("Unknown project")),
         items: groups[key]!,
       }));
   }
@@ -164,13 +190,19 @@ export function buildRoutineGroups(
   const groups = groupBy(routines, (routine) => routine.assigneeAgentId ?? "__unassigned");
   return Object.keys(groups)
     .sort((left, right) => {
-      const leftLabel = left === "__unassigned" ? "Unassigned" : (agentById.get(left)?.name ?? "Unknown agent");
-      const rightLabel = right === "__unassigned" ? "Unassigned" : (agentById.get(right)?.name ?? "Unknown agent");
+      const leftLabel = left === "__unassigned"
+        ? translateInstant("Unassigned")
+        : (agentById.get(left)?.name ?? translateInstant("Unknown agent"));
+      const rightLabel = right === "__unassigned"
+        ? translateInstant("Unassigned")
+        : (agentById.get(right)?.name ?? translateInstant("Unknown agent"));
       return leftLabel.localeCompare(rightLabel);
     })
     .map((key) => ({
       key,
-      label: key === "__unassigned" ? "Unassigned" : (agentById.get(key)?.name ?? "Unknown agent"),
+      label: key === "__unassigned"
+        ? translateInstant("Unassigned")
+        : (agentById.get(key)?.name ?? translateInstant("Unknown agent")),
       items: groups[key]!,
     }));
 }
@@ -270,12 +302,19 @@ export function Routines() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { pushToast } = useToastActions();
   const descriptionEditorRef = useRef<MarkdownEditorRef>(null);
   const titleInputRef = useRef<HTMLTextAreaElement | null>(null);
   const assigneeSelectorRef = useRef<HTMLButtonElement | null>(null);
   const projectSelectorRef = useRef<HTMLButtonElement | null>(null);
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [folderDialogTarget, setFolderDialogTarget] = useState<FolderListItem | null>(null);
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<FolderListItem | null>(null);
+  const [mobileFoldersOpen, setMobileFoldersOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedRoutineIds, setSelectedRoutineIds] = useState<string[]>([]);
+  const [moveAfterCreateIds, setMoveAfterCreateIds] = useState<string[]>([]);
   const [runningRoutineId, setRunningRoutineId] = useState<string | null>(null);
   const [statusMutationRoutineId, setStatusMutationRoutineId] = useState<string | null>(null);
   const [runDialogRoutine, setRunDialogRoutine] = useState<RoutineListItem | null>(null);
@@ -286,6 +325,7 @@ export function Routines() {
     title: string;
     description: string;
     projectId: string;
+    folderId: string | null;
     assigneeAgentId: string;
     priority: string;
     concurrencyPolicy: string;
@@ -295,6 +335,7 @@ export function Routines() {
     title: "",
     description: "",
     projectId: "",
+    folderId: null,
     assigneeAgentId: "",
     priority: "medium",
     concurrencyPolicy: "coalesce_if_active",
@@ -305,6 +346,7 @@ export function Routines() {
     ? `paperclip:routines-view:${selectedCompanyId}`
     : "paperclip:routines-view";
   const [routineViewState, setRoutineViewState] = useState<RoutineViewState>(() => getRoutineViewState(routineViewStateKey));
+  const folderSelection = normalizeFolderSelection(searchParams.get("folder"));
 
   useEffect(() => {
     setBreadcrumbs([{ label: t("Routines") }]);
@@ -318,6 +360,11 @@ export function Routines() {
     queryKey: queryKeys.routines.list(selectedCompanyId!),
     queryFn: () => routinesApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
+  });
+  const { data: routineFolders, isLoading: foldersLoading } = useQuery({
+    queryKey: queryKeys.folders.list(selectedCompanyId!, "routine"),
+    queryFn: () => foldersApi.list(selectedCompanyId!, "routine"),
+    enabled: !!selectedCompanyId && activeTab === "routines",
   });
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -345,7 +392,8 @@ export function Routines() {
     resourceKey: "live-runs",
     queryKey: liveRunsQueryKey,
     enabled: !!selectedCompanyId && activeTab === "runs",
-    refetchInterval: 5000,
+    // Event-sourced via LiveUpdatesProvider (#9627); no interval poll needed.
+    refetchInterval: false,
     leaderOnly: true,
   });
   const { data: liveRuns, dataUpdatedAt: liveRunsUpdatedAt } = useQuery({
@@ -376,6 +424,7 @@ export function Routines() {
         title: "",
         description: "",
         projectId: "",
+        folderId: null,
         assigneeAgentId: "",
         priority: "medium",
         concurrencyPolicy: "coalesce_if_active",
@@ -386,13 +435,131 @@ export function Routines() {
       setAdvancedOpen(false);
       await queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) });
       pushToast({
-        title: "Routine created",
+        title: t("Routine created"),
         body: routine.assigneeAgentId
-          ? "Add the first trigger to turn it into a live workflow."
-          : "Draft saved. Add a default agent before enabling automation.",
+          ? t("Add the first trigger to turn it into a live workflow.")
+          : t("Draft saved. Add a default agent before enabling automation."),
         tone: "success",
       });
       navigate(`/routines/${routine.id}?tab=triggers`);
+    },
+  });
+  const createFolder = useMutation({
+    mutationFn: (payload: { name: string; color: string | null }) =>
+      foldersApi.create(selectedCompanyId!, { kind: "routine", ...payload }),
+    onSuccess: async (folder) => {
+      setFolderDialogOpen(false);
+      setFolderDialogTarget(null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") });
+      if (moveAfterCreateIds.length > 0) {
+        const ids = moveAfterCreateIds;
+        setMoveAfterCreateIds([]);
+        try {
+          await Promise.all(ids.map((itemId) =>
+            foldersApi.moveItem(selectedCompanyId!, { kind: "routine", itemId, folderId: folder.id })
+          ));
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+          ]);
+        } catch (moveError) {
+          pushToast({
+            title: t("folders.createdMoveFailed", { defaultValue: "Folder created, move failed" }),
+            body: moveError instanceof Error
+              ? moveError.message
+              : t("folders.moveSelectedFailed", {
+                  defaultValue: "Failed to move the selected {{items}}.",
+                  items: t("folders.routines", { defaultValue: "routines" }),
+                }),
+            tone: "error",
+          });
+          return;
+        }
+      } else {
+        setFolderSelection(folder.id);
+      }
+      pushToast({
+        title: t("folders.created", { defaultValue: "Folder created" }),
+        body: folder.name,
+        tone: "success",
+      });
+    },
+    onError: (mutationError) => {
+      pushToast({
+        title: t("folders.saveFailed", { defaultValue: "Folder save failed" }),
+        body: mutationError instanceof Error
+          ? mutationError.message
+          : t("folders.saveError", { defaultValue: "Failed to save folder." }),
+        tone: "error",
+      });
+    },
+  });
+  const updateFolder = useMutation({
+    mutationFn: ({ folderId, payload }: { folderId: string; payload: { name?: string; color?: string | null } }) =>
+      foldersApi.update(selectedCompanyId!, folderId, payload),
+    onSuccess: async () => {
+      setFolderDialogOpen(false);
+      setFolderDialogTarget(null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") });
+    },
+    onError: (mutationError) => {
+      pushToast({
+        title: t("folders.saveFailed", { defaultValue: "Folder save failed" }),
+        body: mutationError instanceof Error
+          ? mutationError.message
+          : t("folders.updateError", { defaultValue: "Failed to update folder." }),
+        tone: "error",
+      });
+    },
+  });
+  const deleteFolder = useMutation({
+    mutationFn: (folderId: string) => foldersApi.delete(selectedCompanyId!, folderId),
+    onSuccess: async (_, folderId) => {
+      if (folderSelection === folderId) setFolderSelection("all");
+      setDeleteFolderTarget(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+      ]);
+      pushToast({
+        title: t("folders.deleted", { defaultValue: "Folder deleted" }),
+        body: t("folders.itemsMovedToUnfiled", {
+          defaultValue: "{{items}} moved to Unfiled.",
+          items: t("folders.routinesTitle", { defaultValue: "Routines" }),
+        }),
+        tone: "success",
+      });
+    },
+    onError: (mutationError) => {
+      pushToast({
+        title: t("folders.deleteFailed", { defaultValue: "Folder delete failed" }),
+        body: mutationError instanceof Error
+          ? mutationError.message
+          : t("folders.deleteError", { defaultValue: "Failed to delete folder." }),
+        tone: "error",
+      });
+    },
+  });
+  const moveRoutineToFolder = useMutation({
+    mutationFn: ({ itemId, folderId }: { itemId: string; folderId: string | null }) =>
+      foldersApi.moveItem(selectedCompanyId!, { kind: "routine", itemId, folderId }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+      ]);
+    },
+    onError: (mutationError) => {
+      pushToast({
+        title: t("folders.itemMoveFailed", { defaultValue: "Move failed" }),
+        body: mutationError instanceof Error
+          ? mutationError.message
+          : t("folders.moveItemError", {
+              defaultValue: "Failed to move {{item}}.",
+              item: t("folders.routine", { defaultValue: "routine" }),
+            }),
+        tone: "error",
+      });
     },
   });
   const updateIssue = useMutation({
@@ -419,8 +586,10 @@ export function Routines() {
     },
     onError: (mutationError) => {
       pushToast({
-        title: "Failed to update routine",
-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not update the routine.",
+        title: t("Failed to update routine"),
+        body: mutationError instanceof Error
+          ? mutationError.message
+          : t("routineDetail.updateFailedBody"),
         tone: "error",
       });
     },
@@ -454,8 +623,10 @@ export function Routines() {
     },
     onError: (mutationError) => {
       pushToast({
-        title: "Routine run failed",
-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not start the routine run.",
+        title: t("Routine run failed"),
+        body: mutationError instanceof Error
+          ? mutationError.message
+          : t("routineDetail.runFailedBody"),
         tone: "error",
       });
     },
@@ -497,9 +668,35 @@ export function Routines() {
     () => (routines ?? []).filter((routine) => routine.status !== "archived"),
     [routines],
   );
+  const folderFilteredRoutines = useMemo(() => {
+    if (routineViewState.groupBy !== "folder") return visibleRoutines;
+    if (folderSelection === "all") return visibleRoutines;
+    if (folderSelection === "unfiled") return visibleRoutines.filter((routine) => !routine.folderId);
+    return visibleRoutines.filter((routine) => routine.folderId === folderSelection);
+  }, [folderSelection, routineViewState.groupBy, visibleRoutines]);
+  // Rail counts reflect the page's visible scope (archived hidden), not raw DB
+  // counts (ux-spec §5.3).
+  const railFolderResult = useMemo(() => {
+    if (!routineFolders) return routineFolders;
+    const counts = new Map<string, number>();
+    let unfiled = 0;
+    for (const routine of visibleRoutines) {
+      if (routine.folderId) counts.set(routine.folderId, (counts.get(routine.folderId) ?? 0) + 1);
+      else unfiled += 1;
+    }
+    return {
+      ...routineFolders,
+      allCount: visibleRoutines.length,
+      unfiledCount: unfiled,
+      folders: routineFolders.folders.map((folder) => ({
+        ...folder,
+        itemCount: counts.get(folder.id) ?? 0,
+      })),
+    };
+  }, [routineFolders, visibleRoutines]);
   const sortedRoutines = useMemo(
-    () => sortRoutines(visibleRoutines, routineViewState.sortField, routineViewState.sortDir),
-    [routineViewState.sortDir, routineViewState.sortField, visibleRoutines],
+    () => sortRoutines(folderFilteredRoutines, routineViewState.sortField, routineViewState.sortDir),
+    [folderFilteredRoutines, routineViewState.sortDir, routineViewState.sortField],
   );
   const routineSections = useMemo(
     () => buildRoutineSections(sortedRoutines, routineViewState.groupBy, projectById, agentById),
@@ -516,6 +713,9 @@ export function Routines() {
   );
   const currentAssignee = draft.assigneeAgentId ? agentById.get(draft.assigneeAgentId) ?? null : null;
   const currentProject = draft.projectId ? projectById.get(draft.projectId) ?? null : null;
+  const activeFolder = selectedFolderFromList(routineFolders?.folders ?? [], folderSelection);
+  const hasRoutineFolders = (routineFolders?.folders.length ?? 0) > 0;
+  const showFolderRail = activeTab === "routines" && routineViewState.groupBy === "folder" && hasRoutineFolders;
 
   function updateRoutineView(patch: Partial<RoutineViewState>) {
     setRoutineViewState((current) => {
@@ -532,6 +732,69 @@ export function Routines() {
     });
   }
 
+  function setFolderSelection(selection: FolderSelection) {
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      const value = folderSearchValue(selection);
+      if (value) params.set("folder", value);
+      else params.delete("folder");
+      return params;
+    });
+  }
+
+  function openCreateFolder(moveItemIds: string[] = []) {
+    setMoveAfterCreateIds(moveItemIds);
+    setFolderDialogTarget(null);
+    setFolderDialogOpen(true);
+  }
+
+  function openCreateRoutine() {
+    setDraft((current) => ({
+      ...current,
+      folderId: folderSelection === "all" || folderSelection === "unfiled" ? null : folderSelection,
+    }));
+    setComposerOpen(true);
+  }
+
+  async function moveSelectedRoutines(folderId: string | null) {
+    const ids = selectedRoutineIds;
+    if (ids.length === 0) return;
+    try {
+      await Promise.all(ids.map((itemId) => foldersApi.moveItem(selectedCompanyId!, { kind: "routine", itemId, folderId })));
+      setSelectedRoutineIds([]);
+      setSelectMode(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+      ]);
+      pushToast({
+        title: t("folders.itemsMoved", {
+          defaultValue: "{{items}} moved",
+          items: t("folders.routinesTitle", { defaultValue: "Routines" }),
+        }),
+        body: t("folders.routineCountFiled", {
+          defaultValue: "{{count}} routines filed.",
+          count: ids.length,
+        }),
+        tone: "success",
+      });
+    } catch (moveError) {
+      pushToast({
+        title: t("folders.moveItemsFailed", {
+          defaultValue: "Failed to move {{items}}",
+          items: t("folders.routines", { defaultValue: "routines" }),
+        }),
+        body: moveError instanceof Error
+          ? moveError.message
+          : t("folders.moveSelectedFailed", {
+              defaultValue: "Failed to move the selected {{items}}.",
+              items: t("folders.routines", { defaultValue: "routines" }),
+            }),
+        tone: "error",
+      });
+    }
+  }
+
   function handleRunNow(routine: RoutineListItem) {
     setRunDialogRoutine(routine);
   }
@@ -539,8 +802,8 @@ export function Routines() {
   function handleToggleEnabled(routine: RoutineListItem, enabled: boolean) {
     if (!enabled && !routine.assigneeAgentId) {
       pushToast({
-        title: "Default agent required",
-        body: "Set a default agent before enabling routine automation.",
+        title: t("Default agent required"),
+        body: t("Set a default agent before enabling routine automation."),
         tone: "warn",
       });
       return;
@@ -577,7 +840,7 @@ export function Routines() {
             {t("Recurring work definitions that materialize into auditable execution issues.")}
           </p>
         </div>
-        <Button onClick={() => setComposerOpen(true)}>
+        <Button onClick={openCreateRoutine}>
           <Plus className="mr-2 h-4 w-4" />
           {t("Create routine")}
         </Button>
@@ -650,6 +913,7 @@ export function Routines() {
                 <PopoverContent align="end" className="w-44 p-0">
                   <div className="p-2 space-y-0.5">
                     {([
+                      ["folder", t("Folder")],
                       ["project", t("Project")],
                       ["assignee", t("Agent")],
                       ["none", t("common.none")],
@@ -670,8 +934,31 @@ export function Routines() {
                   </div>
                 </PopoverContent>
               </Popover>
+              {routineViewState.groupBy === "folder" && !hasRoutineFolders ? (
+                <Button variant="outline" size="sm" onClick={() => openCreateFolder()}>
+                  <Plus className="mr-2 h-3.5 w-3.5" />
+                  {t("folders.newFolder", { defaultValue: "New folder" })}
+                </Button>
+              ) : null}
+              {showFolderRail ? (
+                <Button variant="ghost" size="sm" className="text-xs" onClick={() => setSelectMode((current) => !current)}>
+                  {selectMode
+                    ? t("common.done", { defaultValue: "Done" })
+                    : t("common.select", { defaultValue: "Select" })}
+                </Button>
+              ) : null}
             </div>
           </div>
+          {routineViewState.groupBy === "folder" ? (
+            <div className="md:hidden">
+              <FolderChip
+                result={railFolderResult}
+                selection={folderSelection}
+                allLabel={t("folders.allRoutines", { defaultValue: "All routines" })}
+                onClick={() => setMobileFoldersOpen(true)}
+              />
+            </div>
+          ) : null}
         </TabsContent>
         <TabsContent value="runs">
           <IssuesList
@@ -848,6 +1135,28 @@ export function Routines() {
                       );
                     }}
                   />
+                  <span>{t("folders.filedIn", { defaultValue: "filed in" })}</span>
+                  <Select
+                    value={draft.folderId ?? "__unfiled"}
+                    onValueChange={(value) => setDraft((current) => ({
+                      ...current,
+                      folderId: value === "__unfiled" ? null : value,
+                    }))}
+                  >
+                    <SelectTrigger className="h-8 w-auto min-w-32 border-0 bg-muted/50 px-2 shadow-none">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__unfiled">
+                        {t("folders.unfiled", { defaultValue: "Unfiled" })}
+                      </SelectItem>
+                      {(routineFolders?.folders ?? []).map((folder) => (
+                        <SelectItem key={folder.id} value={folder.id}>
+                          {folder.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
@@ -937,7 +1246,9 @@ export function Routines() {
               </Button>
               {createRoutine.isError ? (
                 <p className="text-sm text-destructive">
-                  {createRoutine.error instanceof Error ? createRoutine.error.message : "Failed to create routine"}
+                  {createRoutine.error instanceof Error
+                    ? createRoutine.error.message
+                    : t("Failed to create routine")}
                 </p>
               ) : null}
             </div>
@@ -948,19 +1259,99 @@ export function Routines() {
       {error ? (
         <Card>
           <CardContent className="pt-6 text-sm text-destructive">
-            {error instanceof Error ? error.message : "Failed to load routines"}
+            {error instanceof Error ? error.message : t("Failed to load routines")}
           </CardContent>
         </Card>
       ) : null}
 
       {activeTab === "routines" ? (
-        <div>
+        <div className={cn(showFolderRail && "flex gap-4")}>
+          {showFolderRail ? (
+            <FolderRail
+              result={railFolderResult}
+              selection={folderSelection}
+              allLabel={t("folders.allRoutines", { defaultValue: "All routines" })}
+              itemLabelPlural={t("folders.routines", { defaultValue: "routines" })}
+              loading={foldersLoading}
+              onSelect={setFolderSelection}
+              onCreate={() => openCreateFolder()}
+              onRename={(folder, name) => updateFolder.mutate({ folderId: folder.id, payload: { name } })}
+              onEdit={(folder) => {
+                setFolderDialogTarget(folder);
+                setFolderDialogOpen(true);
+              }}
+              onDelete={setDeleteFolderTarget}
+            />
+          ) : null}
+          <div className="min-w-0 flex-1">
+          {routineViewState.groupBy === "folder" && hasRoutineFolders ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {folderSelection === "all" ? (
+                <FolderIconHeader
+                  label={t("folders.allRoutines", { defaultValue: "All routines" })}
+                  count={sortedRoutines.length}
+                />
+              ) : (
+                <div className="flex min-w-0 items-center gap-2 text-sm">
+                  <FolderSwatch color={activeFolder?.color} />
+                  <span className="truncate font-medium">
+                    {folderSelection === "unfiled"
+                      ? t("folders.unfiled", { defaultValue: "Unfiled" })
+                      : activeFolder?.name ?? t("folders.folder", { defaultValue: "Folder" })}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {t("folders.routineCount", {
+                      defaultValue: "{{count}} routines",
+                      count: sortedRoutines.length,
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : null}
+          {routineViewState.groupBy === "folder" && !hasRoutineFolders && !foldersLoading && visibleRoutines.length > 0 ? (
+            <AllUnfiledBanner
+              storageKey={`paperclip:routines-folder-nudge:${selectedCompanyId ?? "none"}`}
+              itemLabelPlural={t("folders.routines", { defaultValue: "routines" })}
+              onCreateFolder={() => openCreateFolder()}
+            />
+          ) : null}
+          {selectMode ? (
+            <BulkBar
+              selectedCount={selectedRoutineIds.length}
+              folders={routineFolders?.folders ?? []}
+              onMove={(folderId) => void moveSelectedRoutines(folderId)}
+              onCreateAndMove={() => openCreateFolder(selectedRoutineIds)}
+              onClear={() => setSelectedRoutineIds([])}
+              onDone={() => {
+                setSelectMode(false);
+                setSelectedRoutineIds([]);
+              }}
+            />
+          ) : null}
           {visibleRoutines.length === 0 ? (
             <div className="py-12">
               <EmptyState
                 icon={Repeat}
                 message={t("routines.noActiveRoutines")}
               />
+            </div>
+          ) : sortedRoutines.length === 0 ? (
+            <div className="py-12">
+              <EmptyState
+                icon={Repeat}
+                message={folderSelection === "all"
+                  ? t("folders.noRoutinesMatch", { defaultValue: "No routines match this view." })
+                  : t("folders.empty", { defaultValue: "This folder is empty." })}
+              />
+              {folderSelection !== "all" ? (
+                <div className="mt-3 flex justify-center">
+                  <Button size="sm" onClick={openCreateRoutine}>
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    {t("folders.newRoutineHere", { defaultValue: "New routine in this folder" })}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
@@ -1000,6 +1391,45 @@ export function Routines() {
                           onRunNow={handleRunNow}
                           onToggleEnabled={handleToggleEnabled}
                           onToggleArchived={handleToggleArchived}
+                          selectMode={selectMode}
+                          selected={selectedRoutineIds.includes(routine.id)}
+                          onSelectChange={(selectedRoutine, selected) => {
+                            setSelectedRoutineIds((current) =>
+                              selected
+                                ? Array.from(new Set([...current, selectedRoutine.id]))
+                                : current.filter((id) => id !== selectedRoutine.id)
+                            );
+                          }}
+                          extraMenuItems={
+                            <MoveToMenu
+                              folders={routineFolders?.folders ?? []}
+                              currentFolderId={routine.folderId ?? null}
+                              onMove={(folderId) => {
+                                const previousFolderId = routine.folderId ?? null;
+                                moveRoutineToFolder.mutate({ itemId: routine.id, folderId });
+                                pushToast({
+                                  title: t("folders.routineMoved", { defaultValue: "Routine moved" }),
+                                  body: folderId
+                                    ? t("folders.movedNamedItemToFolder", {
+                                        defaultValue: "Moved \"{{name}}\" to {{folder}}.",
+                                        name: routine.title,
+                                        folder: routineFolders?.folders.find((folder) => folder.id === folderId)?.name
+                                          ?? t("folders.folder", { defaultValue: "folder" }),
+                                      })
+                                    : t("folders.movedNamedItemToUnfiled", {
+                                        defaultValue: "Moved \"{{name}}\" to Unfiled.",
+                                        name: routine.title,
+                                      }),
+                                  tone: "success",
+                                  action: {
+                                    label: t("common.undo", { defaultValue: "Undo" }),
+                                    onClick: () => moveRoutineToFolder.mutate({ itemId: routine.id, folderId: previousFolderId }),
+                                  },
+                                });
+                              }}
+                              onCreateAndMove={() => openCreateFolder([routine.id])}
+                            />
+                          }
                         />
                       ))}
                     </CollapsibleContent>
@@ -1008,8 +1438,43 @@ export function Routines() {
               })}
             </div>
           )}
+          </div>
         </div>
       ) : null}
+
+      <FolderFormDialog
+        open={folderDialogOpen}
+        kind="routine"
+        folder={folderDialogTarget}
+        pending={createFolder.isPending || updateFolder.isPending}
+        onOpenChange={setFolderDialogOpen}
+        onSubmit={(payload) => {
+          if (folderDialogTarget) updateFolder.mutate({ folderId: folderDialogTarget.id, payload });
+          else createFolder.mutate(payload);
+        }}
+      />
+      <DeleteFolderDialog
+        open={deleteFolderTarget !== null}
+        folder={deleteFolderTarget}
+        itemLabelPlural={t("folders.routines", { defaultValue: "routines" })}
+        pending={deleteFolder.isPending}
+        onOpenChange={(open) => {
+          if (!open) setDeleteFolderTarget(null);
+        }}
+        onConfirm={() => {
+          if (deleteFolderTarget) deleteFolder.mutate(deleteFolderTarget.id);
+        }}
+      />
+      <MobileFolderSheet
+        open={mobileFoldersOpen}
+        onOpenChange={setMobileFoldersOpen}
+        result={railFolderResult}
+        selection={folderSelection}
+        allLabel={t("folders.allRoutines", { defaultValue: "All routines" })}
+        itemLabelPlural={t("folders.routinesTitle", { defaultValue: "Routines" })}
+        onSelect={setFolderSelection}
+        onCreate={() => openCreateFolder()}
+      />
 
       <RoutineRunVariablesDialog
         open={runDialogRoutine !== null}
@@ -1029,6 +1494,19 @@ export function Routines() {
           runRoutine.mutate({ id: runDialogRoutine.id, data });
         }}
       />
+    </div>
+  );
+}
+
+function FolderIconHeader({ label, count }: { label: string; count: number }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-sm">
+      <Repeat className="h-3.5 w-3.5 text-muted-foreground" />
+      <span className="truncate font-medium">{label}</span>
+      <span className="text-muted-foreground">
+        {t("folders.routineCount", { defaultValue: "{{count}} routines", count })}
+      </span>
     </div>
   );
 }

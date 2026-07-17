@@ -94,6 +94,38 @@ test("the unsharded general-server command uses a bounded complete exclude set",
   }
 });
 
+test("the Windows general-server chunks are complete, non-overlapping, and command-bounded", () => {
+  const plan = dryRunJson(["--mode", "general", "--group", "general-server"]);
+  const chunks = plan.windowsGeneralServerCommandChunks;
+
+  assert.ok(
+    plan.windowsGeneralServerCommandBudget <= 4_096,
+    "Windows command budget must reserve space for pnpm's nested command wrapper",
+  );
+  assert.ok(chunks.length > 1, "expected the full Windows suite set to require multiple worker lifetimes");
+  const seen = new Set();
+  for (const chunk of chunks) {
+    assert.ok(chunk.files.length > 0, "Windows command chunks must not be empty");
+    assert.ok(
+      chunk.commandLength <= plan.windowsGeneralServerCommandBudget,
+      `chunk command length ${chunk.commandLength} exceeds ${plan.windowsGeneralServerCommandBudget}`,
+    );
+    for (const file of chunk.files) {
+      assert.ok(!seen.has(file), `suite assigned to more than one Windows chunk: ${file}`);
+      seen.add(file);
+    }
+  }
+
+  assert.equal(seen.size, plan.generalServerSuiteCount, "Windows chunks must cover every general-server suite exactly once");
+});
+
+test("the Windows general-server chunk plan is deterministic", () => {
+  const args = ["--mode", "general", "--group", "general-server"];
+  const first = dryRunJson(args).windowsGeneralServerCommandChunks;
+  const second = dryRunJson(args).windowsGeneralServerCommandChunks;
+  assert.deepEqual(first, second);
+});
+
 test("workspace groups use fork project names without duplicating the CLI", () => {
   const groupA = dryRunJson(["--mode", "general", "--group", "general-workspaces-a"]);
   const groupB = dryRunJson(["--mode", "general", "--group", "general-workspaces-b"]);
