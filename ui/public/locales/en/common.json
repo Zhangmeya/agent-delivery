@@ -3901,6 +3901,7 @@
   "pluginExamples.helloWorld.description": "Reference UI plugin that adds a simple Hello World widget to the Paperclip CN dashboard.",
   "pluginExamples.kitchenSink.description": "Reference plugin that demonstrates the current Paperclip CN plugin API surface, UI surfaces, bridge actions, events, jobs, webhooks, tools, local workspace access, and runtime diagnostics in one place.",
   "pluginExamples.workspaceDiff.description": "First-party workspace changes plugin that adds a local Git diff-powered Changes tab to workspace details.",
+  "pluginExamples.workspaceDiff.tabs.changes": "Changes",
   "pluginPage.routeConflictPrefix": "Multiple plugins declare the route",
   "pluginPage.routeConflictSuffix": "Use the plugin-id route until the conflict is resolved.",
   "pluginPage.selectCompany": "Select a company to view this page.",

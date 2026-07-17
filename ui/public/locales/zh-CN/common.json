@@ -3860,6 +3860,7 @@
   "pluginExamples.helloWorld.description": "参考界面插件，会在 Paperclip CN 仪表盘中添加一个简单的“你好世界”小组件。",
   "pluginExamples.kitchenSink.description": "参考插件，在一个示例中集中演示当前 Paperclip CN 插件 API、界面挂载点、桥接动作、事件、任务、Webhook、工具、本地工作区访问和运行诊断能力。",
   "pluginExamples.workspaceDiff.description": "第一方工作区变更插件，会在工作区详情中添加由本地 Git diff 驱动的“变更”标签页。",
+  "pluginExamples.workspaceDiff.tabs.changes": "变更",
   "pluginPage.routeConflictPrefix": "有多个插件声明了这条路由",
   "pluginPage.routeConflictSuffix": "请暂时改用带插件 ID 的路由，直到冲突被解决。",
   "pluginPage.selectCompany": "请选择一家公司以查看此页面。",

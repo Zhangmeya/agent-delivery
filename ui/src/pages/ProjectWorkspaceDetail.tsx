@@ -20,6 +20,7 @@ import {
 } from "../components/WorkspaceRuntimeControls";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
+import { displayPluginSlotName } from "../lib/plugin-slot-display";
 import { queryKeys } from "../lib/queryKeys";
 import { projectRouteRef, projectWorkspaceUrl } from "../lib/utils";
 
@@ -300,11 +301,11 @@ export function ProjectWorkspaceDetail() {
   const pluginTabItems = useMemo(
     () => pluginDetailSlots.map((slot) => ({
       value: `plugin:${slot.pluginKey}:${slot.id}` as ProjectWorkspacePluginTab,
-      label: slot.displayName,
+      label: displayPluginSlotName(slot, t),
       order: slot.order ?? DEFAULT_PLUGIN_DETAIL_TAB_ORDER,
       slot,
     })),
-    [pluginDetailSlots],
+    [pluginDetailSlots, t],
   );
   const tabItems = useMemo(
     () => orderProjectWorkspaceTabItems([...PROJECT_WORKSPACE_BASE_TAB_ITEMS, ...pluginTabItems]),

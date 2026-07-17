@@ -39,6 +39,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { useToastActions } from "../context/ToastContext";
 import { collectLiveIssueIds } from "../lib/liveIssueIds";
+import { displayPluginSlotName } from "../lib/plugin-slot-display";
 import { queryKeys } from "../lib/queryKeys";
 import { timeAgo } from "../lib/timeAgo";
 import { cn, formatDateTime, issueUrl, projectRouteRef, projectWorkspaceUrl } from "../lib/utils";
@@ -792,11 +793,11 @@ export function ExecutionWorkspaceDetail() {
   const workspacePluginTabItems = useMemo(
     () => workspacePluginDetailSlots.map((slot) => ({
       value: `plugin:${slot.pluginKey}:${slot.id}` as ExecutionWorkspacePluginTab,
-      label: slot.displayName,
+      label: displayPluginSlotName(slot, t),
       order: slot.order ?? DEFAULT_PLUGIN_DETAIL_TAB_ORDER,
       slot,
     })),
-    [workspacePluginDetailSlots],
+    [t, workspacePluginDetailSlots],
   );
   const workspaceTabItems = useMemo(
     () => orderExecutionWorkspaceTabItems([...EXECUTION_WORKSPACE_BASE_TAB_ITEMS, ...workspacePluginTabItems]),
