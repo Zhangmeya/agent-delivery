@@ -5740,102 +5740,123 @@ describeEmbeddedPostgres("workspace runtime startup reconciliation", () => {
     const executionWorkspaceId = randomUUID();
     const cwd = process.cwd();
     const reuseKey = `project_workspace:${projectWorkspaceId}:paperclip-dev`;
+    const liveProcess = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      cwd,
+      detached: process.platform !== "win32",
+      stdio: "ignore",
+    });
+    await new Promise<void>((resolve, reject) => {
+      liveProcess.once("spawn", resolve);
+      liveProcess.once("error", reject);
+    });
+    liveProcess.unref();
 
-    await db.insert(companies).values({
-      id: companyId,
-      name: "Paperclip",
-      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
-      requireBoardApprovalForNewAgents: false,
-    });
-    await db.insert(projects).values({
-      id: projectId,
-      companyId,
-      name: "Runtime reconcile test",
-      status: "in_progress",
-    });
-    await db.insert(projectWorkspaces).values({
-      id: projectWorkspaceId,
-      companyId,
-      projectId,
-      name: "Primary",
-      sourceType: "local_path",
-      cwd,
-      isPrimary: true,
-    });
-    await db.insert(executionWorkspaces).values({
-      id: executionWorkspaceId,
-      companyId,
-      projectId,
-      projectWorkspaceId,
-      mode: "isolated_workspace",
-      strategyType: "git_worktree",
-      name: "Execution workspace",
-      status: "active",
-      cwd,
-      providerType: "local_fs",
-      providerRef: cwd,
-    });
-    await db.insert(workspaceRuntimeServices).values({
-      id: runtimeServiceId,
-      companyId,
-      projectId,
-      projectWorkspaceId,
-      executionWorkspaceId,
-      issueId: null,
-      scopeType: "project_workspace",
-      scopeId: projectWorkspaceId,
-      serviceName: "paperclip-dev",
-      status: "stopped",
-      lifecycle: "shared",
-      reuseKey,
-      command: "node",
-      cwd,
-      port: null,
-      url: null,
-      provider: "local_process",
-      providerRef: "stale",
-      ownerAgentId: null,
-      startedByRunId: null,
-      lastUsedAt: stoppedAt,
-      startedAt,
-      stoppedAt,
-      stopPolicy: { type: "manual" },
-      healthStatus: "unknown",
-      createdAt: startedAt,
-      updatedAt: stoppedAt,
-    });
-    await writeLocalServiceRegistryRecord({
-      version: 1,
-      serviceKey: "workspace-runtime-paperclip-dev-live-stopped",
-      profileKind: "workspace-runtime",
-      serviceName: "paperclip-dev",
-      command: "node",
-      cwd,
-      envFingerprint: reuseKey,
-      port: null,
-      url: null,
-      pid: process.pid,
-      processGroupId: process.pid,
-      provider: "local_process",
-      runtimeServiceId,
-      reuseKey,
-      startedAt: startedAt.toISOString(),
-      lastSeenAt: stoppedAt.toISOString(),
-      metadata: null,
-    });
+    try {
+      await db.insert(companies).values({
+        id: companyId,
+        name: "Paperclip",
+        issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+        requireBoardApprovalForNewAgents: false,
+      });
+      await db.insert(projects).values({
+        id: projectId,
+        companyId,
+        name: "Runtime reconcile test",
+        status: "in_progress",
+      });
+      await db.insert(projectWorkspaces).values({
+        id: projectWorkspaceId,
+        companyId,
+        projectId,
+        name: "Primary",
+        sourceType: "local_path",
+        cwd,
+        isPrimary: true,
+      });
+      await db.insert(executionWorkspaces).values({
+        id: executionWorkspaceId,
+        companyId,
+        projectId,
+        projectWorkspaceId,
+        mode: "isolated_workspace",
+        strategyType: "git_worktree",
+        name: "Execution workspace",
+        status: "active",
+        cwd,
+        providerType: "local_fs",
+        providerRef: cwd,
+      });
+      await db.insert(workspaceRuntimeServices).values({
+        id: runtimeServiceId,
+        companyId,
+        projectId,
+        projectWorkspaceId,
+        executionWorkspaceId,
+        issueId: null,
+        scopeType: "project_workspace",
+        scopeId: projectWorkspaceId,
+        serviceName: "paperclip-dev",
+        status: "stopped",
+        lifecycle: "shared",
+        reuseKey,
+        command: "node",
+        cwd,
+        port: null,
+        url: null,
+        provider: "local_process",
+        providerRef: "stale",
+        ownerAgentId: null,
+        startedByRunId: null,
+        lastUsedAt: stoppedAt,
+        startedAt,
+        stoppedAt,
+        stopPolicy: { type: "manual" },
+        healthStatus: "unknown",
+        createdAt: startedAt,
+        updatedAt: stoppedAt,
+      });
+      await writeLocalServiceRegistryRecord({
+        version: 1,
+        serviceKey: "workspace-runtime-paperclip-dev-live-stopped",
+        profileKind: "workspace-runtime",
+        serviceName: "paperclip-dev",
+        command: "node",
+        cwd,
+        envFingerprint: reuseKey,
+        port: null,
+        url: null,
+        pid: liveProcess.pid!,
+        processGroupId: liveProcess.pid!,
+        provider: "local_process",
+        runtimeServiceId,
+        reuseKey,
+        startedAt: startedAt.toISOString(),
+        lastSeenAt: stoppedAt.toISOString(),
+        metadata: null,
+      });
 
-    const result = await reconcilePersistedRuntimeServicesOnStartup(db);
+      const result = await reconcilePersistedRuntimeServicesOnStartup(db);
 
-    expect(result).toMatchObject({ reconciled: 1, adopted: 1, stopped: 0 });
-    const persisted = await db
-      .select()
-      .from(workspaceRuntimeServices)
-      .where(eq(workspaceRuntimeServices.id, runtimeServiceId))
-      .then((rows) => rows[0] ?? null);
-    expect(persisted?.status).toBe("running");
-    expect(persisted?.healthStatus).toBe("healthy");
-    expect(persisted?.stoppedAt).toBeNull();
-    expect(persisted?.providerRef).toBe(String(process.pid));
+      expect(result).toMatchObject({ reconciled: 1, adopted: 1, stopped: 0 });
+      const persisted = await db
+        .select()
+        .from(workspaceRuntimeServices)
+        .where(eq(workspaceRuntimeServices.id, runtimeServiceId))
+        .then((rows) => rows[0] ?? null);
+      expect(persisted?.status).toBe("running");
+      expect(persisted?.healthStatus).toBe("healthy");
+      expect(persisted?.stoppedAt).toBeNull();
+      expect(persisted?.providerRef).toBe(String(liveProcess.pid));
+    } finally {
+      await stopRuntimeServicesForTests();
+      if (liveProcess.pid) {
+        try {
+          process.kill(process.platform === "win32" ? liveProcess.pid : -liveProcess.pid, "SIGKILL");
+        } catch {
+          // The adopted service cleanup normally owns process termination.
+        }
+      }
+    }
   });
 
   it("persists controlled execution workspace stops as stopped", async () => {

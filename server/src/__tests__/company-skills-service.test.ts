@@ -356,7 +356,9 @@ describeEmbeddedPostgres("companySkillService.list", () => {
     const bundledRoot = folderRows.find((folder) => folder.systemKey === "bundled");
     const repairedSquat = folderRows.find((folder) => folder.id === squatted!.id);
 
-    expect(listed.some((skill) => skill.key.startsWith("paperclipai/paperclip/"))).toBe(true);
+    expect(
+      listed.some((skill) => skill.key.startsWith(BUNDLED_PAPERCLIP_SKILL_KEY_PREFIX)),
+    ).toBe(true);
     expect(bundledRoot).toMatchObject({ slug: "bundled", parentId: null, systemKey: "bundled" });
     expect(repairedSquat).toMatchObject({ name: "User Bundled", systemKey: null });
     expect(repairedSquat?.slug).toMatch(/^bundled-[a-f0-9]{8}$/);

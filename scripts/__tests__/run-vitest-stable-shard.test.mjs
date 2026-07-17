@@ -126,6 +126,12 @@ test("the Windows general-server chunk plan is deterministic", () => {
   assert.deepEqual(first, second);
 });
 
+test("each Vitest invocation isolates cross-platform temporary directories", () => {
+  const plan = dryRunJson(["--mode", "general", "--group", "general-server"]);
+  assert.deepEqual(plan.isolatedTempEnvironmentVariables, ["TEMP", "TMP", "TMPDIR"]);
+  assert.equal(plan.windowsInvocationTempPrefix, "v-");
+});
+
 test("workspace groups use fork project names without duplicating the CLI", () => {
   const groupA = dryRunJson(["--mode", "general", "--group", "general-workspaces-a"]);
   const groupB = dryRunJson(["--mode", "general", "--group", "general-workspaces-b"]);

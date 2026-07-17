@@ -1,4 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
+import { existsSync } from "node:fs";
 import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
@@ -13,6 +14,43 @@ import {
 import { captureDirectorySnapshot, mergeDirectoryWithBaseline } from "./workspace-restore-merge.js";
 
 const execFile = promisify(execFileCallback);
+
+function resolveTestPosixShellCommand(command: "sh") {
+  if (process.platform !== "win32") return "/bin/sh";
+  const candidates = ["C:\\Program Files\\Git\\usr\\bin\\sh.exe", "C:\\Program Files\\Git\\bin\\bash.exe"];
+  return candidates.find((candidate) => existsSync(candidate)) ?? command;
+}
+
+function augmentTestPosixPath(env: Record<string, string | undefined>) {
+  if (process.platform !== "win32") return;
+  const entries = [
+    "/usr/bin",
+    "/bin",
+    "C:\\Program Files\\Git\\usr\\bin",
+    "C:\\Program Files\\Git\\bin",
+  ].filter((entry) => entry.startsWith("/") || existsSync(entry));
+  env.PATH = [...entries, env.PATH ?? ""].join(path.delimiter);
+}
+
+function rewriteWindowsPathsForGitShell(script: string) {
+  if (process.platform !== "win32") return script;
+  const toGitShellPath = (drive: string, rest: string) => `/${drive.toLowerCase()}/${rest.replace(/\\/g, "/")}`;
+  const rewritten = script
+    .replace(/'([A-Za-z]):\\([^']*)'/g, (_match, drive: string, rest: string) =>
+      `'${toGitShellPath(drive, rest)}'`,
+    )
+    .replace(/"([A-Za-z]):\\([^"]*)"/g, (_match, drive: string, rest: string) =>
+      `"${toGitShellPath(drive, rest)}"`,
+    )
+    .replace(/([A-Za-z]):\\([^'"\s]*)/g, (_match, drive: string, rest: string) =>
+      toGitShellPath(drive, rest),
+    );
+
+  return rewritten.replace(
+    /mkdir -p '\.' && (?=(?:base64 -d >|rm -f|: >)\s+'([^']+)')/g,
+    (_match, targetPath: string) => `mkdir -p '${path.posix.dirname(targetPath)}' && `,
+  );
+}
 
 describe("workspace restore merge", () => {
   const cleanupDirs: string[] = [];
@@ -122,6 +160,15 @@ describe("codex home auth merge on sandbox asset extract", () => {
     return JSON.stringify({ OPENAI_API_KEY: `sk-${marker}` }, null, 2);
   }
 
+  function expectPrivateAuthMode(result: { finalMode: number; extractScript: string }) {
+    expect(result.extractScript).toContain("umask 077");
+    if (process.platform === "win32") {
+      expect(result.finalMode & 0o111).toBe(0);
+      return;
+    }
+    expect(result.finalMode).toBe(0o600);
+  }
+
   async function runCodexHomeAssetExtract(input: {
     sandboxAuth: string;
     hostAuth: string;
@@ -130,6 +177,7 @@ describe("codex home auth merge on sandbox asset extract", () => {
     writtenPaths: string[];
     finalAuth: string;
     finalMode: number;
+    extractScript: string;
     combinedOutput: string;
   }> {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), "paperclip-codex-auth-merge-"));
@@ -150,12 +198,14 @@ describe("codex home auth merge on sandbox asset extract", () => {
     const commands: string[] = [];
     const outputs: string[] = [];
     const writtenPaths: string[] = [];
+    const writtenFiles = new Map<string, string>();
     const client: SandboxManagedRuntimeClient = {
       makeDir: async (remotePath) => {
         await mkdir(remotePath, { recursive: true });
       },
       writeFile: async (remotePath, bytes) => {
         writtenPaths.push(remotePath);
+        writtenFiles.set(remotePath, Buffer.from(bytes).toString("utf8"));
         await mkdir(path.dirname(remotePath), { recursive: true });
         await writeFile(remotePath, Buffer.from(bytes));
       },
@@ -166,7 +216,13 @@ describe("codex home auth merge on sandbox asset extract", () => {
       },
       run: async (command) => {
         commands.push(command);
-        const result = await execFile("sh", ["-c", command], { maxBuffer: 32 * 1024 * 1024 });
+        const env = { ...process.env };
+        augmentTestPosixPath(env);
+        const result = await execFile(
+          resolveTestPosixShellCommand("sh"),
+          ["-c", rewriteWindowsPathsForGitShell(command)],
+          { env, maxBuffer: 32 * 1024 * 1024 },
+        );
         outputs.push(result.stdout, result.stderr);
       },
     };
@@ -197,6 +253,8 @@ describe("codex home auth merge on sandbox asset extract", () => {
       writtenPaths,
       finalAuth: await readFile(finalAuthPath, "utf8"),
       finalMode: (await lstat(finalAuthPath)).mode & 0o777,
+      extractScript: Array.from(writtenFiles.entries())
+        .find(([entry]) => entry.endsWith("codex-auth-merge-extract.sh"))?.[1] ?? "",
       combinedOutput: outputs.join("\n"),
     };
   }
@@ -216,7 +274,7 @@ describe("codex home auth merge on sandbox asset extract", () => {
     const result = await runCodexHomeAssetExtract({ sandboxAuth, hostAuth });
 
     expect(result.finalAuth).toBe(sandboxAuth);
-    expect(result.finalMode).toBe(0o600);
+    expectPrivateAuthMode(result);
     expect(result.combinedOutput).not.toContain("SENTINEL");
     expect(result.commandText).not.toContain("SENTINEL");
     expect(result.commandText).toContain("codex-auth-merge-extract.sh");
@@ -243,7 +301,7 @@ describe("codex home auth merge on sandbox asset extract", () => {
     const result = await runCodexHomeAssetExtract({ sandboxAuth, hostAuth });
 
     expect(result.finalAuth).toBe(hostAuth);
-    expect(result.finalMode).toBe(0o600);
+    expectPrivateAuthMode(result);
   });
 
   it("installs host auth on identity mismatch, auth-mode mismatch, apikey mode, and unusable sandbox auth", async () => {
@@ -299,7 +357,7 @@ describe("codex home auth merge on sandbox asset extract", () => {
         hostAuth: entry.hostAuth,
       });
       expect(result.finalAuth, entry.name).toBe(entry.hostAuth);
-      expect(result.finalMode, entry.name).toBe(0o600);
+      expectPrivateAuthMode(result);
     }
   });
 
@@ -376,7 +434,7 @@ describe("codex home auth merge on sandbox asset extract", () => {
         hostAuth: entry.hostAuth,
       });
       expect(result.finalAuth, entry.name).toBe(entry.sandboxAuth);
-      expect(result.finalMode, entry.name).toBe(0o600);
+      expectPrivateAuthMode(result);
     }
   });
 
@@ -415,7 +473,7 @@ describe("codex home auth merge on sandbox asset extract", () => {
       });
       expect(result.finalAuth, entry.name).toBe(entry.hostAuth);
       expect(result.finalAuth, entry.name).not.toBe(sandboxAuth);
-      expect(result.finalMode, entry.name).toBe(0o600);
+      expectPrivateAuthMode(result);
       expect(result.combinedOutput, entry.name).not.toContain("SENTINEL");
       expect(result.commandText, entry.name).not.toContain("SENTINEL");
     }

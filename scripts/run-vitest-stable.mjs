@@ -74,6 +74,8 @@ const routeTestExcludePatterns = [
 // cmd.exe limits a command line to 8,191 characters, and pnpm wraps the
 // Vitest invocation again. Reserve roughly half the ceiling for that expansion.
 const windowsGeneralServerCommandBudget = 4_000;
+const windowsInvocationTempPrefix = "v-";
+const isolatedTempEnvironmentVariables = ["TEMP", "TMP", "TMPDIR"];
 
 function quoteCmdArg(value) {
   if (/^[A-Za-z0-9_/:=.,@+-]+$/.test(value)) return value;
@@ -313,17 +315,24 @@ function runVitest(args, label) {
   console.log(`\n[test:run] ${label}`);
   invocationIndex += 1;
   const tempRootParent = process.platform === "win32" ? os.tmpdir() : "/tmp";
-  const testRoot = mkdtempSync(path.join(tempRootParent, `pcvt-${process.pid}-${invocationIndex}-`));
+  const tempPrefix =
+    process.platform === "win32"
+      ? windowsInvocationTempPrefix
+      : `pcvt-${process.pid}-${invocationIndex}-`;
+  const testRoot = mkdtempSync(path.join(tempRootParent, tempPrefix));
+  const tempDir = path.join(testRoot, "t");
   // Keep per-run paths compact so Unix socket fixtures stay under macOS path limits.
   const env = {
     ...process.env,
     NODE_ENV: "test",
     PAPERCLIP_HOME: path.join(testRoot, "h"),
     PAPERCLIP_INSTANCE_ID: `vt-${process.pid}-${invocationIndex}`,
-    TMPDIR: path.join(testRoot, "t"),
+    TEMP: tempDir,
+    TMP: tempDir,
+    TMPDIR: tempDir,
   };
   mkdirSync(env.PAPERCLIP_HOME, { recursive: true });
-  mkdirSync(env.TMPDIR, { recursive: true });
+  mkdirSync(tempDir, { recursive: true });
   const pnpmInvocation = resolvePnpmInvocation(["exec", "vitest", "run", ...args]);
   const result = spawnSync(pnpmInvocation.command, pnpmInvocation.args, {
     cwd: repoRoot,
@@ -491,6 +500,8 @@ if (options.dryRun) {
         selectedSerializedSuites: serializedSuites.map((routeTest) => routeTest.repoPath),
         generalServerSuiteCount: generalServerTestFiles.length,
         generalServerExcludePatterns,
+        isolatedTempEnvironmentVariables,
+        windowsInvocationTempPrefix,
         windowsGeneralServerCommandBudget,
         windowsGeneralServerCommandChunks:
           options.mode === generalModeName &&
