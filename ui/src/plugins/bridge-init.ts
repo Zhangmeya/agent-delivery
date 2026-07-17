@@ -278,7 +278,7 @@ function PluginSdkIssuesList({
     resourceKey: "live-runs",
     queryKey: liveRunsQueryKey,
     enabled: !!companyId,
-    // Event-sourced via LiveUpdatesProvider (#9627); no interval poll needed.
+    // Event-sourced via LiveUpdatesProvider (paperclipai/paperclip#9627); no interval poll needed.
     refetchInterval: false,
     leaderOnly: true,
   });
