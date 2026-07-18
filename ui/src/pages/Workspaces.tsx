@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { executionWorkspacesApi } from "../api/execution-workspaces";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { ProjectWorkspacesContent } from "../components/ProjectWorkspacesContent";
+import { SummarySlotCard } from "../components/SummarySlotCard";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
@@ -121,6 +122,13 @@ export function Workspaces() {
       <div>
         <h2 className="text-xl font-bold">{t("workspaces.title", { defaultValue: "Workspaces" })}</h2>
       </div>
+
+      <SummarySlotCard
+        companyId={selectedCompanyId}
+        scopeKind="workspaces_overview"
+        title="Workspace summary"
+        description="Summarizer tracks workspace activity, live services, and follow-up needs across projects."
+      />
 
       {groups.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("workspaces.empty", { defaultValue: "No workspace activity yet." })}</p>

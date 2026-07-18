@@ -150,6 +150,7 @@ import {
 } from "../services/issue-dependency-wakeups.js";
 import { assertEnvironmentSelectionForCompany } from "./environment-selection.js";
 import { executionWorkspaceService as executionWorkspaceServiceDirect } from "../services/execution-workspaces.js";
+import { decisionTrainingService } from "../services/decision-training.js";
 import { feedbackService } from "../services/feedback.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
 import {
@@ -2602,6 +2603,7 @@ export function issueRoutes(
   const documentsSvc = documentService(db);
   const companySkillsSvc = companySkillService(db);
   const documentAnnotationsSvc = documentAnnotationService(db);
+  const decisionTrainingSvc = decisionTrainingService(db);
   const issueReferencesSvc = issueReferenceService(db);
   const issueThreadInteractionsSvc = issueThreadInteractionService(db);
   const taskWatchdogFactory: TaskWatchdogServiceFactory | undefined = Object.prototype.hasOwnProperty.call(
@@ -9557,6 +9559,12 @@ export function issueRoutes(
               ])
             ),
           );
+          await decisionTrainingSvc.scrubDeletedComments({
+            companyId: issue.companyId,
+            issueId: issue.id,
+            commentIds: [deletedComment.id, ...annotationCleanup.deletedCommentIds],
+            deletedAt: deletedComment.deletedAt ?? new Date(),
+          }, tx);
         },
       },
     );

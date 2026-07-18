@@ -5,36 +5,6 @@ import type { BuiltInAgentStatus } from "@/api/builtInAgents";
 import { useTranslation } from "react-i18next";
 
 /**
- * Provenance label ("Built-in"). Constant for the life of a built-in agent —
- * this is NOT a lifecycle/status chip, so it never routes through
- * `StatusBadge`/`AgentStatusBadge` (ux-spec D2).
- */
-export function BuiltInAgentBadge({
-  className,
-  compact = false,
-}: {
-  className?: string;
-  compact?: boolean;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        brandChipBadge.blue,
-        compact && "px-1.5 py-0 text-(length:--text-nano)",
-        className,
-      )}
-      title={t("builtInAgents.badge.tooltip", {
-        defaultValue: "Ships with Paperclip CN",
-      })}
-    >
-      {t("builtInAgents.badge.label", { defaultValue: "Built-in" })}
-    </Badge>
-  );
-}
-
-/**
  * Derived lifecycle chip. Rendered for the amber attention states
  * (`needs_setup`, `pending_approval`). Kept separate from the real agent status
  * (`idle/active/…`) per ux-spec D1.

@@ -28,6 +28,7 @@ export function queueIssueAssignmentWakeup(input: {
   requestedUiLocale?: UiLocale | null;
   requestedByActorType?: "user" | "agent" | "system";
   requestedByActorId?: string | null;
+  taskKey?: string | null;
   rethrowOnError?: boolean;
 }) {
   if (!input.issue.assigneeAgentId || input.issue.status === "backlog") return;
@@ -37,12 +38,17 @@ export function queueIssueAssignmentWakeup(input: {
       source: "assignment",
       triggerDetail: "system",
       reason: input.reason,
-      payload: { issueId: input.issue.id, mutation: input.mutation },
+      payload: {
+        issueId: input.issue.id,
+        mutation: input.mutation,
+        ...(input.taskKey ? { taskKey: input.taskKey } : {}),
+      },
       requestedByActorType: input.requestedByActorType,
       requestedByActorId: input.requestedByActorId ?? null,
       contextSnapshot: {
         issueId: input.issue.id,
         source: input.contextSource,
+        ...(input.taskKey ? { taskKey: input.taskKey } : {}),
         ...(input.requestedUiLocale ? { requestedUiLocale: input.requestedUiLocale } : {}),
       },
     })
