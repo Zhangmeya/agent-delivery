@@ -199,8 +199,8 @@ describe("sandbox adapter execution targets", () => {
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
     });
-    await waitForChildSpawn(child);
-    await bridge.ready;
+    // The proxy queues stdin before it authenticates. Ending stdin here also
+    // avoids racing a late stdinEnd against an already-buffered exit event.
     child.stdin.end(input);
     const code = await new Promise<number | null>((resolve, reject) => {
       const timeout = setTimeout(() => {
