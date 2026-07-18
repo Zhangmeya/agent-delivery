@@ -21,6 +21,7 @@ import { projectsApi } from "../api/projects";
 import { routinesApi } from "../api/routines";
 import { IssuesList } from "../components/IssuesList";
 import { PageTabBar } from "../components/PageTabBar";
+import { SummarySlotCard } from "../components/SummarySlotCard";
 import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
 import {
@@ -29,15 +30,19 @@ import {
 } from "../components/RoutineRunVariablesDialog";
 import {
   buildWorkspaceRuntimeControlSections,
-  WorkspaceRuntimeQuickControls,
+  buildWorkspaceServiceControlEntries,
+  resolveWorkspaceServiceControlRequests,
   WorkspaceRuntimeControls,
   type WorkspaceRuntimeControlRequest,
 } from "../components/WorkspaceRuntimeControls";
+import { WorkspaceServiceControlBar } from "../components/WorkspaceServiceControlBar";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { useToastActions } from "../context/ToastContext";
 import { collectLiveIssueIds } from "../lib/liveIssueIds";
+import { displayPluginSlotName } from "../lib/plugin-slot-display";
 import { queryKeys } from "../lib/queryKeys";
+import { timeAgo } from "../lib/timeAgo";
 import { cn, formatDateTime, issueUrl, projectRouteRef, projectWorkspaceUrl } from "../lib/utils";
 import {
   getWorkspaceSpecificRoutineVariableNames,
@@ -453,7 +458,8 @@ function ExecutionWorkspaceIssuesList({
     resourceKey: "live-runs",
     queryKey: liveRunsQueryKey,
     enabled: !!companyId,
-    refetchInterval: 5000,
+    // Event-sourced via LiveUpdatesProvider (paperclipai/paperclip#9627); no interval poll needed.
+    refetchInterval: false,
     leaderOnly: true,
   });
   const { data: liveRuns, dataUpdatedAt: liveRunsUpdatedAt } = useQuery({
@@ -724,6 +730,7 @@ export function ExecutionWorkspaceDetail() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [runtimeActionErrorMessage, setRuntimeActionErrorMessage] = useState<string | null>(null);
   const [runtimeActionMessage, setRuntimeActionMessage] = useState<string | null>(null);
+  const [pendingRuntimeActions, setPendingRuntimeActions] = useState<WorkspaceRuntimeControlRequest[]>([]);
   const activeRouteTab = workspaceId ? resolveExecutionWorkspaceTab(location.pathname, workspaceId) : null;
   const pluginTabFromSearch = useMemo(() => {
     const tab = new URLSearchParams(location.search).get("tab");
@@ -787,11 +794,11 @@ export function ExecutionWorkspaceDetail() {
   const workspacePluginTabItems = useMemo(
     () => workspacePluginDetailSlots.map((slot) => ({
       value: `plugin:${slot.pluginKey}:${slot.id}` as ExecutionWorkspacePluginTab,
-      label: slot.displayName,
+      label: displayPluginSlotName(slot, t),
       order: slot.order ?? DEFAULT_PLUGIN_DETAIL_TAB_ORDER,
       slot,
     })),
-    [workspacePluginDetailSlots],
+    [t, workspacePluginDetailSlots],
   );
   const workspaceTabItems = useMemo(
     () => orderExecutionWorkspaceTabItems([...EXECUTION_WORKSPACE_BASE_TAB_ITEMS, ...workspacePluginTabItems]),
@@ -834,6 +841,7 @@ export function ExecutionWorkspaceDetail() {
     setForm(formStateFromWorkspace(workspace));
     setErrorMessage(null);
     setRuntimeActionErrorMessage(null);
+    setPendingRuntimeActions([]);
   }, [workspace]);
 
   useEffect(() => {
@@ -894,6 +902,9 @@ export function ExecutionWorkspaceDetail() {
       setRuntimeActionMessage(null);
       setRuntimeActionErrorMessage(error instanceof Error ? error.message : t("executionWorkspace.controlCommandsFailed", { defaultValue: "Failed to control workspace commands." }));
     },
+    onSettled: (_result, _error, request) => {
+      setPendingRuntimeActions((current) => current.filter((pendingRequest) => pendingRequest !== request));
+    },
   });
 
   if (workspaceQuery.isLoading) return <p className="text-sm text-muted-foreground">{t("executionWorkspace.loadingWorkspace", { defaultValue: "Loading workspace..." })}</p>;
@@ -915,6 +926,14 @@ export function ExecutionWorkspaceDetail() {
     canRunJobs: canRunWorkspaceCommands,
   });
   const pendingRuntimeAction = controlRuntimeServices.isPending ? controlRuntimeServices.variables ?? null : null;
+  const serviceControlEntries = buildWorkspaceServiceControlEntries({
+    sections: runtimeControlSections,
+    runtimeServices: workspace.runtimeServices ?? [],
+    pendingRequests: pendingRuntimeActions,
+    formatFailureDetail: (stoppedAt) => stoppedAt
+      ? t("workspaceServiceControl.serviceFailedAt", { defaultValue: "Service failed · {{time}}", time: timeAgo(stoppedAt) })
+      : t("workspaceServiceControl.serviceFailed", { defaultValue: "Service failed" }),
+  });
 
   const pluginSlotContext = {
     companyId: workspace.companyId,
@@ -962,6 +981,12 @@ export function ExecutionWorkspaceDetail() {
     updateWorkspace.mutate(patch);
   };
 
+  const runRuntimeControlRequests = (requests: WorkspaceRuntimeControlRequest[]) => {
+    if (requests.length === 0) return;
+    setPendingRuntimeActions((current) => [...current, ...requests]);
+    for (const request of requests) controlRuntimeServices.mutate(request);
+  };
+
   return (
     <>
       <div className="space-y-4 overflow-hidden sm:space-y-6">
@@ -972,11 +997,15 @@ export function ExecutionWorkspaceDetail() {
             </div>
             <h1 className="truncate text-xl font-semibold sm:text-2xl">{workspace.name}</h1>
           </div>
-          <WorkspaceRuntimeQuickControls
-            sections={runtimeControlSections}
-            isPending={controlRuntimeServices.isPending}
-            pendingRequest={pendingRuntimeAction}
-            onAction={(request) => controlRuntimeServices.mutate(request)}
+          <WorkspaceServiceControlBar
+            services={serviceControlEntries}
+            onAction={(action, serviceKey) => {
+              runRuntimeControlRequests(
+                resolveWorkspaceServiceControlRequests(runtimeControlSections, action, serviceKey),
+              );
+            }}
+            onViewLogs={() => handleTabChange("runtime_logs")}
+            onManageServices={() => handleTabChange("services")}
           />
         </div>
         {runtimeActionErrorMessage ? <p className="text-sm text-destructive">{runtimeActionErrorMessage}</p> : null}
@@ -1021,7 +1050,7 @@ export function ExecutionWorkspaceDetail() {
                     defaultValue: "Execution workspaces need a working directory before local commands can run, and services also need runtime config.",
                   })
             }
-            onAction={(request) => controlRuntimeServices.mutate(request)}
+            onAction={(request) => runRuntimeControlRequests([request])}
           />
         ) : activeTab === "configuration" ? (
           <div className="space-y-4 sm:space-y-6">
@@ -1438,14 +1467,25 @@ export function ExecutionWorkspaceDetail() {
             </CardContent>
           </Card>
         ) : activeTab === "issues" ? (
-          <ExecutionWorkspaceIssuesList
-            companyId={workspace.companyId}
-            workspace={workspace}
-            issues={linkedIssues}
-            isLoading={linkedIssuesQuery.isLoading}
-            error={linkedIssuesQuery.error as Error | null}
-            project={project}
-          />
+          <div className="space-y-6">
+            {workspace.projectWorkspaceId ? (
+              <SummarySlotCard
+                companyId={workspace.companyId}
+                scopeKind="project_workspace"
+                scopeId={workspace.projectWorkspaceId}
+                title="Workspace summary"
+                description="Summarizer keeps the latest workspace status, next step, and operator-needed items here."
+              />
+            ) : null}
+            <ExecutionWorkspaceIssuesList
+              companyId={workspace.companyId}
+              workspace={workspace}
+              issues={linkedIssues}
+              isLoading={linkedIssuesQuery.isLoading}
+              error={linkedIssuesQuery.error as Error | null}
+              project={project}
+            />
+          </div>
         ) : activePluginTab ? (
           <PluginSlotMount
             slot={activePluginTab.slot}

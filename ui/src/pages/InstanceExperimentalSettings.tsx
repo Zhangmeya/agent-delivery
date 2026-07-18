@@ -323,6 +323,7 @@ export function InstanceExperimentalSettings() {
   );
   const enableEnvironments = experimentalQuery.data?.enableEnvironments === true;
   const enableIsolatedWorkspaces = experimentalQuery.data?.enableIsolatedWorkspaces === true;
+  const enableApps = experimentalQuery.data?.enableApps === true;
   // Streamlined left navigation is now the standard sidebar (PAP-12472); the
   // experimental opt-out was retired, so it no longer surfaces a toggle here.
   const enableConferenceRoomChat = experimentalQuery.data?.enableConferenceRoomChat === true;
@@ -334,10 +335,12 @@ export function InstanceExperimentalSettings() {
   const enableCloudSync = experimentalQuery.data?.enableCloudSync === true;
   const enableExternalObjects = experimentalQuery.data?.enableExternalObjects === true;
   const enableBuiltInAgents = experimentalQuery.data?.enableBuiltInAgents === true;
+  const enableSummaries = experimentalQuery.data?.enableSummaries === true;
   const enableDecisions = experimentalQuery.data?.enableDecisions === true;
   const enableGoalsSidebarLink = experimentalQuery.data?.enableGoalsSidebarLink === true;
   const enableCases = experimentalQuery.data?.enableCases === true;
   const enableServerInfoDebugView = experimentalQuery.data?.enableServerInfoDebugView === true;
+  const enableSmokeLab = experimentalQuery.data?.enableSmokeLab === true;
   const autoRestartDevServerWhenIdle = experimentalQuery.data?.autoRestartDevServerWhenIdle === true;
   const enableIssueGraphLivenessAutoRecovery =
     experimentalQuery.data?.enableIssueGraphLivenessAutoRecovery === true;
@@ -491,6 +494,30 @@ export function InstanceExperimentalSettings() {
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold">
+                {t("instanceExperimentalSettings.appsTitle", { defaultValue: "Apps" })}
+              </h2>
+              <Badge variant="secondary">{t("Experimental", { defaultValue: "Experimental" })}</Badge>
+            </div>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              {t("instanceExperimentalSettings.appsDescription", {
+                defaultValue: "Show the Apps navigation and allow access to app connections, gateways, and advanced app tooling.",
+              })}
+            </p>
+          </div>
+          <ToggleSwitch
+            checked={enableApps}
+            onCheckedChange={() => toggleMutation.mutate({ enableApps: !enableApps })}
+            disabled={toggleMutation.isPending}
+            aria-label={t("instanceExperimentalSettings.appsToggle", { defaultValue: "Toggle apps experimental setting" })}
+          />
+        </div>
+      </Card>
+
+      <Card className="block p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold">
                 {t("instanceExperimentalSettings.casesTitle", { defaultValue: "Cases" })}
               </h2>
               <Badge variant="secondary">{t("Experimental", { defaultValue: "Experimental" })}</Badge>
@@ -554,6 +581,30 @@ export function InstanceExperimentalSettings() {
             disabled={toggleMutation.isPending}
             aria-label={t("instanceExperimentalSettings.builtInAgentsToggle", {
               defaultValue: "Toggle built-in agents experimental setting",
+            })}
+          />
+        </div>
+      </Card>
+
+      <Card className="block p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <h2 className="text-sm font-semibold">
+              {t("instanceExperimentalSettings.summariesTitle", { defaultValue: "Summaries" })}
+            </h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              {t("instanceExperimentalSettings.summariesDescription", {
+                defaultValue:
+                  "Show Summarizer-generated status slots on project and workspace pages, with on-demand refresh and revision history. Existing summary data is kept when this is disabled.",
+              })}
+            </p>
+          </div>
+          <ToggleSwitch
+            checked={enableSummaries}
+            onCheckedChange={() => toggleMutation.mutate({ enableSummaries: !enableSummaries })}
+            disabled={toggleMutation.isPending}
+            aria-label={t("instanceExperimentalSettings.summariesToggle", {
+              defaultValue: "Toggle summaries experimental setting",
             })}
           />
         </div>
@@ -776,7 +827,31 @@ export function InstanceExperimentalSettings() {
       <Card className="block p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <h2 className="text-sm font-semibold">{t("instanceExperimentalSettings.autoRestartDevServerTitle", { defaultValue: "Auto-Restart Dev Server When Idle" })}</h2>
+            <h2 className="text-sm font-semibold">
+              {t("instanceExperimentalSettings.smokeLabTitle", { defaultValue: "Smoke Lab" })}
+            </h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              {t("instanceExperimentalSettings.smokeLabDescription", {
+                defaultValue:
+                  'Add a "Smoke Lab" tab under Apps → Developer and an "Integration smoke" card on the dashboard for exercising every integration path against deterministic local fixtures (fake OAuth provider + loopback MCP servers). Private (non-public) deployments only.',
+              })}
+            </p>
+          </div>
+          <ToggleSwitch
+            checked={enableSmokeLab}
+            onCheckedChange={() => toggleMutation.mutate({ enableSmokeLab: !enableSmokeLab })}
+            disabled={toggleMutation.isPending}
+            aria-label={t("instanceExperimentalSettings.smokeLabToggle", { defaultValue: "Toggle smoke lab experimental setting" })}
+          />
+        </div>
+      </Card>
+
+      <Card className="block p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <h2 className="text-sm font-semibold">
+              {t("instanceExperimentalSettings.autoRestartDevServerTitle", { defaultValue: "Auto-Restart Dev Server When Idle" })}
+            </h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
               {t("instanceExperimentalSettings.autoRestartDevServerDescription", { defaultValue: "In `pnpm dev:once`, wait for all queued and running local agent runs to finish, then restart the server automatically when backend changes or migrations make the current boot stale." })}
             </p>

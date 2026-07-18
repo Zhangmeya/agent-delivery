@@ -3,6 +3,7 @@ import { basename, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { spawn } from "node:child_process";
 import { open as openFile } from "node:fs/promises";
+import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
 import postgres from "postgres";
@@ -434,6 +435,23 @@ async function* readRestoreStatements(backupFile: string): AsyncGenerator<string
     stream.destroy();
     raw.destroy();
   }
+}
+
+function parseCopyRestoreStatement(statement: string): { command: string; data: string } | null {
+  const lines = statement.split(/\r?\n/);
+  const commandIndex = lines.findIndex((line) => /^\s*COPY\b.*\bFROM\s+stdin;\s*$/i.test(line));
+  if (commandIndex === -1) return null;
+
+  const terminatorIndex = lines.findIndex((line, index) => index > commandIndex && line === "\\.");
+  if (terminatorIndex === -1) {
+    throw new Error("Malformed backup COPY block: missing \\. terminator");
+  }
+
+  const dataLines = lines.slice(commandIndex + 1, terminatorIndex);
+  return {
+    command: lines[commandIndex]!.trim(),
+    data: dataLines.length > 0 ? `${dataLines.join("\n")}\n` : "",
+  };
 }
 
 export function createBufferedTextFileWriter(filePath: string, maxBufferedBytes = DEFAULT_BACKUP_WRITE_BUFFER_BYTES) {
@@ -985,10 +1003,12 @@ export async function runDatabaseBackup(opts: RunDatabaseBackupOptions): Promise
 
 export async function runDatabaseRestore(opts: RunDatabaseRestoreOptions): Promise<void> {
   const connectTimeout = Math.max(1, Math.trunc(opts.connectTimeoutSeconds ?? 5));
+  let psqlRestoreError: unknown = null;
   try {
     await restoreWithPsql(opts, connectTimeout);
     return;
   } catch (error) {
+    psqlRestoreError = error;
     if (!(await hasStatementBreakpoints(opts.backupFile))) {
       throw new Error(
         `Failed to restore ${basename(opts.backupFile)} with psql: ${sanitizeRestoreErrorMessage(error)}`,
@@ -1001,7 +1021,14 @@ export async function runDatabaseRestore(opts: RunDatabaseRestoreOptions): Promi
   try {
     await sql`SELECT 1`;
     for await (const statement of readRestoreStatements(opts.backupFile)) {
-      await sql.unsafe(statement).execute();
+      const copy = parseCopyRestoreStatement(statement);
+      if (!copy) {
+        await sql.unsafe(statement).execute();
+        continue;
+      }
+
+      const writable = await sql.unsafe(copy.command).writable();
+      await pipeline(Readable.from([copy.data]), writable);
     }
   } catch (error) {
     const statementPreview = typeof error === "object" && error !== null && typeof (error as Record<string, unknown>).query === "string"
@@ -1010,8 +1037,9 @@ export async function runDatabaseRestore(opts: RunDatabaseRestoreOptions): Promi
         .map((line) => line.trim())
         .find((line) => line.length > 0 && !line.startsWith("--"))
       : null;
+    const psqlMessage = psqlRestoreError === null ? "" : `; psql error: ${sanitizeRestoreErrorMessage(psqlRestoreError)}`;
     throw new Error(
-      `Failed to restore ${basename(opts.backupFile)}: ${sanitizeRestoreErrorMessage(error)}${statementPreview ? ` [statement: ${statementPreview.slice(0, 120)}]` : ""}`,
+      `Failed to restore ${basename(opts.backupFile)}: ${sanitizeRestoreErrorMessage(error)}${statementPreview ? ` [statement: ${statementPreview.slice(0, 120)}]` : ""}${psqlMessage}`,
     );
   } finally {
     await sql.end();

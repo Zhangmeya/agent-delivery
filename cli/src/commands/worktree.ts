@@ -43,6 +43,7 @@ import {
   routineTriggers,
   runDatabaseBackup,
   runDatabaseRestore,
+  resetPostgresDatabase,
   createEmbeddedPostgresLogBuffer,
   formatEmbeddedPostgresError,
   prepareEmbeddedPostgresNativeRuntime,
@@ -65,6 +66,7 @@ import {
   resolveWorktreeSeedPlan,
   resolveWorktreeLocalPaths,
   sanitizeWorktreeInstanceId,
+  type WorktreeSeedPlan,
   type WorktreeSeedMode,
   type WorktreeLocalPaths,
 } from "./worktree-lib.js";
@@ -1317,7 +1319,7 @@ async function seedWorktreeDatabase(input: {
       backupDir: path.resolve(input.targetPaths.backupDir, "seed"),
       retention: { dailyDays: 7, weeklyWeeks: 4, monthlyMonths: 1 },
       filenamePrefix: `${input.instanceId}-seed`,
-      backupEngine: "javascript",
+      backupEngine: resolveWorktreeSeedBackupEngine(seedPlan),
       includeMigrationJournal: true,
       excludeTables: seedPlan.excludedTables,
       nullifyColumns: seedPlan.nullifyColumns,
@@ -1329,7 +1331,7 @@ async function seedWorktreeDatabase(input: {
     );
 
     const adminConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${targetHandle.port}/postgres`;
-    await ensurePostgresDatabase(adminConnectionString, "paperclip");
+    await resetPostgresDatabase(adminConnectionString, "paperclip");
     const targetConnectionString = `postgres://paperclip:paperclip@127.0.0.1:${targetHandle.port}/paperclip`;
     await runDatabaseRestore({
       connectionString: targetConnectionString,
@@ -1359,6 +1361,12 @@ async function seedWorktreeDatabase(input: {
       await sourceHandle.stop();
     }
   }
+}
+
+export function resolveWorktreeSeedBackupEngine(seedPlan: WorktreeSeedPlan): "auto" | "javascript" {
+  return seedPlan.excludedTables.length === 0 && Object.keys(seedPlan.nullifyColumns).length === 0
+    ? "auto"
+    : "javascript";
 }
 
 async function runWorktreeInit(opts: WorktreeInitOptions): Promise<void> {

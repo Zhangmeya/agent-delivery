@@ -693,12 +693,12 @@ export function RoutineDetail() {
   const automationToggleDisabled = updateRoutineStatus.isPending || routine.status === "archived";
   const automationLabel =
     routine.status === "archived"
-      ? "Archived"
+      ? t("status.archived", { defaultValue: "Archived" })
       : !routine.assigneeAgentId
-        ? "Draft"
+        ? t("status.draft", { defaultValue: "Draft" })
         : automationEnabled
-          ? "Active"
-          : "Paused";
+          ? t("status.active", { defaultValue: "Active" })
+          : t("status.paused", { defaultValue: "Paused" });
   const automationLabelClassName =
     routine.status === "archived"
       ? "text-muted-foreground"
@@ -728,8 +728,10 @@ export function RoutineDetail() {
     onToggleAutomation: () => {
       if (!automationEnabled && !routine.assigneeAgentId) {
         pushToast({
-          title: "Default agent required",
-          body: "Set a default agent before enabling routine automation.",
+          title: t("routineDetail.defaultAgentRequiredTitle", { defaultValue: "Default agent required" }),
+          body: t("routineDetail.defaultAgentRequiredBody", {
+            defaultValue: "Set a default agent before enabling routine automation.",
+          }),
           tone: "warn",
         });
         return;
@@ -781,7 +783,7 @@ export function RoutineDetail() {
         href="#routine-section"
         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-20 focus:rounded focus:bg-background focus:px-3 focus:py-1.5 focus:text-sm"
       >
-        Skip to section
+        {t("routineDetail.skipToSection", { defaultValue: "Skip to section" })}
       </a>
 
       {/* Bounded to the main scroll area's height so the header + sub-nav stay
@@ -829,7 +831,9 @@ export function RoutineDetail() {
                 checked={automationEnabled}
                 onCheckedChange={contextValue.onToggleAutomation}
                 disabled={automationToggleDisabled}
-                aria-label={automationEnabled ? "Pause automatic triggers" : "Enable automatic triggers"}
+                aria-label={automationEnabled
+                  ? t("routineDetail.pauseAutomaticTriggers", { defaultValue: "Pause automatic triggers" })
+                  : t("routineDetail.enableAutomaticTriggers", { defaultValue: "Enable automatic triggers" })}
               />
               <span className={`text-sm font-medium ${automationLabelClassName}`}>{automationLabel}</span>
             </div>
@@ -862,7 +866,7 @@ export function RoutineDetail() {
               className={isEditableSection ? "mx-auto w-full max-w-3xl" : "w-full"}
             >
               <h2 id="routine-section-title" className="mb-4 text-lg font-semibold">
-                {SECTION_TITLES[section]}
+                {t(`routineDetail.nav.${section}`, { defaultValue: SECTION_TITLES[section] })}
               </h2>
 
               {section === "overview" && <OverviewSection />}

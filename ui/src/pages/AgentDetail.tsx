@@ -43,6 +43,7 @@ import { useAdapterCapabilities } from "@/adapters/use-adapter-capabilities";
 import { redactCommandText as redactCommandSecretText } from "@penclipai/adapter-utils";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { assetsApi } from "../api/assets";
+import { toolsApi } from "../api/tools";
 import { getUIAdapter, buildTranscript, onAdapterChange } from "../adapters";
 import { StatusBadge } from "../components/StatusBadge";
 import { MarkdownBody } from "../components/MarkdownBody";
@@ -54,7 +55,6 @@ import { Identity } from "../components/Identity";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { AgentActionButtons } from "../components/AgentActionButtons";
 import { InlineBanner } from "../components/InlineBanner";
-import { BuiltInAgentBadge } from "../components/BuiltInAgentBadges";
 import { BuiltInBundlePanel } from "../components/BuiltInBundlePanel";
 import { ConfigureBuiltInAgentModal } from "../components/ConfigureBuiltInAgentModal";
 import { BudgetPolicyCard } from "../components/BudgetPolicyCard";
@@ -98,6 +98,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { AgentIcon, AgentIconPicker } from "../components/AgentIconPicker";
 import { RunTranscriptView, type TranscriptMode } from "../components/transcript/RunTranscriptView";
+import { AgentToolsTab } from "./AgentToolsTab";
+import {
+  appendCapped,
+  LIVE_TRANSCRIPT_RENDER_LIMIT,
+  MAX_LIVE_EVENTS,
+  MAX_LIVE_LOG_LINES,
+} from "../lib/live-log-buffer";
 import {
   isUuidLike,
   type Agent,
@@ -297,12 +304,13 @@ function scrollToContainerBottom(container: ScrollContainer, behavior: ScrollBeh
   container.scrollTo({ top: container.scrollHeight, behavior });
 }
 
-type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget";
+type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "tools" | "runs" | "budget";
 
 function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "instructions" || value === "prompts") return "instructions";
   if (value === "configure" || value === "configuration") return "configuration";
   if (value === "skills") return "skills";
+  if (value === "tools") return "tools";
   if (value === "budget") return "budget";
   if (value === "runs") return value;
   return "dashboard";
@@ -787,7 +795,9 @@ export function AgentDetail() {
     : null;
   const builtInFeatureLabel = builtInState
     ? builtInState.definition.featureKeys
-        .map((key) => key.charAt(0).toUpperCase() + key.slice(1))
+        .map((key) => t(`builtInAgents.features.${key}`, {
+          defaultValue: key.charAt(0).toUpperCase() + key.slice(1),
+        }))
         .join(", ")
     : "";
   const invalidateBuiltIn = useCallback(() => {
@@ -932,10 +942,12 @@ export function AgentDetail() {
           ? "configuration"
           : activeView === "skills"
             ? "skills"
-            : activeView === "runs"
-              ? "runs"
-              : activeView === "budget"
-                ? "budget"
+            : activeView === "tools"
+              ? "tools"
+              : activeView === "runs"
+                ? "runs"
+                : activeView === "budget"
+                  ? "budget"
               : "dashboard";
     if (routeAgentRef !== canonicalAgentRef || urlTab !== canonicalTab) {
       navigate(`/agents/${canonicalAgentRef}/${canonicalTab}`, { replace: true });
@@ -1039,6 +1051,8 @@ export function AgentDetail() {
         crumbs.push({ label: t("agentDetail.configuration") });
       // } else if (activeView === "skills") { // TODO: bring back later
       //   crumbs.push({ label: "Skills" });
+      } else if (activeView === "tools") {
+        crumbs.push({ label: t("agentDetail.tools", { defaultValue: "Tools" }) });
       } else if (activeView === "runs") {
         crumbs.push({ label: t("agentDetail.runs") });
       } else if (activeView === "budget") {
@@ -1096,7 +1110,9 @@ export function AgentDetail() {
       {showLeftAgentNotice ? (
         <div className="flex items-center gap-3 border border-yellow-300/35 bg-yellow-300/10 px-3 py-2 text-sm text-yellow-900 dark:text-yellow-100">
           <p className="min-w-0 flex-1">
-            You left this agent. It no longer appears in your sidebar.
+            {t("agentDetail.membership.leftNotice", {
+              defaultValue: "You left this agent. It no longer appears in your sidebar.",
+            })}
           </p>
           <MembershipAction
             compact
@@ -1162,7 +1178,6 @@ export function AgentDetail() {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-2xl font-bold truncate">{agent.name}</h2>
-              {builtInState && <BuiltInAgentBadge />}
             </div>
             <p className="text-sm text-muted-foreground truncate">
               {roleLabels[agent.role] ?? agent.role}
@@ -1198,7 +1213,7 @@ export function AgentDetail() {
       {builtInState && (
         <InlineBanner
           tone="info"
-          title="Built-in agent"
+          title={t("agentDetail.builtIn.title", { defaultValue: "Built-in agent" })}
           actions={
             <Button
               variant="outline"
@@ -1206,13 +1221,16 @@ export function AgentDetail() {
               onClick={() => resetBuiltIn.mutate()}
               disabled={resetBuiltIn.isPending}
             >
-              {resetBuiltIn.isPending ? "Resetting…" : "Reset to defaults"}
+              {resetBuiltIn.isPending
+                ? t("agentDetail.builtIn.resetting", { defaultValue: "Resetting…" })
+                : t("agentDetail.builtIn.resetToDefaults", { defaultValue: "Reset to defaults" })}
             </Button>
           }
         >
-          Ships with Paperclip and powers <strong>{builtInFeatureLabel}</strong>. Configure it like
-          any agent — model, instructions, budget. It can be paused but not deleted; pausing it
-          pauses {builtInFeatureLabel}.
+          {t("agentDetail.builtIn.description", {
+            defaultValue: "Ships with Paperclip and powers {{feature}}. Configure it like any agent — model, instructions, budget. It can be paused but not deleted; pausing it pauses {{feature}}.",
+            feature: builtInFeatureLabel,
+          })}
         </InlineBanner>
       )}
 
@@ -1254,6 +1272,7 @@ export function AgentDetail() {
               { value: "instructions", label: t("agentDetail.instructions") },
               { value: "skills", label: t("agentDetail.skills") },
               { value: "configuration", label: t("agentDetail.configuration") },
+              { value: "tools", label: t("agentDetail.tools", { defaultValue: "Tools" }) },
               { value: "runs", label: t("agentDetail.runs") },
               { value: "budget", label: t("agentDetail.budget") },
             ]}
@@ -1315,14 +1334,14 @@ export function AgentDetail() {
               onClick={() => cancelConfigActionRef.current?.()}
               disabled={configSaving}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               size="sm"
               onClick={() => saveConfigActionRef.current?.()}
               disabled={configSaving}
             >
-              {configSaving ? "Saving…" : "Save"}
+              {configSaving ? t("agentDetail.saving") : t("common.save")}
             </Button>
           </div>
         </div>
@@ -1369,6 +1388,10 @@ export function AgentDetail() {
           agent={agent}
           companyId={resolvedCompanyId ?? undefined}
         />
+      )}
+
+      {activeView === "tools" && resolvedCompanyId && (
+        <AgentToolsTab agent={agent} companyId={resolvedCompanyId} />
       )}
 
       {activeView === "runs" && (
@@ -1919,7 +1942,9 @@ function ConfigurationTab({
         sectionLayout="cards"
       />
       <p className="text-xs text-muted-foreground">
-        Saved adapter config affects the next run. Active runs keep the config they started with, and config changes may start a fresh adapter session.
+        {t("agentDetail.adapterConfigNextRunNotice", {
+          defaultValue: "Saved adapter config affects the next run. Active runs keep the config they started with, and config changes may start a fresh adapter session.",
+        })}
       </p>
 
       <TrustPresetSection
@@ -2379,7 +2404,9 @@ export function PromptsTab({
         </div>
       )}
       <p className="text-xs text-muted-foreground">
-        Saved instructions affect the next run. Active runs keep the instructions they started with, and instruction changes may start a fresh adapter session.
+        {t("agentDetail.instructionsNextRunNotice", {
+          defaultValue: "Saved instructions affect the next run. Active runs keep the instructions they started with, and instruction changes may start a fresh adapter session.",
+        })}
       </p>
 
       <Collapsible defaultOpen={currentMode === "external"}>
@@ -3640,7 +3667,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
                 data-testid="run-detail-on-behalf-of"
                 className="text-xs text-muted-foreground"
               >
-                On behalf of{" "}
+                {t("agentDetail.onBehalfOf", { defaultValue: "On behalf of" })}{" "}
                 <span className="text-foreground">
                   {responsibleUserName ?? responsibleUserLabel(null)}
                 </span>
@@ -3702,7 +3729,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
                 )}
                 {claudeLoginResult?.loginUrl && (
                   <p className="text-xs">
-                    Login URL:
+                    {t("agentDetail.loginUrl", { defaultValue: "Login URL" })}:
                     <a
                       href={claudeLoginResult.loginUrl}
                       className="text-blue-600 underline underline-offset-2 ml-1 break-all dark:text-blue-400"
@@ -3737,8 +3764,12 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
             )}
             {hasNonZeroExit && (
               <div className="text-xs text-red-600 dark:text-red-400">
-                Exit code {run.exitCode}
-                {run.signal && <span className="text-muted-foreground ml-1">(signal: {run.signal})</span>}
+                {t("agentDetail.exitCode", { defaultValue: "Exit code {{code}}", code: run.exitCode })}
+                {run.signal && (
+                  <span className="text-muted-foreground ml-1">
+                    {t("agentDetail.signal", { defaultValue: "(signal: {{signal}})", signal: run.signal })}
+                  </span>
+                )}
               </div>
             )}
             {retryState && (
@@ -3966,7 +3997,11 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     }
 
     if (parsed.length > 0) {
-      setLogLines((prev) => [...prev, ...parsed]);
+      // Live runs stream forever, so cap the retained tail. Terminated runs are
+      // paginated by the user via "Load more log" and keep their full history.
+      setLogLines((prev) =>
+        isLive ? appendCapped(prev, parsed, MAX_LIVE_LOG_LINES) : [...prev, ...parsed],
+      );
     }
   }
 
@@ -4135,7 +4170,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
       try {
         const newEvents = await heartbeatsApi.events(run.id, maxSeq, 100);
         if (newEvents.length > 0) {
-          setEvents((prev) => [...prev, ...newEvents]);
+          setEvents((prev) => appendCapped(prev, newEvents, MAX_LIVE_EVENTS));
         }
       } catch {
         // ignore polling errors
@@ -4212,7 +4247,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
           const streamRaw = asNonEmptyString(payload.stream);
           const stream = streamRaw === "stderr" || streamRaw === "system" ? streamRaw : "stdout";
           const ts = asNonEmptyString((payload as Record<string, unknown>).ts) ?? event.createdAt;
-          setLogLines((prev) => [...prev, { ts, stream, chunk }]);
+          setLogLines((prev) => appendCapped(prev, [{ ts, stream, chunk }], MAX_LIVE_LOG_LINES));
           return;
         }
 
@@ -4222,7 +4257,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
           const key = heartbeatProgressLogLineKey(line);
           if (seenProgressLogLineKeysRef.current.has(key)) return;
           seenProgressLogLineKeysRef.current.add(key);
-          setLogLines((prev) => [...prev, line]);
+          setLogLines((prev) => appendCapped(prev, [line], MAX_LIVE_LOG_LINES));
           return;
         }
 
@@ -4259,7 +4294,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
 
         setEvents((prev) => {
           if (prev.some((existing) => existing.seq === seq)) return prev;
-          return [...prev, liveEvent];
+          return appendCapped(prev, [liveEvent], MAX_LIVE_EVENTS);
         });
       };
 
@@ -4314,6 +4349,13 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     () => buildTranscript(logLines, adapter, { censorUsernameInLogs }),
     [adapter, censorUsernameInLogs, logLines, parserTick],
   );
+  const toolDecisionLookup = useQuery({
+    queryKey: queryKeys.tools.runDecisions(run.companyId, run.id),
+    queryFn: () => toolsApi.getRunDecisionLookup(run.companyId, run.id),
+    enabled: Boolean(run.companyId && run.id),
+    refetchInterval: isLive ? 3000 : false,
+    staleTime: isLive ? 1000 : 30_000,
+  });
 
   useEffect(() => {
     setTranscriptMode("nice");
@@ -4402,8 +4444,10 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
       <div className="max-h-(--sz-38rem) overflow-y-auto rounded-2xl border border-border/70 bg-background/40 p-3 sm:p-4">
         <RunTranscriptView
           entries={transcript}
+          toolDecisions={toolDecisionLookup.data?.decisions ?? []}
           mode={transcriptMode}
           streaming={isLive}
+          limit={isLive ? LIVE_TRANSCRIPT_RENDER_LIMIT : undefined}
           emptyMessage={run.logRef ? t("agentDetail.waitingForTranscript") : t("agentDetail.noPersistedTranscript")}
         />
         {hasMoreLog && (

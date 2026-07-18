@@ -88,7 +88,7 @@ function isModelBasedAdapter(adapterType: string): boolean {
 }
 
 function defaultAdapterType(state: BuiltInAgentState): string {
-  return state.definition.allowedAdapterTypes?.[0] ?? "codex_local";
+  return state.definition.defaultAdapterType ?? state.definition.allowedAdapterTypes?.[0] ?? "codex_local";
 }
 
 function parseBudgetMonthlyCents(value: string): number | undefined {
@@ -130,11 +130,12 @@ export function ConfigureBuiltInAgentModal({
   );
   const [model, setModel] = useState<string>(() => {
     const config = state.agent?.adapterConfig;
-    return typeof config === "object" &&
-      config !== null &&
-      typeof (config as Record<string, unknown>).model === "string"
-      ? ((config as Record<string, unknown>).model as string)
-      : "";
+    const configuredModel = typeof config === "object" && config !== null
+      ? (config as Record<string, unknown>).model
+      : null;
+    if (typeof configuredModel === "string") return configuredModel;
+    const defaultModel = state.definition.defaultAdapterConfig?.model;
+    return typeof defaultModel === "string" ? defaultModel : "";
   });
   const [modelOpen, setModelOpen] = useState(false);
   const [budgetDollars, setBudgetDollars] = useState<string>(() => {
@@ -165,11 +166,25 @@ export function ConfigureBuiltInAgentModal({
   const models = fetchedModels ?? [];
 
   const modelRequired = setupSupportedInModal;
+  const normalizedModel = model.trim();
+  const modelKnown =
+    !normalizedModel ||
+    models.length === 0 ||
+    models.some((candidate) => candidate.id === normalizedModel);
+  const modelError = modelKnown
+    ? null
+    : t("builtInAgents.configure.modelUnavailable", {
+        defaultValue:
+          'Model "{{model}}" is not available for {{adapterType}}. Choose a known model.',
+        model: normalizedModel,
+        adapterType,
+      });
   const budgetMonthlyCents = parseBudgetMonthlyCents(budgetDollars);
   const budgetValid = !budgetDollars.trim() || budgetMonthlyCents !== undefined;
   const canSubmit =
     budgetValid &&
-    (setupSupportedInModal ? !modelRequired || model.trim().length > 0 : true);
+    modelKnown &&
+    (setupSupportedInModal ? !modelRequired || normalizedModel.length > 0 : true);
   const submitLabel = setupSupportedInModal
     ? t("builtInAgents.configure.configureAndEnable", {
         defaultValue: "Configure & enable {{name}}",
@@ -276,6 +291,12 @@ export function ConfigureBuiltInAgentModal({
               groupByProvider={false}
               creatable
             />
+          )}
+
+          {modelError && (
+            <p className="text-sm text-destructive" role="alert">
+              {modelError}
+            </p>
           )}
 
           {!setupSupportedInModal && (

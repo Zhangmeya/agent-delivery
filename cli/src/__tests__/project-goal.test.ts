@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerGoalCommands } from "../commands/client/goal.js";
@@ -22,12 +25,15 @@ function createProgram(): Command {
 describe("project and goal commands", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    delete process.env["PAPERCLIP_API_KEY"];
-    delete process.env["PAPERCLIP_API_URL"];
+    delete process.env.PAPERCLIP_API_KEY;
+    delete process.env.PAPERCLIP_API_URL;
+    delete process.env.PAPERCLIP_COMPANY_ID;
+    process.env.PAPERCLIP_CONTEXT = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-project-goal-")), "context.json");
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    delete process.env.PAPERCLIP_CONTEXT;
   });
 
   it("creates and updates projects with shared schemas", async () => {

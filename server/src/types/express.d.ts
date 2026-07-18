@@ -20,6 +20,7 @@ declare global {
         agentId?: string;
         companyId?: string;
         companyIds?: string[];
+        sessionId?: string | null;
         memberships?: Array<{
           companyId: string;
           membershipRole?: string | null;

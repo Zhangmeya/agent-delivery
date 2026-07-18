@@ -76,6 +76,62 @@ test("general-server shard runner uses the fork server package scope", () => {
   assert.doesNotMatch(source, /"--project",\s*"@paperclipai\/server"/);
 });
 
+test("the unsharded general-server command uses a bounded complete exclude set", () => {
+  const plan = dryRunJson(["--mode", "general", "--group", "general-server"]);
+  const patterns = plan.generalServerExcludePatterns;
+
+  assert.ok(patterns.includes("src/**/*route*.test.ts"));
+  assert.ok(patterns.includes("src/**/*authz*.test.ts"));
+  assert.ok(patterns.length < 50, `exclude list must stay below Windows command limits, got ${patterns.length}`);
+
+  for (const repoPath of plan.selectedSerializedSuites) {
+    const serverPath = repoPath.replace(/^server\//, "");
+    const coveredByCategoryGlob = /[^/]*(?:route|routes|authz)[^/]*\.test\.ts$/.test(repoPath);
+    assert.ok(
+      coveredByCategoryGlob || patterns.includes(serverPath),
+      `serialized suite must be excluded from the general-server command: ${repoPath}`,
+    );
+  }
+});
+
+test("the Windows general-server chunks are complete, non-overlapping, and command-bounded", () => {
+  const plan = dryRunJson(["--mode", "general", "--group", "general-server"]);
+  const chunks = plan.windowsGeneralServerCommandChunks;
+
+  assert.ok(
+    plan.windowsGeneralServerCommandBudget <= 4_096,
+    "Windows command budget must reserve space for pnpm's nested command wrapper",
+  );
+  assert.ok(chunks.length > 1, "expected the full Windows suite set to require multiple worker lifetimes");
+  const seen = new Set();
+  for (const chunk of chunks) {
+    assert.ok(chunk.files.length > 0, "Windows command chunks must not be empty");
+    assert.ok(
+      chunk.commandLength <= plan.windowsGeneralServerCommandBudget,
+      `chunk command length ${chunk.commandLength} exceeds ${plan.windowsGeneralServerCommandBudget}`,
+    );
+    for (const file of chunk.files) {
+      assert.ok(!seen.has(file), `suite assigned to more than one Windows chunk: ${file}`);
+      seen.add(file);
+    }
+  }
+
+  assert.equal(seen.size, plan.generalServerSuiteCount, "Windows chunks must cover every general-server suite exactly once");
+});
+
+test("the Windows general-server chunk plan is deterministic", () => {
+  const args = ["--mode", "general", "--group", "general-server"];
+  const first = dryRunJson(args).windowsGeneralServerCommandChunks;
+  const second = dryRunJson(args).windowsGeneralServerCommandChunks;
+  assert.deepEqual(first, second);
+});
+
+test("each Vitest invocation isolates cross-platform temporary directories", () => {
+  const plan = dryRunJson(["--mode", "general", "--group", "general-server"]);
+  assert.deepEqual(plan.isolatedTempEnvironmentVariables, ["TEMP", "TMP", "TMPDIR"]);
+  assert.equal(plan.windowsInvocationTempPrefix, "v-");
+});
+
 test("workspace groups use fork project names without duplicating the CLI", () => {
   const groupA = dryRunJson(["--mode", "general", "--group", "general-workspaces-a"]);
   const groupB = dryRunJson(["--mode", "general", "--group", "general-workspaces-b"]);

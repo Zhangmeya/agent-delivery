@@ -30,6 +30,7 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import type { Agent, Issue } from "@penclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
 import { displaySeededName } from "../lib/seeded-display";
+import { SmokeLabDashboardCard } from "../components/SmokeLabDashboardCard";
 
 const DASHBOARD_ACTIVITY_LIMIT = 10;
 
@@ -319,6 +320,8 @@ export function Dashboard() {
               }
             />
           </div>
+
+          <SmokeLabDashboardCard companyId={selectedCompanyId!} />
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <ChartCard title={t("dashboard.runActivity")} subtitle={t("dashboard.last14Days")}>
