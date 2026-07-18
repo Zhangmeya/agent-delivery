@@ -2284,11 +2284,15 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       body: "Agent failed to resume after approval: `adapter_failed` — retrying (attempt 1/3)",
     });
 
-    const interaction = await db
-      .select({ result: issueThreadInteractions.result })
-      .from(issueThreadInteractions)
-      .where(eq(issueThreadInteractions.id, interactionId))
-      .then((rows) => rows[0] ?? null);
+    const interaction = await waitForValue(async () => {
+      const row = await db
+        .select({ result: issueThreadInteractions.result })
+        .from(issueThreadInteractions)
+        .where(eq(issueThreadInteractions.id, interactionId))
+        .then((rows) => rows[0] ?? null);
+      const result = row?.result as { resumeFailure?: unknown } | null | undefined;
+      return result?.resumeFailure ? row : null;
+    });
     expect(interaction?.result).toMatchObject({
       version: 1,
       outcome: "accepted",
