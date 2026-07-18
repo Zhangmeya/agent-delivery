@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { localized } from "./localized-selectors";
 
 // One-off visual capture for PAP-10817. The retired Tools -> Applications
 // table now redirects into Apps, so capture the current app removal
@@ -23,9 +24,9 @@ test("captures the current app removal confirmations", async ({ page }) => {
 
   await page.goto(`/${prefix}/apps/app/${application.id}/advanced`);
   await expect(page.getByRole("heading", { name: "Demo Notes" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText("Danger zone")).toBeVisible();
-  await page.getByRole("button", { name: "Remove app", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Yes, remove it" })).toBeVisible();
+  await expect(page.getByText(localized.appDangerZone)).toBeVisible();
+  await page.getByRole("button", { name: localized.appRemove, exact: true }).click();
+  await expect(page.getByRole("button", { name: localized.appRemoveConfirm })).toBeVisible();
   await page.screenshot({ path: "test-results/pap-10817-delete-dialog.png", fullPage: true });
 
   const conn = await page.request.post(`/api/companies/${companyId}/tools/connections`, {
@@ -41,8 +42,8 @@ test("captures the current app removal confirmations", async ({ page }) => {
 
   await page.goto(`/${prefix}/apps/${connection.id}/advanced`);
   await expect(page.getByRole("heading", { name: "Primary connection" })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Remove app", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Yes, remove it" })).toBeVisible();
+  await page.getByRole("button", { name: localized.appRemove, exact: true }).click();
+  await expect(page.getByRole("button", { name: localized.appRemoveConfirm })).toBeVisible();
   await page.screenshot({ path: "test-results/pap-10817-delete-dialog-guarded.png", fullPage: true });
 
   await page.request.delete(`/api/companies/${companyId}`).catch(() => undefined);
