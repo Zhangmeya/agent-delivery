@@ -407,6 +407,7 @@ export function InlineEditor({
   // Use div instead of Tag when rendering markdown to avoid invalid nesting
   // (e.g. <p> cannot contain the <div>/<p> elements that markdown produces)
   const DisplayTag = value && multiline ? "div" : Tag;
+  const renderedDisplayValue = previewTransform ? previewTransform(value) : value;
 
   return (
     <DisplayTag
@@ -418,7 +419,7 @@ export function InlineEditor({
       )}
       onClick={() => setEditing(true)}
     >
-      {value || placeholder}
+      {renderedDisplayValue || placeholder}
     </DisplayTag>
   );
 }

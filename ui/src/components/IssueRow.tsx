@@ -9,6 +9,7 @@ import {
   withIssueDetailHeaderSeed,
 } from "../lib/issueDetailBreadcrumb";
 import { cn } from "../lib/utils";
+import { displaySeededName } from "../lib/seeded-display";
 import {
   deriveActiveRecoveryDisplayState,
   RECOVERY_CHIP_DEFAULT_TONE,
@@ -198,7 +199,7 @@ export function IssueRow({
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1 sm:contents">
         <span className={cn("line-clamp-2 text-sm sm:order-2 sm:min-w-0 sm:flex-1 sm:truncate sm:line-clamp-none", titleClassName)}>
-          {issue.title}{titleSuffix}
+          {displaySeededName(issue.title)}{titleSuffix}
         </span>
         {checklistDependencyChips ? (
           <span className="flex flex-wrap gap-1 sm:order-3 sm:ml-(--sz-calc-13)">

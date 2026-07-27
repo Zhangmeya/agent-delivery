@@ -8,6 +8,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { projectsApi } from "../api/projects";
 import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
 import { queryKeys } from "../lib/queryKeys";
+import { displaySeededName } from "../lib/seeded-display";
 import { cn, projectRouteRef, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import {
   isStarred,
@@ -67,7 +68,11 @@ export function SidebarStarredProjects() {
       .map((id) => byId.get(id))
       .filter((project): project is Project => !!project && !project.archivedAt)
       .sort((left, right) =>
-        left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+        displaySeededName(left.name).localeCompare(
+          displaySeededName(right.name),
+          undefined,
+          { sensitivity: "base" },
+        ),
       );
   }, [membershipsQuery.data, membershipsQuery.isSuccess, projects]);
 
@@ -75,7 +80,7 @@ export function SidebarStarredProjects() {
     (project: Project) => membershipMutation.mutate({
       resourceType: "project",
       resourceId: project.id,
-      resourceName: project.name,
+      resourceName: displaySeededName(project.name),
       starred: false,
     }),
     [membershipMutation],
@@ -84,7 +89,7 @@ export function SidebarStarredProjects() {
     (project: Project) => membershipMutation.mutate({
       resourceType: "project",
       resourceId: project.id,
-      resourceName: project.name,
+      resourceName: displaySeededName(project.name),
       state: "left",
     }),
     [membershipMutation],
@@ -108,6 +113,7 @@ export function SidebarStarredProjects() {
   return (
     <div className="flex flex-col gap-0.5" aria-label={t("sidebar.starredProjects", { defaultValue: "Starred projects" })}>
       {starredProjects.map((project) => {
+        const displayName = displaySeededName(project.name);
         const routeRef = projectRouteRef(project);
         const isActive = activeProjectRef === routeRef || activeProjectRef === project.id;
         const pending = pendingFor(project);
@@ -131,7 +137,7 @@ export function SidebarStarredProjects() {
             )}
           >
             <ProjectTile color={project.color ?? null} icon={project.icon ?? null} size="xs" />
-            <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "flex-1 truncate"}>{project.name}</span>
+            <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "flex-1 truncate"}>{displayName}</span>
             {!rail && project.pauseReason === "budget" ? (
               <BudgetSidebarMarker title={t("Project paused by budget")} />
             ) : null}
@@ -145,7 +151,7 @@ export function SidebarStarredProjects() {
                 <TooltipTrigger asChild>
                   <div className="min-w-0 flex-1">{link}</div>
                 </TooltipTrigger>
-                <TooltipContent side="right">{project.name}</TooltipContent>
+                <TooltipContent side="right">{displayName}</TooltipContent>
               </Tooltip>
             ) : (
               link
@@ -159,7 +165,7 @@ export function SidebarStarredProjects() {
                   quiet
                   starred={starred}
                   pending={unstarPending}
-                  resourceName={project.name}
+                  resourceName={displayName}
                   onToggle={() => unstar(project)}
                   revealClassName={STAR_ROW_REVEAL}
                 />
@@ -174,7 +180,7 @@ export function SidebarStarredProjects() {
                     variant="ghost"
                     size="icon-xs"
                     className="absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 opacity-100"
-                    aria-label={t("Open actions for {{name}}", { name: project.name })}
+                    aria-label={t("Open actions for {{name}}", { name: displayName })}
                   >
                     <MoreHorizontal className="h-3.5 w-3.5" />
                   </Button>

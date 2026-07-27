@@ -538,7 +538,7 @@ export function Layout() {
     <GeneralSettingsProvider value={{ keyboardShortcutsEnabled }}>
       <div
       className={cn(
-        "bg-background text-foreground pt-(--sz-safe-top)",
+        "delivery-app-shell bg-background text-foreground pt-(--sz-safe-top)",
         // overflow-x-clip on mobile keeps a stray wide descendant from making the
         // whole viewport scroll horizontally. clip (not hidden) leaves overflow-y
         // computed as visible, so native body scroll + the sticky breadcrumb keep
@@ -628,7 +628,7 @@ export function Layout() {
               ref={mainContentRef}
               tabIndex={-1}
               className={cn(
-                "flex-1 p-4 outline-none md:p-6",
+                "delivery-main flex-1 p-4 outline-none",
                 // Reserve the scrollbar gutter on desktop so pages whose height
                 // changes (e.g. switching skill-detail tabs) don't widen/shift
                 // when the vertical scrollbar appears or disappears (PAP-10907).

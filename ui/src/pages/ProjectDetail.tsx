@@ -789,17 +789,17 @@ export function ProjectDetail() {
             state="left"
             pending={projectJoinLeavePending}
             pendingState={projectJoinLeavePending ? membershipMutation.variables?.state : null}
-            resourceName={project.name}
+            resourceName={displaySeededName(project.name)}
             onJoin={() => membershipMutation.mutate({
               resourceType: "project",
               resourceId: project.id,
-              resourceName: project.name,
+              resourceName: displaySeededName(project.name),
               state: "joined",
             })}
             onLeave={() => membershipMutation.mutate({
               resourceType: "project",
               resourceId: project.id,
-              resourceName: project.name,
+              resourceName: displaySeededName(project.name),
               state: "left",
             })}
           />
@@ -850,11 +850,11 @@ export function ProjectDetail() {
             size="button"
             starred={projectStarred}
             pending={projectStarPending}
-            resourceName={project.name}
+            resourceName={displaySeededName(project.name)}
             onToggle={(next) => membershipMutation.mutate({
               resourceType: "project",
               resourceId: project.id,
-              resourceName: project.name,
+              resourceName: displaySeededName(project.name),
               starred: next,
             })}
           />

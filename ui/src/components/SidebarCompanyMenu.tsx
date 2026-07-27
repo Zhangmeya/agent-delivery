@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronsUpDown,
+  Box,
   GripVertical,
   LogOut,
   Plus,
@@ -233,7 +234,7 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
           // the Button's default size adds `has-[>svg]:px-3`, so with the chevron
           // svg present (expanded) it was already 12px but without it (rail) it fell
           // back to 8px — a 4px horizontal jump on collapse (PAP-10676).
-          className="h-9 flex-1 justify-start gap-2 px-3 text-left"
+          className="h-10 flex-1 justify-start gap-2 px-3 text-left"
           aria-label={
             selectedCompany
               ? t("sidebar.openCompanySwitcherFor", {
@@ -244,9 +245,19 @@ export function SidebarCompanyMenu({ open: controlledOpen, onOpenChange }: Sideb
           }
         >
           <span className="flex min-w-0 flex-1 items-center gap-2">
-            {selectedCompany ? <WorkspaceIcon company={selectedCompany} /> : null}
-            <span className={cn("truncate text-sm font-bold text-foreground", rail && SIDEBAR_RAIL_HIDDEN_LABEL)}>
-              {selectedCompany?.name ?? t("sidebar.selectCompany", { defaultValue: "Select company" })}
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm">
+              <Box className="size-4" aria-hidden="true" />
+            </span>
+            <span className={cn("flex min-w-0 flex-1 flex-col leading-tight", rail && SIDEBAR_RAIL_HIDDEN_LABEL)}>
+              <span className="truncate text-sm font-semibold text-foreground">
+                {t("brand.productName", { defaultValue: "Agent Delivery" })}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {t("brand.productCnName", { defaultValue: "灵构交付" })}
+                {selectedCompany
+                  ? ` · ${selectedCompany.name}`
+                  : ` · ${t("sidebar.selectCompany", { defaultValue: "Select company" })}`}
+              </span>
             </span>
           </span>
           {!rail && <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />}
