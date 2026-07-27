@@ -1,5 +1,12 @@
 {
   "name": "paperclip",
+  "description": "Agent Delivery（灵构交付）——面向项目负责人的 AI 原生项目交付与智能体协作平台。",
+  "homepage": "https://github.com/Zhangmeya/agent-delivery",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zhangmeya/agent-delivery.git"
+  },
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
