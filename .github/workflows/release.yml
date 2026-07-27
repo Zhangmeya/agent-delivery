@@ -59,7 +59,7 @@ jobs:
           version: 9.15.4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
@@ -103,7 +103,7 @@ jobs:
           version: 9.15.4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
@@ -139,7 +139,7 @@ jobs:
           version: 9.15.4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
@@ -231,7 +231,7 @@ jobs:
           version: 9.15.4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
@@ -277,7 +277,7 @@ jobs:
           version: 9.15.4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
@@ -312,7 +312,7 @@ jobs:
           version: 9.15.4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
@@ -364,7 +364,7 @@ jobs:
           version: 9.15.4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
