@@ -167,12 +167,12 @@ describe("Sidebar", () => {
     vi.clearAllMocks();
   });
 
-  it("links the top search icon to the search page without showing Search in Work nav", async () => {
+  it("keeps search out of the sidebar because it lives in the global top bar", async () => {
     mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableIsolatedWorkspaces: false });
     const root = await renderSidebar();
 
     const topSearchLink = container.querySelector('a[aria-label="Open search"]');
-    expect(topSearchLink?.getAttribute("href")).toBe("/search");
+    expect(topSearchLink).toBeNull();
     const workLinks = [...container.querySelectorAll("nav a")].map((anchor) => anchor.textContent?.trim());
     expect(workLinks).not.toContain("Search");
 
@@ -198,7 +198,7 @@ describe("Sidebar", () => {
       workSectionContainer = workSectionContainer.parentElement;
     }
     expect(workSectionContainer?.textContent).toContain("Work");
-    expect(workSectionContainer?.textContent).toContain("Tasks");
+    expect(workSectionContainer?.textContent).not.toContain("Tasks");
     expect(workSectionContainer?.textContent).not.toContain("Goals");
 
     flushSync(() => {
@@ -213,7 +213,7 @@ describe("Sidebar", () => {
     });
     const root = await renderSidebar();
 
-    expect(container.textContent).toContain("New Issue");
+    expect(container.textContent).not.toContain("New Issue");
     expect(container.textContent).not.toContain("New Task");
 
     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
@@ -256,7 +256,7 @@ describe("Sidebar", () => {
     });
     const root = await renderSidebar();
 
-    expect(container.textContent).toContain("New Issue");
+    expect(container.textContent).not.toContain("New Issue");
     expect(container.textContent).not.toContain("New Task");
 
     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
