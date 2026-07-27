@@ -14,8 +14,12 @@ import { queryKeys } from "../lib/queryKeys";
 import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
 import { IssuesList } from "../components/IssuesList";
-import { CircleDot } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Link } from "@/lib/router";
+import { ArrowRight, CircleAlert, CircleDot } from "lucide-react";
 import type { Issue } from "@penclipai/shared";
+import { issueUrl } from "../lib/utils";
+import { displaySeededName } from "../lib/seeded-display";
 
 const WORKSPACE_FILTER_ISSUE_LIMIT = 1000;
 const ISSUES_PAGE_SIZE = 100;
@@ -172,6 +176,17 @@ export function Issues() {
   });
 
   const issues = useMemo(() => mergeIssuePagesStable(issuePages?.pages ?? []) as Issue[], [issuePages]);
+  const attentionIssue = useMemo(
+    () => issues.find((issue) => issue.status === "blocked")
+      ?? issues.find((issue) => issue.status === "in_review"),
+    [issues],
+  );
+  const attentionProject = attentionIssue?.projectId
+    ? projects?.find((project) => project.id === attentionIssue.projectId)
+    : undefined;
+  const attentionAgent = attentionIssue?.assigneeAgentId
+    ? agents?.find((agent) => agent.id === attentionIssue.assigneeAgentId)
+    : undefined;
   const hasMoreServerIssues = syncedSearch.trim().length === 0
     && hasNextPage === true;
   const loadMoreServerIssues = useCallback(() => {
@@ -195,25 +210,74 @@ export function Issues() {
   }
 
   return (
-    <IssuesList
-      issues={issues ?? []}
-      isLoading={isLoading}
-      isLoadingMoreIssues={isFetchingNextPage}
-      error={error as Error | null}
-      agents={agents}
-      projects={projects}
-      liveIssueIds={liveIssueIds}
-      viewStateKey="paperclip:issues-view"
-      issueLinkState={issueLinkState}
-      initialAssignees={searchParams.get("assignee") ? [searchParams.get("assignee")!] : undefined}
-      initialWorkspaces={initialWorkspaces.length > 0 ? initialWorkspaces : undefined}
-      initialSearch={syncedSearch}
-      onSearchChange={handleSearchChange}
-      enableRoutineVisibilityFilter
-      hasMoreIssues={hasMoreServerIssues}
-      onLoadMoreIssues={loadMoreServerIssues}
-      onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}
-      searchFilters={participantAgentId || workspaceIdFilter ? { participantAgentId, workspaceId: workspaceIdFilter } : undefined}
-    />
+    <div className="space-y-4">
+      {attentionIssue ? (
+        <section className="overflow-hidden rounded-lg border border-delivery-amber/30 bg-delivery-amber/8 shadow-sm backdrop-blur-xl">
+          <div className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-delivery-amber/12 text-delivery-amber">
+                <CircleAlert className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium text-delivery-amber">
+                    {t("taskFocus.eyebrow")}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {attentionIssue.identifier}
+                  </span>
+                </div>
+                <h2 className="mt-1 truncate text-sm font-semibold">
+                  {displaySeededName(attentionIssue.title)}
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {attentionIssue.status === "blocked"
+                    ? t("taskFocus.blockedReason")
+                    : t("taskFocus.reviewReason")}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:gap-4">
+              <span>{t("taskFocus.project", {
+                name: attentionProject
+                  ? displaySeededName(attentionProject.name)
+                  : t("taskFocus.unassigned"),
+              })}</span>
+              <span>{t("taskFocus.owner", {
+                name: attentionAgent
+                  ? displaySeededName(attentionAgent.name)
+                  : t("taskFocus.unassigned"),
+              })}</span>
+              <Button asChild size="sm" className="mt-2 sm:mt-0">
+                <Link to={issueUrl(attentionIssue)} state={issueLinkState}>
+                  {t("taskFocus.open")}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+      <IssuesList
+        issues={issues ?? []}
+        isLoading={isLoading}
+        isLoadingMoreIssues={isFetchingNextPage}
+        error={error as Error | null}
+        agents={agents}
+        projects={projects}
+        liveIssueIds={liveIssueIds}
+        viewStateKey="paperclip:issues-view"
+        issueLinkState={issueLinkState}
+        initialAssignees={searchParams.get("assignee") ? [searchParams.get("assignee")!] : undefined}
+        initialWorkspaces={initialWorkspaces.length > 0 ? initialWorkspaces : undefined}
+        initialSearch={syncedSearch}
+        onSearchChange={handleSearchChange}
+        enableRoutineVisibilityFilter
+        hasMoreIssues={hasMoreServerIssues}
+        onLoadMoreIssues={loadMoreServerIssues}
+        onUpdateIssue={(id, data) => updateIssue.mutate({ id, data })}
+        searchFilters={participantAgentId || workspaceIdFilter ? { participantAgentId, workspaceId: workspaceIdFilter } : undefined}
+      />
+    </div>
   );
 }

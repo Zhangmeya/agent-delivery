@@ -6,8 +6,6 @@ import {
   LayoutDashboard,
   DollarSign,
   History,
-  Search,
-  SquarePen,
   Network,
   Boxes,
   Repeat,
@@ -26,13 +24,11 @@ import {
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { NavLink } from "@/lib/router";
 import { SidebarSection } from "./SidebarSection";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarAgents } from "./SidebarAgents";
 import { SidebarProjects } from "./SidebarProjects";
 import { SidebarStarredProjects } from "./SidebarStarredProjects";
-import { useDialogActions } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { useSidebar } from "../context/SidebarContext";
 import { attentionApi } from "../api/attention";
@@ -43,15 +39,12 @@ import { attentionBadgeCount } from "../lib/attention";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import { PluginSlotOutlet } from "@/plugins/slots";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
 
 export function Sidebar() {
   const { t } = useTranslation();
-  const { openNewIssue } = useDialogActions();
   // Every labeled section is collapsible (session-scoped, default open) —
   // one policy across static nav groups and the data-driven sections.
   const [workOpen, setWorkOpen] = useState(true);
@@ -118,9 +111,9 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-full h-full min-h-0 border-r border-border bg-background flex flex-col">
-      {/* Top bar: Company name (bold) + Search — aligned with top sections (no visible border) */}
-      <div className="flex items-center gap-1 px-3 h-12 shrink-0">
+    <aside className="delivery-sidebar flex h-full min-h-0 w-full flex-col border-r border-sidebar-border bg-sidebar/90 backdrop-blur-xl">
+      {/* Product identity + company switcher. Search and creation live in the global top bar. */}
+      <div className="flex h-16 shrink-0 items-center gap-1 px-3">
         <SidebarCompanyMenu />
         {/* In the collapsed rail the search/toggle controls don't fit beside the
             logo — keeping them would overflow the 64px rail and squeeze the logo
@@ -129,18 +122,6 @@ export function Sidebar() {
             rail is still reachable via hover-peek + Pin and Cmd/Ctrl+B. */}
         {!rail ? (
           <>
-            <Button
-              asChild
-              variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground shrink-0"
-              aria-label={t("sidebar.openSearch", { defaultValue: "Open search" })}
-              title={t("sidebar.openSearch", { defaultValue: "Open search" })}
-            >
-              <NavLink to="/search">
-                <Search className="h-4 w-4" />
-              </NavLink>
-            </Button>
             {/* Desktop-only collapse/expand affordance. While peeking (hover flyout
                 over the collapsed rail) it becomes a Pin that promotes the peek to a
                 pinned-expanded sidebar; otherwise it toggles the pinned rail. Mobile
@@ -183,33 +164,10 @@ export function Sidebar() {
 
       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide flex flex-col gap-4 pointer-coarse:gap-3 px-3 py-2">
         <div className="flex flex-col gap-0.5">
-          {/* New Task button aligned with nav items */}
-          {(() => {
-            const newTaskButton = (
-              <button
-                onClick={() => openNewIssue()}
-                data-slot="icon-button"
-                aria-label={rail ? t("sidebar.newIssue", { defaultValue: "New Issue" }) : undefined}
-                className="flex items-center gap-2.5 px-3 py-2 pointer-coarse:py-1.5 text-(length:--text-compact) font-medium text-foreground/80 hover:bg-accent/50 hover:text-foreground transition-colors"
-              >
-                <SquarePen className="h-4 w-4 shrink-0" />
-                <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate"}>
-                  {t("sidebar.newIssue", { defaultValue: "New Issue" })}
-                </span>
-              </button>
-            );
-            return rail ? (
-              <Tooltip>
-                <TooltipTrigger asChild>{newTaskButton}</TooltipTrigger>
-                <TooltipContent side="right">
-                  {t("sidebar.newIssue", { defaultValue: "New Issue" })}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              newTaskButton
-            );
-          })()}
           <SidebarNavItem to="/dashboard" label={t("sidebar.dashboard", { defaultValue: "Dashboard" })} icon={LayoutDashboard} liveCount={liveRunCount} />
+          <SidebarNavItem to="/projects" label={t("sidebar.projects", { defaultValue: "Projects" })} icon={FolderOpen} />
+          <SidebarStarredProjects />
+          <SidebarNavItem to="/issues" label={t("sidebar.issues", { defaultValue: "Tasks" })} icon={CircleDot} />
           <SidebarNavItem
             to="/inbox"
             label={t("sidebar.inbox", { defaultValue: "Inbox" })}
@@ -237,7 +195,6 @@ export function Sidebar() {
           label={t("sidebar.work", { defaultValue: "Work" })}
           collapsible={{ open: workOpen, onOpenChange: setWorkOpen }}
         >
-          <SidebarNavItem to="/issues" label={t("sidebar.issues", { defaultValue: "Tasks" })} icon={CircleDot} />
           {showCases ? (
             <SidebarNavItem
               to="/cases"
@@ -263,12 +220,6 @@ export function Sidebar() {
           <SidebarNavItem to="/skills" label={t("sidebar.skills", { defaultValue: "Skills" })} icon={Boxes} />
           {showWorkspacesLink ? (
             <SidebarNavItem to="/workspaces" label={t("sidebar.workspaces", { defaultValue: "Workspaces" })} icon={GitBranch} />
-          ) : null}
-          {streamlined ? (
-            <>
-              <SidebarNavItem to="/projects" label={t("Projects", { defaultValue: "Projects" })} icon={FolderOpen} />
-              <SidebarStarredProjects />
-            </>
           ) : null}
           <PluginSlotOutlet
             slotTypes={["sidebar"]}

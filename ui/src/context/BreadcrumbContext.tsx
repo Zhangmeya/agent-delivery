@@ -48,7 +48,10 @@ export function buildDocumentTitle(breadcrumbs: Breadcrumb[], companyName?: stri
   const pageParts = breadcrumbs.length === 0
     ? []
     : [...breadcrumbs].reverse().map((breadcrumb) => breadcrumb.label);
-  const companyPart = companyName?.trim() ? [companyName.trim()] : [];
+  const normalizedCompanyName = companyName?.trim();
+  const companyPart = normalizedCompanyName && !pageParts.includes(normalizedCompanyName)
+    ? [normalizedCompanyName]
+    : [];
   const parts = [...pageParts, ...companyPart, BRAND_NAME];
   return parts.join(" • ");
 }

@@ -276,12 +276,12 @@ describe("SidebarAccountMenu", () => {
     });
     await flushReact();
 
-    expect(document.body.textContent).toContain("feature/source-build-labelPaperclip CN 518fc71");
+    expect(document.body.textContent).toContain("feature/source-build-labelAgent Delivery 518fc71");
     expect(document.body.textContent).not.toContain("2026.626.0+58.git.518fc71ce");
-    expect(document.body.querySelector('a[href="https://github.com/penclipai/paperclip-cn/tree/feature%2Fsource-build-label"]')?.textContent).toBe(
+    expect(document.body.querySelector('a[href="https://github.com/Zhangmeya/agent-delivery/tree/feature%2Fsource-build-label"]')?.textContent).toBe(
       "feature/source-build-label",
     );
-    expect(document.body.querySelector('a[href="https://github.com/penclipai/paperclip-cn/commit/518fc71ce1234567890abcdef1234567890abcde"]')?.textContent).toBe(
+    expect(document.body.querySelector('a[href="https://github.com/Zhangmeya/agent-delivery/commit/518fc71ce1234567890abcdef1234567890abcde"]')?.textContent).toBe(
       "518fc71",
     );
 

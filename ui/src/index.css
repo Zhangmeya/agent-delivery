@@ -54,6 +54,16 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-delivery-surface: var(--delivery-surface);
+  --color-delivery-surface-strong: var(--delivery-surface-strong);
+  --color-delivery-surface-subtle: var(--delivery-surface-subtle);
+  --color-delivery-blue: var(--delivery-blue);
+  --color-delivery-cyan: var(--delivery-cyan);
+  --color-delivery-violet: var(--delivery-violet);
+  --color-delivery-amber: var(--delivery-amber);
+  --color-delivery-rose: var(--delivery-rose);
+  --color-delivery-green: var(--delivery-green);
+  --color-delivery-glass-border: var(--delivery-glass-border);
   /* Multiplicative radius ladder (modern shadcn/Tailwind v4 mapping):
      sm/md/lg/xl/2xl/3xl/4xl = 0.6/0.8/1.0/1.4/1.8/2.2/2.6 x the single
      --radius knob (base anchor 0.5rem = 8px; rounded-lg IS the anchor).
@@ -71,41 +81,58 @@
 
 :root {
   color-scheme: light;
-  --radius: 0;
+  --radius: 0.5rem;
   --paperclip-desktop-titlebar-height: 0px;
   --paperclip-available-height: 100vh;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: oklch(0.976 0.012 240);
+  --foreground: oklch(0.25 0.025 255);
+  --card: oklch(0.995 0.004 240 / 88%);
+  --card-foreground: oklch(0.25 0.025 255);
+  --popover: oklch(0.995 0.004 240 / 96%);
+  --popover-foreground: oklch(0.25 0.025 255);
+  --primary: oklch(0.58 0.19 255);
+  --primary-foreground: oklch(0.99 0.002 240);
+  --secondary: oklch(0.95 0.03 220);
+  --secondary-foreground: oklch(0.32 0.065 235);
+  --muted: oklch(0.958 0.014 248);
+  --muted-foreground: oklch(0.52 0.035 255);
+  --accent: oklch(0.93 0.04 245);
+  --accent-foreground: oklch(0.32 0.085 255);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: oklch(0.87 0.028 240 / 72%);
+  --input: oklch(0.87 0.028 240 / 82%);
+  --ring: oklch(0.58 0.19 255);
+  --chart-1: oklch(0.62 0.18 255);
+  --chart-2: oklch(0.7 0.13 205);
+  --chart-3: oklch(0.65 0.16 295);
+  --chart-4: oklch(0.74 0.14 75);
+  --chart-5: oklch(0.67 0.14 155);
+  --sidebar: oklch(0.97 0.018 224 / 94%);
+  --sidebar-foreground: oklch(0.27 0.035 255);
+  --sidebar-primary: oklch(0.58 0.19 255);
+  --sidebar-primary-foreground: oklch(0.99 0.002 240);
+  --sidebar-accent: oklch(0.92 0.04 240);
+  --sidebar-accent-foreground: oklch(0.34 0.09 255);
+  --sidebar-border: oklch(0.86 0.03 230 / 72%);
+  --sidebar-ring: oklch(0.58 0.19 255);
+  --delivery-surface: oklch(0.995 0.004 240 / 72%);
+  --delivery-surface-strong: oklch(0.995 0.004 240 / 90%);
+  --delivery-surface-subtle: oklch(0.965 0.026 232 / 70%);
+  --delivery-blue: oklch(0.61 0.18 255);
+  --delivery-cyan: oklch(0.7 0.13 205);
+  --delivery-violet: oklch(0.65 0.16 295);
+  --delivery-amber: oklch(0.75 0.15 78);
+  --delivery-rose: oklch(0.66 0.18 15);
+  --delivery-green: oklch(0.67 0.14 155);
+  --delivery-glass-border: oklch(0.88 0.035 235 / 72%);
+  --delivery-glass-highlight: oklch(1 0 0 / 78%);
+  --delivery-glass-shadow: 0 16px 42px oklch(0.44 0.055 245 / 10%), 0 2px 8px oklch(0.44 0.055 245 / 6%);
+  --delivery-panel-shadow: 0 10px 28px oklch(0.44 0.055 245 / 8%), inset 0 1px 0 oklch(1 0 0 / 72%);
+  --delivery-canvas-background: linear-gradient(135deg, oklch(0.965 0.034 205) 0%, oklch(0.978 0.018 235) 48%, oklch(0.96 0.028 255) 100%);
+  --gtc-delivery-dashboard-main: minmax(0, 1.85fr) minmax(18rem, 0.8fr);
+  --gtc-delivery-dashboard-projects: minmax(10rem, 1.6fr) minmax(5rem, 0.65fr) minmax(4.5rem, 0.55fr) minmax(5.5rem, 0.65fr) minmax(4rem, 0.45fr) minmax(5.5rem, 0.65fr);
+  --sp-delivery-dashboard-columns: 0.75rem;
   --chip-match-title-bg: oklch(0.97 0.02 265);
   --chip-match-title-fg: oklch(0.4 0.13 265);
   --chip-match-title-border: oklch(0.85 0.05 265);
@@ -245,6 +272,20 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --delivery-surface: oklch(0.23 0.02 250 / 76%);
+  --delivery-surface-strong: oklch(0.25 0.022 250 / 90%);
+  --delivery-surface-subtle: oklch(0.29 0.035 248 / 72%);
+  --delivery-blue: oklch(0.69 0.15 255);
+  --delivery-cyan: oklch(0.75 0.11 205);
+  --delivery-violet: oklch(0.72 0.14 295);
+  --delivery-amber: oklch(0.8 0.13 78);
+  --delivery-rose: oklch(0.72 0.16 15);
+  --delivery-green: oklch(0.73 0.12 155);
+  --delivery-glass-border: oklch(0.68 0.035 245 / 22%);
+  --delivery-glass-highlight: oklch(0.9 0.02 245 / 10%);
+  --delivery-glass-shadow: 0 16px 42px oklch(0.08 0.02 250 / 34%), 0 2px 8px oklch(0.08 0.02 250 / 24%);
+  --delivery-panel-shadow: 0 10px 28px oklch(0.08 0.02 250 / 28%), inset 0 1px 0 oklch(0.9 0.02 245 / 8%);
+  --delivery-canvas-background: linear-gradient(135deg, oklch(0.2 0.035 220) 0%, oklch(0.19 0.025 242) 48%, oklch(0.2 0.035 258) 100%);
   --chip-match-title-bg: oklch(0.27 0.04 265 / 0.5);
   --chip-match-title-fg: oklch(0.78 0.10 265);
   --chip-match-title-border: oklch(0.4 0.06 265);
@@ -1856,6 +1897,7 @@ span.paperclip-mention-chip[data-mention-kind="external-object"] {
   --gtc-62: 1fr minmax(0,18rem);
   --gtc-63: 280px 1fr;
   --gtc-64: minmax(0,20rem) 1fr;
+  --gtc-delivery-issue-detail: minmax(0,1.25fr) minmax(20rem,0.95fr);
   --gtr-1: auto auto; /* Extracted from ui/src/components/ui/card.tsx (grid-rows-[auto_auto]). */
   --gtr-2: 1fr; /* Extracted from ui/src/pages/CompanySkills.tsx (grid-rows-[1fr]). */
   --gtr-3: 0fr; /* Extracted from ui/src/pages/CompanySkills.tsx (grid-rows-[0fr]). */
@@ -1900,6 +1942,118 @@ span.paperclip-mention-chip[data-mention-kind="external-object"] {
   --code-highlight-border-resolved: var(--paperclip-code-highlight-border); /* Extracted from ui/src/components/FileViewerSheet.tsx; fallback dropped in A5 now that --paperclip-code-highlight-border is a real token (was var(--paperclip-code-highlight-border, rgb(234,179,8))). */
   --gradient-extract-25: linear-gradient(135deg,hsl(var(--primary)) 0%,hsl(var(--accent)) 55%,hsl(var(--muted)) 100%); /* Extracted from ui/src/components/SidebarAccountMenu.tsx (bg-[linear-gradient(135deg,hsl(var(--primary))_0%,hsl(var(--accent))_55%,hsl(var(--muted))_100%)]). */
   --gradient-extract-26: linear-gradient(135deg,hsl(var(--primary)) 0%,hsl(var(--accent)) 58%,color-mix(in oklab,hsl(var(--background)) 76%,white 24%) 100%); /* Extracted from ui/src/pages/ProfileSettings.tsx (bg-[linear-gradient(135deg,hsl(var(--primary))_0%,hsl(var(--accent))_58%,color-mix(in_oklab,hsl(var(--background))_76%,white_24%)_100%)]). */
+}
+
+.delivery-project-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(16rem, 2.3fr)
+    minmax(7rem, 0.8fr)
+    minmax(7rem, 0.8fr)
+    minmax(4rem, 0.45fr)
+    minmax(6rem, 0.55fr)
+    minmax(9rem, 0.8fr);
+  gap: 0.75rem;
+}
+
+.delivery-app-shell {
+  background: var(--delivery-canvas-background);
+}
+
+.delivery-main {
+  background: linear-gradient(180deg, color-mix(in oklab, var(--background) 22%, transparent), color-mix(in oklab, var(--background) 55%, transparent));
+}
+
+.delivery-sidebar,
+.delivery-topbar,
+.delivery-properties-panel {
+  box-shadow: inset -1px 0 0 var(--delivery-glass-highlight);
+}
+
+.delivery-topbar {
+  background: color-mix(in oklab, var(--delivery-surface-strong) 88%, transparent);
+  backdrop-filter: blur(24px) saturate(128%);
+  box-shadow: inset 0 -1px 0 var(--delivery-glass-highlight), 0 5px 18px oklch(0.44 0.055 245 / 5%);
+}
+
+.delivery-search-trigger {
+  background: color-mix(in oklab, var(--delivery-surface-strong) 82%, transparent);
+  box-shadow: var(--delivery-panel-shadow);
+}
+
+.delivery-glass-panel,
+.delivery-detail-panel {
+  border: 1px solid var(--delivery-glass-border);
+  background: color-mix(in oklab, var(--delivery-surface-strong) 84%, transparent);
+  box-shadow: var(--delivery-glass-shadow);
+  backdrop-filter: blur(22px) saturate(125%);
+}
+
+.delivery-overview-card {
+  box-shadow: var(--delivery-glass-shadow);
+}
+
+.delivery-overview-card[data-tone="blue"] {
+  background: linear-gradient(145deg, color-mix(in oklab, var(--delivery-blue) 10%, var(--delivery-surface-strong)), var(--delivery-surface));
+}
+
+.delivery-overview-card[data-tone="cyan"] {
+  background: linear-gradient(145deg, color-mix(in oklab, var(--delivery-cyan) 11%, var(--delivery-surface-strong)), var(--delivery-surface));
+}
+
+.delivery-overview-card[data-tone="violet"] {
+  background: linear-gradient(145deg, color-mix(in oklab, var(--delivery-violet) 10%, var(--delivery-surface-strong)), var(--delivery-surface));
+}
+
+.delivery-action-strip,
+.delivery-dashboard-metrics,
+.delivery-dashboard-panel {
+  box-shadow: var(--delivery-panel-shadow);
+}
+
+.delivery-dashboard-main-grid {
+  grid-template-columns: var(--gtc-delivery-dashboard-main);
+}
+
+.delivery-dashboard-project-grid {
+  display: grid;
+  grid-template-columns: var(--gtc-delivery-dashboard-projects);
+  column-gap: var(--sp-delivery-dashboard-columns);
+}
+
+.delivery-issue-detail-grid {
+  display: grid;
+  grid-template-columns: var(--gtc-delivery-issue-detail);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.delivery-detail-panel {
+  min-height: calc(var(--paperclip-available-height) - 6rem);
+  max-height: calc(var(--paperclip-available-height) - 6rem);
+  overflow-y: auto;
+}
+
+@media (max-width: 73.999rem) {
+  .delivery-dashboard-main-grid {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+
+  .delivery-issue-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .delivery-detail-panel {
+    min-height: auto;
+    max-height: none;
+  }
+}
+
+@media (max-width: 47.999rem) {
+  .delivery-project-grid {
+    display: block;
+  }
 }
 
 /* ── ALLOWLIST (Phase 2, design/token-extraction) ──────────────────────────

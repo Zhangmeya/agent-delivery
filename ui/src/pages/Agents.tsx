@@ -564,7 +564,7 @@ export function Agents() {
 
       {/* List view */}
       {effectiveView === "list" && filtered.length > 0 && (
-        <div>
+        <div className="overflow-hidden rounded-lg border border-border bg-card/80 shadow-sm backdrop-blur">
           {filtered.map(renderAgentRow)}
         </div>
       )}
@@ -577,7 +577,7 @@ export function Agents() {
 
       {/* Org chart view */}
       {effectiveView === "org" && filteredOrg.length > 0 && (
-        <div className="py-1">
+        <div className="rounded-lg border border-border bg-card/80 py-1 shadow-sm backdrop-blur">
           {filteredOrg.map((node) => (
             <OrgTreeNode
               key={node.id}

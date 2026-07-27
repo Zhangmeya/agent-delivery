@@ -12,11 +12,11 @@ export function PropertiesPanel() {
 
   return (
     <aside
-      className="hidden md:flex border-l border-border bg-card flex-col shrink-0 overflow-hidden transition-(--tp-width-opacity) duration-200 ease-in-out h-full"
+      className="delivery-properties-panel hidden h-full shrink-0 flex-col overflow-hidden border-l border-delivery-glass-border bg-delivery-surface-strong/90 backdrop-blur-xl transition-(--tp-width-opacity) duration-200 ease-in-out md:flex"
       style={{ width: panelVisible ? 320 : 0, opacity: panelVisible ? 1 : 0 }}
     >
       <div className="w-80 flex-1 flex flex-col min-w-(--sz-320px) min-h-0">
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+        <div className="flex h-12 items-center justify-between border-b border-border px-4">
           <span className="text-sm font-medium">{t("Properties")}</span>
           <Button variant="ghost" size="icon-xs" onClick={() => setPanelVisible(false)}>
             <X className="h-4 w-4" />

@@ -530,7 +530,7 @@ describe("buildIssueChatMessages", () => {
     });
   });
 
-  it("uses the CN brand when a system notice references an unavailable agent", () => {
+  it("uses the Agent Delivery brand when a system notice references an unavailable agent", () => {
     const messages = buildIssueChatMessages({
       comments: [
         createComment({
@@ -549,7 +549,7 @@ describe("buildIssueChatMessages", () => {
       role: "system",
       metadata: {
         custom: {
-          authorName: "Paperclip CN",
+          authorName: "Agent Delivery",
           authorType: "agent",
           authorAgentId: "agent-missing",
         },

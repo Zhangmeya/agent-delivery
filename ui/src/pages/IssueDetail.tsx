@@ -30,6 +30,7 @@ import { assigneeValueFromSelection, formatAssigneeUserLabel, formatUserLabel, s
 import { buildCompanyUserInlineOptions, buildCompanyUserLabelMap, buildCompanyUserProfileMap, buildMarkdownMentionOptions, isAgentTaskTarget } from "../lib/company-members";
 import { extractIssueTimelineEvents } from "../lib/issue-timeline-events";
 import { queryKeys } from "../lib/queryKeys";
+import { displaySeededName } from "../lib/seeded-display";
 import { keepPreviousDataForSameQueryTail } from "../lib/query-placeholder-data";
 import { collectLiveIssueIds } from "../lib/liveIssueIds";
 import {
@@ -1947,7 +1948,7 @@ export function IssueDetail() {
       .filter(isAgentTaskTarget)
       .sort((a, b) => a.name.localeCompare(b.name));
     for (const agent of activeAgents) {
-      options.push({ id: `agent:${agent.id}`, label: agent.name });
+      options.push({ id: `agent:${agent.id}`, label: displaySeededName(agent.name) });
     }
     if (currentUserId) {
       options.push({ id: `user:${currentUserId}`, label: "Me" });
@@ -1974,7 +1975,7 @@ export function IssueDetail() {
     () => mergeIssueComments(comments ?? [], optimisticComments),
     [comments, optimisticComments],
   );
-  const breadcrumbTitle = issue?.title ?? issueId ?? "Task";
+  const breadcrumbTitle = displaySeededName(issue?.title) || issueId || "Task";
   const breadcrumbStatus = issue?.status;
   const breadcrumbBlockerAttention = issue?.blockerAttention;
   // Stable identity for the breadcrumb status glyph. The glyph's shape/colour
@@ -4077,7 +4078,9 @@ export function IssueDetail() {
 
   return (
     <FileViewerProvider issueId={issue.id} enabled={fileViewerEnabled}>
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-4">
+      <div className="delivery-issue-detail-grid">
+      <div className="delivery-detail-panel min-w-0 space-y-6 rounded-lg p-4">
       {/* Parent chain breadcrumb */}
       {ancestors.length > 0 && (
         <nav className="flex items-center gap-1 text-xs text-muted-foreground flex-wrap">
@@ -4101,7 +4104,7 @@ export function IssueDetail() {
             </span>
           ))}
           <ChevronRight className="h-3 w-3 shrink-0" />
-          <span className="text-foreground/60 truncate max-w-(--sz-200px)">{issue.title}</span>
+          <span className="text-foreground/60 truncate max-w-(--sz-200px)">{displaySeededName(issue.title)}</span>
         </nav>
       )}
 
@@ -4281,7 +4284,7 @@ export function IssueDetail() {
               className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded px-1 -mx-1 py-0.5 min-w-0"
             >
               <Hexagon className="h-3 w-3 shrink-0" />
-              <span className="truncate">{resolvedProject?.name ?? issue.project?.name ?? issue.projectId.slice(0, 8)}</span>
+              <span className="truncate">{displaySeededName(resolvedProject?.name ?? issue.project?.name) || issue.projectId.slice(0, 8)}</span>
             </Link>
           ) : (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground opacity-50 px-1 -mx-1 py-0.5">
@@ -4510,6 +4513,7 @@ export function IssueDetail() {
 
         <InlineEditor
           value={issue.title}
+          previewTransform={displaySeededName}
           onSave={(title) => updateIssue.mutateAsync({ title })}
           as="h2"
           className="text-xl font-bold"
@@ -4736,8 +4740,9 @@ export function IssueDetail() {
         );
       })()}
 
-      <Separator />
+      </div>
 
+      <div className="delivery-detail-panel min-w-0 rounded-lg p-3">
       <Tabs value={detailTab} onValueChange={setDetailTab} className="space-y-3">
         <TabsList variant="line" className="w-full justify-start gap-1">
           <TabsTrigger value="chat" className="gap-1.5">
@@ -4901,6 +4906,8 @@ export function IssueDetail() {
           </TabsContent>
         )}
       </Tabs>
+      </div>
+      </div>
 
       <Dialog open={treeControlOpen} onOpenChange={setTreeControlOpen}>
         <DialogContent className="flex max-h-(--sz-calc-18) flex-col gap-0 overflow-hidden p-0 sm:max-w-(--sz-560px)">

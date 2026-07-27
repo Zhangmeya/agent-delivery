@@ -1,59 +1,192 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
-import { dashboardApi } from "../api/dashboard";
-import { activityApi } from "../api/activity";
-import { accessApi } from "../api/access";
-import { issuesApi } from "../api/issues";
+import type { Agent, DashboardSummary, Issue, Project } from "@penclipai/shared";
+import type { LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Bot,
+  CheckCircle2,
+  CircleDot,
+  Clock3,
+  FolderKanban,
+  LayoutDashboard,
+  ShieldAlert,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
+import { Link } from "@/lib/router";
 import { agentsApi } from "../api/agents";
+import { accessApi } from "../api/access";
+import { dashboardApi } from "../api/dashboard";
+import { issuesApi } from "../api/issues";
 import { projectsApi } from "../api/projects";
-import { buildCompanyUserProfileMap } from "../lib/company-members";
+import { EmptyState } from "../components/EmptyState";
+import { PageSkeleton } from "../components/PageSkeleton";
+import { SmokeLabDashboardCard } from "../components/SmokeLabDashboardCard";
+import { translateRoleLabel } from "../components/agent-config-primitives";
+import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { useDialogActions } from "../context/DialogContext";
-import { useBreadcrumbs } from "../context/BreadcrumbContext";
-import { queryKeys } from "../lib/queryKeys";
-import { MetricCard } from "../components/MetricCard";
-import { EmptyState } from "../components/EmptyState";
-import { Card } from "@/components/ui/card";
-import { StatusIcon } from "../components/StatusIcon";
 import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
-
-import { ActivityRow } from "../components/ActivityRow";
-import { Identity } from "../components/Identity";
-import { timeAgo } from "../lib/timeAgo";
-import { cn, formatCents } from "../lib/utils";
-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
-import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
-import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
-import { PageSkeleton } from "../components/PageSkeleton";
-import type { Agent, Issue } from "@penclipai/shared";
-import { PluginSlotOutlet } from "@/plugins/slots";
+import { buildCompanyUserProfileMap } from "../lib/company-members";
 import { displaySeededName } from "../lib/seeded-display";
-import { SmokeLabDashboardCard } from "../components/SmokeLabDashboardCard";
+import { getWorkloadLevel } from "../lib/delivery-dashboard";
+import { queryKeys } from "../lib/queryKeys";
+import { cn } from "../lib/utils";
+import { PluginSlotOutlet } from "@/plugins/slots";
 
-const DASHBOARD_ACTIVITY_LIMIT = 10;
+const PROJECT_ROW_LIMIT = 6;
+const ACTION_ROW_LIMIT = 6;
+const RESOURCE_ROW_LIMIT = 4;
 
-function getRecentIssues(issues: Issue[]): Issue[] {
-  return [...issues]
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+type ProjectHealth = "risk" | "attention" | "healthy";
+type ActionTone = "risk" | "attention" | "info";
+type WorkloadTone = "risk" | "attention" | "active" | "available";
+
+type ProjectDeliveryRow = {
+  project: Project;
+  stage: string;
+  health: ProjectHealth;
+  blockedCount: number;
+  openTaskCount: number;
+  owner: string;
+  targetDate: string | null;
+  score: number;
+};
+
+type ActionItem = {
+  key: string;
+  title: string;
+  detail: string;
+  to: string;
+  icon: LucideIcon;
+  tone: ActionTone;
+};
+
+type ResourceRow = {
+  key: string;
+  name: string;
+  subtitle: string;
+  to: string | null;
+  kind: "agent" | "human";
+  activeCount: number;
+  level: number;
+  tone: WorkloadTone;
+  statusLabel: string;
+};
+
+function toTimestamp(value: Date | string | null | undefined) {
+  if (!value) return 0;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function isOpenIssue(issue: Issue) {
+  return issue.status !== "done" && issue.status !== "cancelled";
+}
+
+function projectStage(project: Project, t: ReturnType<typeof useTranslation>["t"]) {
+  if (project.pauseReason) return t("dashboard.stagePaused", { defaultValue: "已暂停" });
+  switch (project.status) {
+    case "backlog":
+      return t("dashboard.stageBacklog", { defaultValue: "待规划" });
+    case "planned":
+      return t("dashboard.stagePlanned", { defaultValue: "待启动" });
+    case "in_progress":
+      return t("dashboard.stageDelivery", { defaultValue: "执行交付" });
+    case "completed":
+      return t("dashboard.stageCompleted", { defaultValue: "已完成" });
+    case "cancelled":
+      return t("dashboard.stageCancelled", { defaultValue: "已取消" });
+    default:
+      return project.status;
+  }
+}
+
+function healthLabel(health: ProjectHealth, t: ReturnType<typeof useTranslation>["t"]) {
+  if (health === "risk") return t("dashboard.healthRisk", { defaultValue: "高风险" });
+  if (health === "attention") return t("dashboard.healthAttention", { defaultValue: "需关注" });
+  return t("dashboard.healthHealthy", { defaultValue: "正常" });
+}
+
+function formatTargetDate(value: string | null, language: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(language, { month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function Panel({
+  title,
+  icon: Icon,
+  action,
+  children,
+  className,
+}: {
+  title: string;
+  icon: LucideIcon;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cn(
+      "delivery-dashboard-panel min-h-0 overflow-hidden rounded-lg border border-delivery-glass-border bg-delivery-surface-strong backdrop-blur-xl",
+      className,
+    )}>
+      <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/70 px-3.5">
+        <Icon className="h-4 w-4 text-delivery-blue" />
+        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</h2>
+        {action}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function HealthBadge({ health, label }: { health: ProjectHealth; label: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-6 items-center rounded-md px-2 text-xs font-medium",
+        health === "risk" && "bg-destructive/10 text-destructive",
+        health === "attention" && "bg-delivery-amber/15 text-foreground",
+        health === "healthy" && "bg-delivery-green/12 text-delivery-green",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function WorkloadMeter({ level, tone }: { level: number; tone: WorkloadTone }) {
+  return (
+    <span className="flex w-20 shrink-0 gap-1" aria-hidden="true">
+      {[1, 2, 3, 4].map((step) => (
+        <span
+          key={step}
+          className={cn(
+            "h-1.5 flex-1 rounded-full",
+            step > level && "bg-muted",
+            step <= level && tone === "risk" && "bg-destructive",
+            step <= level && tone === "attention" && "bg-delivery-amber",
+            step <= level && tone === "active" && "bg-delivery-blue",
+            step <= level && tone === "available" && "bg-delivery-green",
+          )}
+        />
+      ))}
+    </span>
+  );
 }
 
 export function Dashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { selectedCompanyId, companies } = useCompany();
   const { openOnboarding } = useDialogActions();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const [animatedActivityIds, setAnimatedActivityIds] = useState<Set<string>>(new Set());
-  const seenActivityIdsRef = useRef<Set<string>>(new Set());
-  const hydratedActivityRef = useRef(false);
-  const activityAnimationTimersRef = useRef<number[]>([]);
-
-  const { data: agents } = useQuery({
-    queryKey: queryKeys.agents.list(selectedCompanyId!),
-    queryFn: () => agentsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
 
   useEffect(() => {
     setBreadcrumbs([{ label: t("dashboard.title") }]);
@@ -66,133 +199,282 @@ export function Dashboard() {
     queryKey: dashboardQueryKey,
     enabled: !!selectedCompanyId,
   });
-  const { data, isLoading, error, dataUpdatedAt: dashboardUpdatedAt } = useQuery({
+  const {
+    data,
+    isLoading,
+    error,
+    dataUpdatedAt: dashboardUpdatedAt,
+  } = useQuery({
     queryKey: dashboardQueryKey,
     queryFn: () => dashboardApi.summary(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
   usePublishSharedQueryData(sharedDashboard, data, dashboardUpdatedAt);
 
-  const activityQueryKey = [...queryKeys.activity(selectedCompanyId!), { limit: DASHBOARD_ACTIVITY_LIMIT }] as const;
-  const sharedActivity = useSharedPollingQuery({
-    companyId: selectedCompanyId,
-    resourceKey: `activity:limit:${DASHBOARD_ACTIVITY_LIMIT}`,
-    queryKey: activityQueryKey,
+  const { data: agents } = useQuery({
+    queryKey: queryKeys.agents.list(selectedCompanyId!),
+    queryFn: () => agentsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
-  const { data: activity, dataUpdatedAt: activityUpdatedAt } = useQuery({
-    queryKey: activityQueryKey,
-    queryFn: () => activityApi.list(selectedCompanyId!, { limit: DASHBOARD_ACTIVITY_LIMIT }),
-    enabled: !!selectedCompanyId,
-  });
-  usePublishSharedQueryData(sharedActivity, activity, activityUpdatedAt);
-
   const { data: issues } = useQuery({
     queryKey: queryKeys.issues.list(selectedCompanyId!),
     queryFn: () => issuesApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
-
   const { data: projects } = useQuery({
     queryKey: queryKeys.projects.list(selectedCompanyId!),
     queryFn: () => projectsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
-
   const { data: companyMembers } = useQuery({
     queryKey: queryKeys.access.companyUserDirectory(selectedCompanyId!),
     queryFn: () => accessApi.listUserDirectory(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
 
+  const enabledAgents = useMemo(
+    () => (agents ?? []).filter((agent) => agent.status !== "terminated"),
+    [agents],
+  );
+  const openIssues = useMemo(() => (issues ?? []).filter(isOpenIssue), [issues]);
+
+  const agentMap = useMemo(() => {
+    const map = new Map<string, Agent>();
+    for (const agent of enabledAgents) map.set(agent.id, agent);
+    return map;
+  }, [enabledAgents]);
+
   const userProfileMap = useMemo(
     () => buildCompanyUserProfileMap(companyMembers?.users),
     [companyMembers?.users],
   );
 
-  const recentIssues = issues ? getRecentIssues(issues) : [];
-  const recentActivity = useMemo(() => (activity ?? []).slice(0, 10), [activity]);
+  const blockedIssueCount = data?.tasks.blocked
+    ?? openIssues.filter((issue) => issue.status === "blocked").length;
 
-  useEffect(() => {
-    for (const timer of activityAnimationTimersRef.current) {
-      window.clearTimeout(timer);
-    }
-    activityAnimationTimersRef.current = [];
-    seenActivityIdsRef.current = new Set();
-    hydratedActivityRef.current = false;
-    setAnimatedActivityIds(new Set());
-  }, [selectedCompanyId]);
-
-  useEffect(() => {
-    if (recentActivity.length === 0) return;
-
-    const seen = seenActivityIdsRef.current;
-    const currentIds = recentActivity.map((event) => event.id);
-
-    if (!hydratedActivityRef.current) {
-      for (const id of currentIds) seen.add(id);
-      hydratedActivityRef.current = true;
-      return;
+  const projectRows = useMemo<ProjectDeliveryRow[]>(() => {
+    const blockedByProject = new Map<string, number>();
+    const openByProject = new Map<string, number>();
+    for (const issue of openIssues) {
+      if (!issue.projectId) continue;
+      openByProject.set(issue.projectId, (openByProject.get(issue.projectId) ?? 0) + 1);
+      if (issue.status === "blocked") {
+        blockedByProject.set(issue.projectId, (blockedByProject.get(issue.projectId) ?? 0) + 1);
+      }
     }
 
-    const newIds = currentIds.filter((id) => !seen.has(id));
-    if (newIds.length === 0) {
-      for (const id of currentIds) seen.add(id);
-      return;
+    const now = Date.now();
+    return (projects ?? [])
+      .filter((project) => project.status !== "completed" && project.status !== "cancelled")
+      .map((project) => {
+        const blockedCount = blockedByProject.get(project.id) ?? 0;
+        const targetTimestamp = toTimestamp(project.targetDate);
+        const overdue = targetTimestamp > 0 && targetTimestamp < now;
+        const health: ProjectHealth = project.pauseReason || blockedCount >= 2
+          ? "risk"
+          : blockedCount > 0 || overdue
+            ? "attention"
+            : "healthy";
+        const score = (health === "risk" ? 1000 : health === "attention" ? 500 : 0)
+          + blockedCount * 20
+          + (overdue ? 10 : 0)
+          + toTimestamp(project.updatedAt) / 1e15;
+
+        return {
+          project,
+          stage: projectStage(project, t),
+          health,
+          blockedCount,
+          openTaskCount: openByProject.get(project.id) ?? 0,
+          owner: project.leadAgentId
+            ? displaySeededName(agentMap.get(project.leadAgentId)?.name ?? t("dashboard.unknownOwner", { defaultValue: "未知负责人" }))
+            : t("dashboard.unassignedOwner", { defaultValue: "未指定" }),
+          targetDate: formatTargetDate(project.targetDate, i18n.language),
+          score,
+        };
+      })
+      .sort((left, right) => right.score - left.score)
+      .slice(0, PROJECT_ROW_LIMIT);
+  }, [agentMap, i18n.language, openIssues, projects, t]);
+
+  const highRiskProjectCount = useMemo(() => {
+    const blockedByProject = new Map<string, number>();
+    for (const issue of openIssues) {
+      if (issue.status !== "blocked" || !issue.projectId) continue;
+      blockedByProject.set(issue.projectId, (blockedByProject.get(issue.projectId) ?? 0) + 1);
+    }
+    return (projects ?? []).filter((project) => (
+      project.status !== "completed"
+      && project.status !== "cancelled"
+      && (project.pauseReason !== null || (blockedByProject.get(project.id) ?? 0) >= 2)
+    )).length;
+  }, [openIssues, projects]);
+
+  const actionItems = useMemo<ActionItem[]>(() => {
+    const items: ActionItem[] = [];
+
+    if ((data?.pendingApprovals ?? 0) > 0) {
+      items.push({
+        key: "approvals",
+        title: t("dashboard.pendingApprovalAction", {
+          defaultValue: "{{count}} 项审批等待处理",
+          count: data?.pendingApprovals ?? 0,
+        }),
+        detail: t("dashboard.pendingApprovalDetail", { defaultValue: "需要管理者确认后才能继续执行" }),
+        to: "/approvals",
+        icon: ShieldAlert,
+        tone: "attention",
+      });
     }
 
-    setAnimatedActivityIds((prev) => {
-      const next = new Set(prev);
-      for (const id of newIds) next.add(id);
-      return next;
+    for (const issue of openIssues
+      .filter((item) => item.status === "blocked")
+      .sort((left, right) => toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt))) {
+      items.push({
+        key: "blocked-" + issue.id,
+        title: displaySeededName(issue.title),
+        detail: t("dashboard.blockedIssueAction", {
+          defaultValue: "{{identifier}} · 任务已阻塞",
+          identifier: issue.identifier ?? issue.id.slice(0, 8),
+        }),
+        to: "/issues/" + (issue.identifier ?? issue.id),
+        icon: AlertTriangle,
+        tone: "risk",
+      });
+    }
+
+    for (const issue of openIssues
+      .filter((item) => item.status === "in_review" || item.priority === "critical" || item.priority === "high")
+      .sort((left, right) => toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt))) {
+      if (items.some((item) => item.key === "blocked-" + issue.id)) continue;
+      items.push({
+        key: "review-" + issue.id,
+        title: displaySeededName(issue.title),
+        detail: issue.status === "in_review"
+          ? t("dashboard.reviewIssueAction", { defaultValue: "任务等待评审" })
+          : t("dashboard.priorityIssueAction", { defaultValue: "高优先级任务需要关注" }),
+        to: "/issues/" + (issue.identifier ?? issue.id),
+        icon: CircleDot,
+        tone: "attention",
+      });
+    }
+
+    for (const agent of enabledAgents
+      .filter((item) => item.status === "error" || item.status === "paused")
+      .sort((left, right) => toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt))) {
+      items.push({
+        key: "agent-" + agent.id,
+        title: displaySeededName(agent.name),
+        detail: agent.status === "paused"
+          ? t("dashboard.agentPausedAction", { defaultValue: "智能体已暂停" })
+          : t("dashboard.agentErrorAction", { defaultValue: "智能体运行异常" }),
+        to: "/agents/" + agent.id,
+        icon: Bot,
+        tone: agent.status === "error" ? "risk" : "attention",
+      });
+    }
+
+    return items.slice(0, ACTION_ROW_LIMIT);
+  }, [data?.pendingApprovals, enabledAgents, openIssues, t]);
+
+  const resourceRows = useMemo<ResourceRow[]>(() => {
+    const activeByAgent = new Map<string, number>();
+    const activeByUser = new Map<string, number>();
+    for (const issue of openIssues) {
+      if (issue.assigneeAgentId) {
+        activeByAgent.set(issue.assigneeAgentId, (activeByAgent.get(issue.assigneeAgentId) ?? 0) + 1);
+      }
+      if (issue.assigneeUserId) {
+        activeByUser.set(issue.assigneeUserId, (activeByUser.get(issue.assigneeUserId) ?? 0) + 1);
+      }
+    }
+
+    const rows: ResourceRow[] = enabledAgents.map((agent) => {
+      const activeCount = activeByAgent.get(agent.id) ?? 0;
+      const isUnavailable = agent.status === "error" || agent.status === "paused";
+      const tone: WorkloadTone = isUnavailable
+        ? "risk"
+        : activeCount >= 4
+          ? "risk"
+          : activeCount >= 2
+            ? "attention"
+            : activeCount > 0
+              ? "active"
+              : "available";
+      return {
+        key: "agent-" + agent.id,
+        name: displaySeededName(agent.name),
+        subtitle: displaySeededName(agent.title)
+          || translateRoleLabel(t, agent.role)
+          || t("dashboard.agentResource", { defaultValue: "智能体" }),
+        to: "/agents/" + agent.id,
+        kind: "agent" as const,
+        activeCount,
+        level: getWorkloadLevel(activeCount, isUnavailable),
+        tone,
+        statusLabel: isUnavailable
+          ? t("dashboard.workloadIntervention", { defaultValue: "需介入" })
+          : activeCount >= 4
+            ? t("dashboard.workloadOverload", { defaultValue: "超载" })
+            : activeCount >= 2
+              ? t("dashboard.workloadBusy", { defaultValue: "接近饱和" })
+              : activeCount > 0
+                ? t("dashboard.workloadActive", { defaultValue: "执行中" })
+                : t("dashboard.workloadAvailable", { defaultValue: "可用" }),
+      };
     });
 
-    for (const id of newIds) seen.add(id);
-
-    const timer = window.setTimeout(() => {
-      setAnimatedActivityIds((prev) => {
-        const next = new Set(prev);
-        for (const id of newIds) next.delete(id);
-        return next;
+    for (const [userId, profile] of userProfileMap) {
+      const activeCount = activeByUser.get(userId) ?? 0;
+      const tone: WorkloadTone = activeCount >= 4
+        ? "risk"
+        : activeCount >= 2
+          ? "attention"
+          : activeCount > 0
+            ? "active"
+            : "available";
+      rows.push({
+        key: "human-" + userId,
+        name: profile.label,
+        subtitle: t("dashboard.humanResource", { defaultValue: "团队成员" }),
+        to: null,
+        kind: "human",
+        activeCount,
+        level: getWorkloadLevel(activeCount),
+        tone,
+        statusLabel: activeCount >= 4
+          ? t("dashboard.workloadOverload", { defaultValue: "超载" })
+          : activeCount >= 2
+            ? t("dashboard.workloadBusy", { defaultValue: "接近饱和" })
+            : activeCount > 0
+              ? t("dashboard.workloadActive", { defaultValue: "执行中" })
+              : t("dashboard.workloadAvailable", { defaultValue: "可用" }),
       });
-      activityAnimationTimersRef.current = activityAnimationTimersRef.current.filter((t) => t !== timer);
-    }, 980);
-    activityAnimationTimersRef.current.push(timer);
-  }, [recentActivity]);
+    }
 
-  useEffect(() => {
-    return () => {
-      for (const timer of activityAnimationTimersRef.current) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, []);
+    const toneScore: Record<WorkloadTone, number> = { risk: 4, attention: 3, active: 2, available: 1 };
+    return rows
+      .sort((left, right) => toneScore[right.tone] - toneScore[left.tone] || right.activeCount - left.activeCount)
+      .slice(0, RESOURCE_ROW_LIMIT);
+  }, [enabledAgents, openIssues, t, userProfileMap]);
 
-  const agentMap = useMemo(() => {
-    const map = new Map<string, Agent>();
-    for (const a of agents ?? []) map.set(a.id, a);
-    return map;
-  }, [agents]);
-
-  const entityNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.identifier ?? i.id.slice(0, 8));
-    for (const a of agents ?? []) map.set(`agent:${a.id}`, displaySeededName(a.name));
-    for (const p of projects ?? []) map.set(`project:${p.id}`, displaySeededName(p.name));
-    return map;
-  }, [issues, agents, projects]);
-
-  const entityTitleMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.title);
-    return map;
-  }, [issues]);
-
-  const agentName = (id: string | null) => {
-    if (!id || !agents) return null;
-    const agent = agents.find((a) => a.id === id);
-    return agent ? displaySeededName(agent.name) : null;
-  };
+  const inDeliveryProjectCount = (projects ?? []).filter((project) => (
+    project.status !== "completed" && project.status !== "cancelled"
+  )).length;
+  const pendingActionCount = openIssues.filter((issue) => (
+    issue.status === "blocked"
+    || issue.status === "in_review"
+    || issue.priority === "critical"
+    || issue.priority === "high"
+  )).length + enabledAgents.filter((agent) => agent.status === "error" || agent.status === "paused").length
+    + (data?.pendingApprovals ?? 0);
+  const availableAgentCount = enabledAgents.filter((agent) => (
+    agent.status !== "error"
+    && agent.status !== "paused"
+    && !openIssues.some((issue) => issue.assigneeAgentId === agent.id)
+  )).length;
+  const primaryAction = actionItems[0] ?? null;
+  const hasNoAgents = agents !== undefined && enabledAgents.length === 0;
 
   if (!selectedCompanyId) {
     if (companies.length === 0) {
@@ -205,225 +487,298 @@ export function Dashboard() {
         />
       );
     }
-    return (
-      <EmptyState icon={LayoutDashboard} message={t("dashboard.createOrSelectCompany")} />
-    );
+    return <EmptyState icon={LayoutDashboard} message={t("dashboard.createOrSelectCompany")} />;
   }
 
   if (isLoading) {
     return <PageSkeleton variant="dashboard" />;
   }
 
-  const hasNoAgents = agents !== undefined && agents.length === 0;
+  const metrics = [
+    {
+      label: t("dashboard.inDeliveryProjects", { defaultValue: "在交项目" }),
+      value: inDeliveryProjectCount,
+      icon: FolderKanban,
+      tone: "text-delivery-blue",
+    },
+    {
+      label: t("dashboard.highRiskProjects", { defaultValue: "高风险项目" }),
+      value: highRiskProjectCount,
+      icon: AlertTriangle,
+      tone: highRiskProjectCount > 0 ? "text-destructive" : "text-muted-foreground",
+    },
+    {
+      label: t("dashboard.pendingActions", { defaultValue: "待处理事项" }),
+      value: pendingActionCount,
+      icon: ShieldAlert,
+      tone: pendingActionCount > 0 ? "text-delivery-amber" : "text-muted-foreground",
+    },
+    {
+      label: t("dashboard.blockedTasks", { defaultValue: "阻塞任务" }),
+      value: blockedIssueCount,
+      icon: CircleDot,
+      tone: blockedIssueCount > 0 ? "text-destructive" : "text-muted-foreground",
+    },
+    {
+      label: t("dashboard.availableAgents", { defaultValue: "可用 Agent" }),
+      value: availableAgentCount,
+      icon: Bot,
+      tone: "text-delivery-green",
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      {error && <p className="text-sm text-destructive">{error.message}</p>}
+    <div className="space-y-2 pb-2">
+      {error && (
+        <div className="rounded-lg border border-destructive/25 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+          {error.message}
+        </div>
+      )}
 
-      {hasNoAgents && (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/25 dark:bg-amber-950/60">
-          <div className="flex items-center gap-2.5">
-            <Bot className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <p className="text-sm text-amber-900 dark:text-amber-100">
-              {t("dashboard.noAgents")}
-            </p>
-          </div>
+      {hasNoAgents ? (
+        <div className="delivery-action-strip flex h-10 items-center gap-2 rounded-lg border border-delivery-amber/30 bg-delivery-surface-strong px-3 backdrop-blur-xl">
+          <Bot className="h-4 w-4 shrink-0 text-delivery-amber" />
+          <p className="min-w-0 flex-1 truncate text-sm">{t("dashboard.noAgents")}</p>
           <button
-            onClick={() => openOnboarding({ initialStep: 2, companyId: selectedCompanyId! })}
-            className="text-sm font-medium text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100 underline underline-offset-2 shrink-0"
+            type="button"
+            onClick={() => openOnboarding({ initialStep: 2, companyId: selectedCompanyId })}
+            className="shrink-0 text-xs font-medium text-foreground hover:underline"
           >
             {t("dashboard.createOneHere")}
           </button>
         </div>
+      ) : primaryAction ? (
+        <Link
+          to={primaryAction.to}
+          className="delivery-action-strip flex h-10 items-center gap-2 rounded-lg border border-delivery-glass-border bg-delivery-surface-strong px-3 text-inherit no-underline backdrop-blur-xl"
+        >
+          <primaryAction.icon className={cn(
+            "h-4 w-4 shrink-0",
+            primaryAction.tone === "risk" && "text-destructive",
+            primaryAction.tone === "attention" && "text-delivery-amber",
+            primaryAction.tone === "info" && "text-delivery-blue",
+          )} />
+          <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+            {t("dashboard.mustHandle", { defaultValue: "必须处理" })}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">{primaryAction.title}</span>
+          <span className="hidden max-w-80 truncate text-xs text-muted-foreground xl:block">{primaryAction.detail}</span>
+          <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </Link>
+      ) : (
+        <div className="delivery-action-strip flex h-10 items-center gap-2 rounded-lg border border-delivery-glass-border bg-delivery-surface-strong px-3 backdrop-blur-xl">
+          <CheckCircle2 className="h-4 w-4 text-delivery-green" />
+          <span className="text-sm font-medium">
+            {t("dashboard.noImmediateActions", { defaultValue: "当前没有需要立即处理的事项" })}
+          </span>
+        </div>
       )}
 
-      <ActiveAgentsPanel companyId={selectedCompanyId!} />
+      <section
+        className="delivery-dashboard-metrics grid h-16 grid-cols-2 overflow-hidden rounded-lg border border-delivery-glass-border bg-delivery-surface-strong backdrop-blur-xl lg:grid-cols-5"
+        aria-label={t("dashboard.deliveryOverview")}
+      >
+        {metrics.map(({ label, value, icon: Icon, tone }) => (
+          <div key={label} className="flex min-w-0 items-center gap-2.5 border-r border-border/65 px-3 last:border-r-0">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background/55">
+              <Icon className={cn("h-4 w-4", tone)} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-xl font-semibold tabular-nums leading-none">{value}</span>
+              <span className="mt-1 block truncate text-xs text-muted-foreground">{label}</span>
+            </span>
+          </div>
+        ))}
+      </section>
 
-      {data && (
-        <>
-          {data.budgets.activeIncidents > 0 ? (
-            <div className="flex items-start justify-between gap-3 rounded-xl border border-red-500/20 bg-(image:--gradient-extract-1) px-4 py-3">
-              <div className="flex items-start gap-2.5">
-                <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-700 dark:text-red-300" />
-                <div>
-                  <p className="text-sm font-medium text-red-50">
-                    {t("dashboard.activeBudgetIncidents", { count: data.budgets.activeIncidents })}
-                  </p>
-                  <p className="text-xs text-red-100/70">
-                    {t("dashboard.budgetSummary", {
-                      pausedAgents: data.budgets.pausedAgents,
-                      pausedProjects: data.budgets.pausedProjects,
-                      pendingApprovals: data.budgets.pendingApprovals,
-                    })}
-                  </p>
-                </div>
-              </div>
-              <Link to="/costs" className="text-sm underline underline-offset-2 text-red-100">
-                {t("dashboard.openBudgets")}
-              </Link>
+      <div className="delivery-dashboard-main-grid grid min-h-64 gap-2">
+        <Panel
+          title={t("dashboard.projectDeliveryOverview", { defaultValue: "项目交付总览" })}
+          icon={FolderKanban}
+          action={(
+            <Link to="/projects" className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+              {t("dashboard.viewAll", { defaultValue: "查看全部" })}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+        >
+          <div className="delivery-dashboard-project-grid h-9 items-center border-b border-border/65 px-3 text-xs font-medium text-muted-foreground">
+            <span>{t("dashboard.projectColumn", { defaultValue: "项目" })}</span>
+            <span>{t("dashboard.stageColumn", { defaultValue: "当前阶段" })}</span>
+            <span>{t("dashboard.healthColumn", { defaultValue: "健康度" })}</span>
+            <span>{t("dashboard.targetColumn", { defaultValue: "目标节点" })}</span>
+            <span>{t("dashboard.blockerColumn", { defaultValue: "阻塞" })}</span>
+            <span>{t("dashboard.ownerColumn", { defaultValue: "负责人" })}</span>
+          </div>
+          {projectRows.length === 0 ? (
+            <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">
+              {t("dashboard.noDeliveryProjects", { defaultValue: "暂无在交项目" })}
             </div>
-          ) : null}
+          ) : (
+            <div className="divide-y divide-border/60">
+              {projectRows.map((row) => (
+                <Link
+                  key={row.project.id}
+                  to={"/projects/" + row.project.urlKey}
+                  className="delivery-dashboard-project-grid min-h-11 items-center px-3 text-inherit no-underline transition-colors hover:bg-accent/45"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{displaySeededName(row.project.name)}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {t("dashboard.openTaskCount", {
+                        defaultValue: "{{count}} 个进行中任务",
+                        count: row.openTaskCount,
+                      })}
+                    </span>
+                  </span>
+                  <span className="truncate text-xs">{row.stage}</span>
+                  <HealthBadge health={row.health} label={healthLabel(row.health, t)} />
+                  <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                    <Clock3 className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">
+                      {row.targetDate ?? t("dashboard.noTargetDate", { defaultValue: "未设置" })}
+                    </span>
+                  </span>
+                  <span className={cn(
+                    "text-xs font-medium tabular-nums",
+                    row.blockedCount > 0 ? "text-destructive" : "text-muted-foreground",
+                  )}>
+                    {row.blockedCount > 0
+                      ? t("dashboard.blockedCountShort", {
+                        defaultValue: "{{count}} 项",
+                        count: row.blockedCount,
+                      })
+                      : t("dashboard.noneShort", { defaultValue: "无" })}
+                  </span>
+                  <span className="truncate text-xs">{row.owner}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </Panel>
 
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-1 sm:gap-2">
-            <MetricCard
-              icon={Bot}
-              value={data.agents.active + data.agents.running + data.agents.paused + data.agents.error}
-              label={t("dashboard.agentsEnabled")}
-              to="/agents"
-              description={
-                <span>{t("dashboard.agentSummary", {
-                  running: data.agents.running,
-                  paused: data.agents.paused,
-                  errors: data.agents.error,
-                })}</span>
-              }
-            />
-            <MetricCard
-              icon={CircleDot}
-              value={data.tasks.inProgress}
-              label={t("dashboard.tasksInProgress")}
-              to="/issues"
-              description={
-                <span>{t("dashboard.taskSummary", {
-                  open: data.tasks.open,
-                  blocked: data.tasks.blocked,
-                })}</span>
-              }
-            />
-            <MetricCard
-              icon={DollarSign}
-              value={formatCents(data.costs.monthSpendCents)}
-              label={t("dashboard.monthSpend")}
-              to="/costs"
-              description={
-                <span>
-                  {data.costs.monthBudgetCents > 0
-                    ? t("dashboard.budgetUsage", {
-                      percent: data.costs.monthUtilizationPercent,
-                      budget: formatCents(data.costs.monthBudgetCents),
-                    })
-                    : t("dashboard.unlimitedBudget")}
-                </span>
-              }
-            />
-            <MetricCard
-              icon={ShieldCheck}
-              value={data.pendingApprovals + data.budgets.pendingApprovals}
-              label={t("dashboard.pendingApprovals")}
-              to="/approvals"
-              description={
-                <span>
-                  {data.budgets.pendingApprovals > 0
-                    ? t("dashboard.budgetOverridesAwaitingReview", { count: data.budgets.pendingApprovals })
-                    : t("dashboard.awaitingBoardReview")}
-                </span>
-              }
-            />
+        <Panel
+          title={t("dashboard.pendingActions", { defaultValue: "待处理事项" })}
+          icon={ShieldAlert}
+          action={(
+            <Link to="/inbox" className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+              {t("dashboard.openInbox", { defaultValue: "进入消息中心" })}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+        >
+          {actionItems.length === 0 ? (
+            <div className="flex h-64 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+              <CheckCircle2 className="h-5 w-5 text-delivery-green" />
+              {t("dashboard.noPendingActions", { defaultValue: "当前没有待处理事项" })}
+            </div>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {actionItems.map((item) => (
+                <Link
+                  key={item.key}
+                  to={item.to}
+                  className="flex min-h-11 items-center gap-2.5 px-3 text-inherit no-underline transition-colors hover:bg-accent/45"
+                >
+                  <span className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                    item.tone === "risk" && "bg-destructive/10 text-destructive",
+                    item.tone === "attention" && "bg-delivery-amber/15 text-delivery-amber",
+                    item.tone === "info" && "bg-delivery-blue/10 text-delivery-blue",
+                  )}>
+                    <item.icon className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{item.title}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{item.detail}</span>
+                  </span>
+                  <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                </Link>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <Panel
+        title={t("dashboard.resourceWorkload", { defaultValue: "资源负载" })}
+        icon={UsersRound}
+        className="h-36"
+        action={(
+          <Link to="/agents" className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+            {t("dashboard.viewResources", { defaultValue: "查看资源" })}
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        )}
+      >
+        {resourceRows.length === 0 ? (
+          <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+            {t("dashboard.noResources", { defaultValue: "暂无可展示的执行资源" })}
           </div>
+        ) : (
+          <div className="grid h-24 grid-cols-1 divide-y divide-border/60 lg:grid-cols-2 lg:divide-x lg:divide-y-0 xl:grid-cols-4">
+            {resourceRows.map((resource) => {
+              const content = (
+                <>
+                  <span className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+                    resource.kind === "agent"
+                      ? "bg-delivery-blue/10 text-delivery-blue"
+                      : "bg-delivery-cyan/10 text-delivery-cyan",
+                  )}>
+                    {resource.kind === "agent"
+                      ? <Bot className="h-4 w-4" />
+                      : <UserRound className="h-4 w-4" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{resource.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {resource.subtitle} · {t("dashboard.activeTaskCount", {
+                        defaultValue: "{{count}} 项任务",
+                        count: resource.activeCount,
+                      })}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1.5">
+                    <span className={cn(
+                      "text-xs font-medium",
+                      resource.tone === "risk" && "text-destructive",
+                      resource.tone === "attention" && "text-delivery-amber",
+                      resource.tone === "active" && "text-delivery-blue",
+                      resource.tone === "available" && "text-delivery-green",
+                    )}>
+                      {resource.statusLabel}
+                    </span>
+                    <WorkloadMeter level={resource.level} tone={resource.tone} />
+                  </span>
+                </>
+              );
 
-          <SmokeLabDashboardCard companyId={selectedCompanyId!} />
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <ChartCard title={t("dashboard.runActivity")} subtitle={t("dashboard.last14Days")}>
-              <RunActivityChart activity={data.runActivity} />
-            </ChartCard>
-            <ChartCard title={t("dashboard.issuesByPriority")} subtitle={t("dashboard.last14Days")}>
-              <PriorityChart issues={issues ?? []} />
-            </ChartCard>
-            <ChartCard title={t("dashboard.issuesByStatus")} subtitle={t("dashboard.last14Days")}>
-              <IssueStatusChart issues={issues ?? []} />
-            </ChartCard>
-            <ChartCard title={t("dashboard.successRate")} subtitle={t("dashboard.last14Days")}>
-              <SuccessRateChart activity={data.runActivity} />
-            </ChartCard>
-          </div>
-
-          <PluginSlotOutlet
-            slotTypes={["dashboardWidget"]}
-            context={{ companyId: selectedCompanyId }}
-            className="grid gap-4 md:grid-cols-2"
-            // design-allow(card-pattern): class-string prop consumed by the plugin outlet; a component can't be passed here (C5a Run 3)
-            itemClassName="rounded-lg border bg-card p-4 shadow-sm"
-          />
-
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* Recent Activity */}
-            {recentActivity.length > 0 && (
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                  {t("dashboard.recentActivity")}
-                </h3>
-                <Card className="block py-0 divide-y divide-border overflow-hidden">
-                  {recentActivity.map((event) => (
-                    <ActivityRow
-                      key={event.id}
-                      event={event}
-                      agentMap={agentMap}
-                      userProfileMap={userProfileMap}
-                      entityNameMap={entityNameMap}
-                      entityTitleMap={entityTitleMap}
-                      className={animatedActivityIds.has(event.id) ? "activity-row-enter" : undefined}
-                    />
-                  ))}
-                </Card>
-              </div>
-            )}
-
-            {/* Recent Tasks */}
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                {t("dashboard.recentTasks")}
-              </h3>
-              {recentIssues.length === 0 ? (
-                <div className="border border-border p-4">
-                  <p className="text-sm text-muted-foreground">{t("dashboard.noTasksYet")}</p>
-                </div>
+              return resource.to ? (
+                <Link
+                  key={resource.key}
+                  to={resource.to}
+                  className="flex min-w-0 items-center gap-2.5 px-3 text-inherit no-underline transition-colors hover:bg-accent/45"
+                >
+                  {content}
+                </Link>
               ) : (
-                <Card className="block py-0 divide-y divide-border overflow-hidden">
-                  {recentIssues.slice(0, 10).map((issue) => (
-                    <Link
-                      key={issue.id}
-                      to={`/issues/${issue.identifier ?? issue.id}`}
-                      className="px-4 py-3 text-sm cursor-pointer hover:bg-accent/50 transition-colors no-underline text-inherit block"
-                    >
-                      <div className="flex items-start gap-2 sm:items-center sm:gap-3">
-                        {/* Status icon - left column on mobile */}
-                        <span className="shrink-0 sm:hidden">
-                          <StatusIcon status={issue.status} blockerAttention={issue.blockerAttention} />
-                        </span>
-
-                        {/* Right column on mobile: title + metadata stacked */}
-                        <span className="flex min-w-0 flex-1 flex-col gap-1 sm:contents">
-                          <span className="line-clamp-2 text-sm sm:order-2 sm:flex-1 sm:min-w-0 sm:line-clamp-none sm:truncate">
-                            {issue.title}
-                          </span>
-                          <span className="flex items-center gap-2 sm:order-1 sm:shrink-0">
-                            <span className="hidden sm:inline-flex"><StatusIcon status={issue.status} blockerAttention={issue.blockerAttention} /></span>
-                            <span className="text-xs font-mono text-muted-foreground">
-                              {issue.identifier ?? issue.id.slice(0, 8)}
-                            </span>
-                            {issue.assigneeAgentId && (() => {
-                              const name = agentName(issue.assigneeAgentId);
-                              return name
-                                ? <span className="hidden sm:inline-flex"><Identity name={name} size="sm" /></span>
-                                : null;
-                            })()}
-                            <span className="text-xs text-muted-foreground sm:hidden">&middot;</span>
-                            <span className="text-xs text-muted-foreground shrink-0 sm:order-last">
-                              {timeAgo(issue.updatedAt)}
-                            </span>
-                          </span>
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
-                </Card>
-              )}
-            </div>
+                <div key={resource.key} className="flex min-w-0 items-center gap-2.5 px-3">
+                  {content}
+                </div>
+              );
+            })}
           </div>
+        )}
+      </Panel>
 
-        </>
-      )}
+      <SmokeLabDashboardCard companyId={selectedCompanyId} />
+      <PluginSlotOutlet
+        slotTypes={["dashboardWidget"]}
+        context={{ companyId: selectedCompanyId }}
+        className="grid gap-4 md:grid-cols-2"
+        itemClassName="rounded-lg border border-delivery-glass-border bg-delivery-surface p-4 shadow-sm"
+      />
     </div>
   );
 }

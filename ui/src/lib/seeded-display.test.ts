@@ -43,8 +43,15 @@ describe("displaySeededName", () => {
     });
   });
 
-  it("returns non-seeded names unchanged", () => {
+  it("maps seeded delivery names to their translation keys", () => {
     expect(displaySeededName("Founding Engineer")).toBe("Founding Engineer");
+    expect(translateInstantMock).toHaveBeenCalledWith("seededName.foundingEngineer", {
+      defaultValue: "Founding Engineer",
+    });
+  });
+
+  it("returns non-seeded names unchanged", () => {
+    expect(displaySeededName("Customer Success Lead")).toBe("Customer Success Lead");
     expect(translateInstantMock).not.toHaveBeenCalled();
   });
 });

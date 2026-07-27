@@ -66,14 +66,14 @@ test.describe("Language switcher", () => {
     await page.goto(`/${company.issuePrefix}/dashboard`);
 
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-    await expect(page).toHaveTitle(/仪表盘/);
+    await expect(page).toHaveTitle(/公司概览/);
 
     await openAccountLanguageMenu(page);
     await page.getByRole("button", { name: "English" }).click();
 
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page).toHaveTitle(/Dashboard/);
-    await expect(page.getByRole("button", { name: "New Issue" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create" })).toBeVisible();
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(page).toHaveTitle(/Dashboard/);

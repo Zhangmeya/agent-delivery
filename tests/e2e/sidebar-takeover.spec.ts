@@ -26,12 +26,11 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 const COMPANY_NAME_PREFIX = "E2E-SidebarTakeover";
 const COLLAPSED_STORAGE_KEY = "paperclip.sidebar.collapsed";
 
-// The sidebar header's "Open search" control only renders when the app sidebar
-// is expanded (pinned or peeking); in the collapsed rail it is hidden to fit
-// the 64px width. Its presence/absence is therefore a stable proxy for the
-// app sidebar's collapsed state (see Sidebar.tsx).
-const APP_SIDEBAR_EXPANDED_MARKER = /Open search|打开搜索/;
-const DASHBOARD_LINK_NAME = /Dashboard|仪表盘/;
+// The sidebar's collapse control only renders when the app sidebar is expanded
+// and is not locked by a secondary pane. Its presence/absence is therefore a
+// stable proxy for the app sidebar's expanded state (see Sidebar.tsx).
+const APP_SIDEBAR_EXPANDED_MARKER = /Collapse sidebar|折叠侧边栏/;
+const DASHBOARD_LINK_NAME = /Dashboard|公司概览/;
 const ENVIRONMENTS_LABEL = /^(Environments|环境)$/;
 
 async function createCompany(board: APIRequestContext): Promise<{ id: string; prefix: string }> {
@@ -94,8 +93,8 @@ test.describe("Sidebar takeover (collapse + secondary pane)", () => {
     // The app sidebar is NOT replaced — its company nav still renders...
     await expect(page.getByRole("link", { name: DASHBOARD_LINK_NAME })).toBeVisible();
 
-    // ...but it is collapsed to its rail: the expanded-only "Open search"
-    // header control is hidden.
+    // ...but it is collapsed to its rail: the expanded-only collapse control
+    // is hidden.
     await expect(page.getByLabel(APP_SIDEBAR_EXPANDED_MARKER)).toHaveCount(0);
   });
 

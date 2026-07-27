@@ -20,6 +20,7 @@ import { authApi } from "../api/auth";
 import { projectsApi } from "../api/projects";
 import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
 import { queryKeys } from "../lib/queryKeys";
+import { displaySeededName } from "../lib/seeded-display";
 import { cn, projectRouteRef, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import { useProjectOrder } from "../hooks/useProjectOrder";
 import { resourceMembershipState, useResourceMembershipMutation, useResourceMemberships } from "../hooks/useResourceMemberships";
@@ -147,7 +148,7 @@ function ProjectItem({
       )}
     >
       <ProjectTile color={project.color ?? null} icon={project.icon ?? null} size="xs" />
-      <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "flex-1 truncate"}>{project.name}</span>
+      <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "flex-1 truncate"}>{displaySeededName(project.name)}</span>
       {!rail ? <ExternalObjectStatusSummary summary={externalObjectsSummary} compact /> : null}
       {!rail && project.pauseReason === "budget" ? (
         <BudgetSidebarMarker title={t("Project paused by budget", { defaultValue: "Project paused by budget" })} />
@@ -168,7 +169,7 @@ function ProjectItem({
             <TooltipTrigger asChild>
               <div className="min-w-0 flex-1">{link}</div>
             </TooltipTrigger>
-            <TooltipContent side="right">{project.name}</TooltipContent>
+            <TooltipContent side="right">{displaySeededName(project.name)}</TooltipContent>
           </Tooltip>
         ) : (
           link
@@ -391,7 +392,7 @@ export function SidebarProjects() {
     (project: Project) => membershipMutation.mutate({
       resourceType: "project",
       resourceId: project.id,
-      resourceName: project.name,
+      resourceName: displaySeededName(project.name),
       state: "left",
     }),
     [membershipMutation],

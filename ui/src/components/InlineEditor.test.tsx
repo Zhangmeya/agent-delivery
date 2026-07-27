@@ -123,6 +123,31 @@ describe("InlineEditor", () => {
     });
   });
 
+  it("transforms the single-line preview without changing the editable value", () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <InlineEditor
+          value="Onboarding"
+          previewTransform={() => "入门引导"}
+          onSave={onSave}
+        />,
+      );
+    });
+
+    const display = container.querySelector("span");
+    expect(display?.textContent).toBe("入门引导");
+
+    act(() => {
+      display!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.querySelector("textarea")?.value).toBe("Onboarding");
+
+    act(() => root.unmount());
+  });
+
   it("does not call onSave when nullable is false/omitted and the field is cleared", () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const root = createRoot(container);

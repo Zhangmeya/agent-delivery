@@ -25,6 +25,7 @@ import { authApi } from "../api/auth";
 import { heartbeatsApi } from "../api/heartbeats";
 import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
 import { queryKeys } from "../lib/queryKeys";
+import { displaySeededName } from "../lib/seeded-display";
 import { cn, agentRouteRef, agentUrl, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import { useAgentOrder } from "../hooks/useAgentOrder";
 import {
@@ -180,7 +181,7 @@ function SidebarAgentItem({
   const navItem = (
     <SidebarNavItem
       to={href}
-      label={agent.name}
+      label={displaySeededName(agent.name)}
       iconNode={<AgentIcon icon={agent.icon} className="shrink-0 h-4 w-4" />}
       active={isActive}
       liveCount={runCount}
@@ -230,7 +231,7 @@ function SidebarAgentItem({
             quiet
             starred
             pending={starPending}
-            resourceName={agent.name}
+            resourceName={displaySeededName(agent.name)}
             onToggle={() => onToggleStar(agent, false)}
             revealClassName={AGENT_STAR_ROW_REVEAL}
           />
@@ -561,7 +562,7 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
         title: action === "pause"
           ? t("Agent paused", { defaultValue: "Agent paused" })
           : t("Agent resumed", { defaultValue: "Agent resumed" }),
-        body: agent.name,
+        body: displaySeededName(agent.name),
         tone: "success",
       });
     },
@@ -570,7 +571,7 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
         title: action === "pause"
           ? t("Could not pause agent", { defaultValue: "Could not pause agent" })
           : t("Could not resume agent", { defaultValue: "Could not resume agent" }),
-        body: error instanceof Error ? error.message : agent.name,
+        body: error instanceof Error ? error.message : displaySeededName(agent.name),
         tone: "error",
       });
     },
@@ -587,7 +588,7 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
     (agent: Agent) => membershipMutation.mutate({
       resourceType: "agent",
       resourceId: agent.id,
-      resourceName: agent.name,
+      resourceName: displaySeededName(agent.name),
       state: "left",
     }),
     [membershipMutation],
@@ -604,7 +605,7 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
     (agent: Agent, starred: boolean) => membershipMutation.mutate({
       resourceType: "agent",
       resourceId: agent.id,
-      resourceName: agent.name,
+      resourceName: displaySeededName(agent.name),
       starred,
     }),
     [membershipMutation],
@@ -656,7 +657,7 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
 
   return (
     <SidebarSection
-      label="Agents"
+      label={t("sidebar.agents", { defaultValue: "Agents" })}
       collapsible={{ open, onOpenChange: setOpen }}
       headerAction={{
         ariaLabel: t("New agent", { defaultValue: "New agent" }),
