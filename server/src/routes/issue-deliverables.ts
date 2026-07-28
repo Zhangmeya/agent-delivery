@@ -16,7 +16,7 @@ import {
 import { validate } from "../middleware/validate.js";
 import { forbidden, notFound, unprocessable } from "../errors.js";
 import { logActivity } from "../services/activity-log.js";
-import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import { assertCompanyAccess, getActorInfo, hasCompanyAccess } from "./authz.js";
 
 export function issueDeliverableRoutes(db: Db) {
   const router = Router();
@@ -31,6 +31,7 @@ export function issueDeliverableRoutes(db: Db) {
 
   router.get("/issues/:issueId/deliverables", async (req, res) => {
     const issue = await loadIssue(req.params.issueId as string);
+    if (!hasCompanyAccess(req, issue.companyId)) throw notFound("Issue not found");
     assertCompanyAccess(req, issue.companyId);
     const deliverables = await db.select().from(issueDeliverables)
       .where(and(eq(issueDeliverables.companyId, issue.companyId), eq(issueDeliverables.issueId, issue.id)))
@@ -49,6 +50,7 @@ export function issueDeliverableRoutes(db: Db) {
     validate(createIssueDeliverableSchema),
     async (req, res) => {
       const issue = await loadIssue(req.params.issueId as string);
+      if (!hasCompanyAccess(req, issue.companyId)) throw notFound("Issue not found");
       assertCompanyAccess(req, issue.companyId);
       if (issue.deliveryTaskType !== "deliverable") {
         throw unprocessable("Deliverables can only be added to deliverable tasks");
@@ -94,6 +96,7 @@ export function issueDeliverableRoutes(db: Db) {
     validate(submitIssueDeliverableVersionSchema),
     async (req, res) => {
       const issue = await loadIssue(req.params.issueId as string);
+      if (!hasCompanyAccess(req, issue.companyId)) throw notFound("Issue not found");
       assertCompanyAccess(req, issue.companyId);
       const deliverable = await db.select().from(issueDeliverables).where(and(
         eq(issueDeliverables.id, req.params.deliverableId as string),
@@ -148,6 +151,7 @@ export function issueDeliverableRoutes(db: Db) {
     validate(reviewIssueDeliverableVersionSchema),
     async (req, res) => {
       const issue = await loadIssue(req.params.issueId as string);
+      if (!hasCompanyAccess(req, issue.companyId)) throw notFound("Issue not found");
       assertCompanyAccess(req, issue.companyId);
       const actor = getActorInfo(req);
       if (actor.actorType !== "user") throw forbidden("Final deliverable review requires a human user");
