@@ -105,6 +105,11 @@ const projectFields = {
   description: z.string().optional().nullable(),
   status: z.enum(PROJECT_STATUSES).optional().default("backlog"),
   leadAgentId: z.string().uuid().optional().nullable(),
+  deliveryMethod: z.literal("digital_twin_story").optional().nullable(),
+  projectManagerUserId: z.string().min(1).optional().nullable(),
+  pmAgentId: z.string().uuid().optional().nullable(),
+  finalAcceptanceOwnerUserId: z.string().min(1).optional().nullable(),
+  plannedStartDate: z.string().optional().nullable(),
   targetDate: z.string().optional().nullable(),
   color: z.string().optional().nullable(),
   icon: z.enum(PROJECT_ICON_NAMES).optional().nullable(),
@@ -116,11 +121,19 @@ const projectFields = {
 export const createProjectSchema = z.object({
   ...projectFields,
   workspace: createProjectWorkspaceSchema.optional(),
+}).superRefine((value, ctx) => {
+  if (value.deliveryMethod === "digital_twin_story" && !value.projectManagerUserId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["projectManagerUserId"],
+      message: "Digital-twin delivery projects require a project manager",
+    });
+  }
 });
 
 export type CreateProject = z.infer<typeof createProjectSchema>;
 
-export const updateProjectSchema = z.object(projectFields).partial();
+export const updateProjectSchema = z.object(projectFields).omit({ deliveryMethod: true }).partial();
 
 export type UpdateProject = z.infer<typeof updateProjectSchema>;
 

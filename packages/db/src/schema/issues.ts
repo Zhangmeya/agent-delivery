@@ -6,6 +6,7 @@ import {
   text,
   timestamp,
   integer,
+  boolean,
   jsonb,
   index,
   uniqueIndex,
@@ -18,6 +19,7 @@ import { heartbeatRuns } from "./heartbeat_runs.js";
 import { projectWorkspaces } from "./project_workspaces.js";
 import { executionWorkspaces } from "./execution_workspaces.js";
 import type { SourceTrustMetadata } from "@penclipai/shared";
+import { projectDeliveryStages, projectTaskGroups } from "./project_delivery.js";
 
 export const issues = pgTable(
   "issues",
@@ -25,6 +27,10 @@ export const issues = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     companyId: uuid("company_id").notNull().references(() => companies.id),
     projectId: uuid("project_id").references(() => projects.id),
+    deliveryStageId: uuid("delivery_stage_id").references(() => projectDeliveryStages.id, { onDelete: "set null" }),
+    taskGroupId: uuid("task_group_id").references(() => projectTaskGroups.id, { onDelete: "set null" }),
+    deliveryTaskType: text("delivery_task_type").notNull().default("execution"),
+    isRequired: boolean("is_required").notNull().default(true),
     projectWorkspaceId: uuid("project_workspace_id").references(() => projectWorkspaces.id, { onDelete: "set null" }),
     goalId: uuid("goal_id").references(() => goals.id),
     parentId: uuid("parent_id").references((): AnyPgColumn => issues.id),
@@ -88,6 +94,8 @@ export const issues = pgTable(
     responsibleUserIdx: index("issues_company_responsible_user_idx").on(table.companyId, table.responsibleUserId),
     parentIdx: index("issues_company_parent_idx").on(table.companyId, table.parentId),
     projectIdx: index("issues_company_project_idx").on(table.companyId, table.projectId),
+    deliveryStageIdx: index("issues_company_delivery_stage_idx").on(table.companyId, table.deliveryStageId),
+    taskGroupIdx: index("issues_company_task_group_idx").on(table.companyId, table.taskGroupId),
     originIdx: index("issues_company_origin_idx").on(table.companyId, table.originKind, table.originId),
     projectWorkspaceIdx: index("issues_company_project_workspace_idx").on(table.companyId, table.projectWorkspaceId),
     executionWorkspaceIdx: index("issues_company_execution_workspace_idx").on(table.companyId, table.executionWorkspaceId),

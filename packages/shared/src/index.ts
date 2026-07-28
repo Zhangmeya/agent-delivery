@@ -63,6 +63,34 @@ export type {
   AttentionSubjectKind,
   AttentionWorkspaceRef,
 } from "./types/attention.js";
+export {
+  DIGITAL_TWIN_STORY_DELIVERY_METHOD,
+  type ProjectDeliveryMethod,
+  type ProjectDeliveryStageKey,
+  type ProjectDeliveryStageStatus,
+  type ProjectSkeletonStatus,
+  type DeliveryTaskType,
+  type DeliverableSubmissionType,
+  type DeliverableReviewStatus,
+  type ProjectDeliveryTaskSummary,
+  type ProjectTaskGroup,
+  type ProjectDeliveryStage,
+  type ProjectDeliveryOverview,
+  type ProjectSkeletonTaskInput,
+  type ProjectSkeletonGroupInput,
+} from "./types/project-delivery.js";
+export {
+  projectDeliveryStageKeySchema,
+  deliveryTaskTypeSchema,
+  applyProjectSkeletonSchema,
+  updateProjectDeliveryStageSchema,
+  updateProjectTaskGroupSchema,
+  advanceProjectDeliveryStageSchema,
+  reopenProjectDeliveryStageSchema,
+  createIssueDeliverableSchema,
+  submitIssueDeliverableVersionSchema,
+  reviewIssueDeliverableVersionSchema,
+} from "./validators/project-delivery.js";
 export type {
   DecisionTrainingExample,
   DecisionTrainingNotesHistoryEntry,

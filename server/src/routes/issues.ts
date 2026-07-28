@@ -13,6 +13,7 @@ import {
   issueComments,
   issueDocuments,
   issueExecutionDecisions,
+  issueDeliverables,
   issueRelations,
   issues as issueRows,
   issueWorkProducts,
@@ -7931,6 +7932,35 @@ export function issueRoutes(
           assigneeAgentId: nextAssigneeAgentId,
           assigneeUserId: nextAssigneeUserId,
         });
+      }
+    }
+
+    if (updateFields.status === "done" && existing.deliveryTaskType === "gate") {
+      if (
+        actor.actorType !== "user"
+        || !existing.assigneeUserId
+        || actor.actorId !== existing.assigneeUserId
+      ) {
+        res.status(403).json({ error: "Only the designated human decision maker can complete a gate task" });
+        return;
+      }
+    }
+    if (updateFields.status === "done" && existing.deliveryTaskType === "deliverable") {
+      const requiredDeliverables = await db.select({
+        id: issueDeliverables.id,
+        officialVersionId: issueDeliverables.officialVersionId,
+      })
+        .from(issueDeliverables)
+        .where(and(
+          eq(issueDeliverables.issueId, existing.id),
+          eq(issueDeliverables.isRequired, true),
+        ));
+      if (
+        requiredDeliverables.length === 0
+        || requiredDeliverables.some((deliverable) => !deliverable.officialVersionId)
+      ) {
+        res.status(422).json({ error: "Required deliverables must be approved before completing this task" });
+        return;
       }
     }
 

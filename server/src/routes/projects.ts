@@ -2,10 +2,15 @@ import { Router, type Request, type Response } from "express";
 import type { Db } from "@penclipai/db";
 import {
   createProjectSchema,
+  advanceProjectDeliveryStageSchema,
+  applyProjectSkeletonSchema,
   createProjectWorkspaceSchema,
   findWorkspaceCommandDefinition,
   isUuidLike,
   matchWorkspaceRuntimeServiceToCommand,
+  reopenProjectDeliveryStageSchema,
+  updateProjectDeliveryStageSchema,
+  updateProjectTaskGroupSchema,
   updateProjectSchema,
   updateProjectWorkspaceSchema,
   workspaceRuntimeControlTargetSchema,
@@ -36,6 +41,8 @@ import { appendWithCap } from "../adapters/utils.js";
 import { assertEnvironmentSelectionForCompany } from "./environment-selection.js";
 import { environmentService } from "../services/environments.js";
 import { secretService } from "../services/secrets.js";
+import { projectDeliveryService } from "../services/project-delivery.js";
+import { heartbeatService } from "../services/heartbeat.js";
 
 const WORKSPACE_CONTROL_OUTPUT_MAX_CHARS = 256 * 1024;
 const SHARED_WORKSPACE_STOP_AND_RESTART_ACTIONS = new Set(["stop", "restart"]);
@@ -52,6 +59,8 @@ export function projectRoutes(db: Db) {
   });
   const strictSecretsMode = process.env.PAPERCLIP_SECRETS_STRICT_MODE === "true";
   const environmentsSvc = environmentService(db);
+  const deliverySvc = projectDeliveryService(db);
+  const heartbeat = heartbeatService(db);
 
   async function assertProjectEnvironmentSelection(companyId: string, environmentId: string | null | undefined) {
     if (environmentId === undefined || environmentId === null) return;
@@ -106,6 +115,39 @@ export function projectRoutes(db: Db) {
     return false;
   }
 
+  function requireProjectManager(
+    req: Request,
+    res: Response,
+    project: { projectManagerUserId?: string | null },
+  ) {
+    const actor = getActorInfo(req);
+    if (
+      actor.actorType !== "user"
+      || !project.projectManagerUserId
+      || actor.actorId !== project.projectManagerUserId
+    ) {
+      res.status(403).json({ error: "Only the project manager can perform this delivery action" });
+      return null;
+    }
+    return actor;
+  }
+
+  function requireSkeletonEditor(
+    req: Request,
+    res: Response,
+    project: { projectManagerUserId?: string | null; pmAgentId?: string | null },
+  ) {
+    const actor = getActorInfo(req);
+    const allowed =
+      (actor.actorType === "user" && actor.actorId === project.projectManagerUserId)
+      || (actor.actorType === "agent" && actor.agentId === project.pmAgentId);
+    if (!allowed) {
+      res.status(403).json({ error: "Only the project manager or configured PM Agent can edit the skeleton draft" });
+      return null;
+    }
+    return actor;
+  }
+
   async function filterProjectsForActor<T extends { id: string; companyId: string }>(req: Request, rows: T[]) {
     const decisions = await Promise.all(rows.map((project) =>
       access.decide({
@@ -140,6 +182,190 @@ export function projectRoutes(db: Db) {
     if (!(await assertProjectReadAllowed(req, res, project))) return;
     res.json(project);
   });
+
+  router.get("/projects/:id/delivery", async (req, res) => {
+    const id = req.params.id as string;
+    const project = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+    if (!project) return;
+    if (!(await assertProjectReadAllowed(req, res, project))) return;
+    res.json(await deliverySvc.overview(id));
+  });
+
+  router.post("/projects/:id/delivery/skeleton/generate", async (req, res) => {
+    const id = req.params.id as string;
+    const project = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+    if (!project) return;
+    const actor = requireProjectManager(req, res, project);
+    if (!actor) return;
+    const requested = await deliverySvc.requestSkeletonGeneration(
+      id,
+      actor.actorType === "user" ? actor.actorId : null,
+    );
+    try {
+      await heartbeat.wakeup(requested.pmAgentId, {
+        source: "automation",
+        triggerDetail: "system",
+        reason: "project_delivery_skeleton_requested",
+        payload: { issueId: requested.issue.id, projectId: id },
+      });
+    } catch (error) {
+      await deliverySvc.failSkeletonGeneration(id, "PM Agent 唤醒失败，请检查 Agent 配置后重试");
+      throw error;
+    }
+    await logActivity(db, {
+      companyId: project.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "project.delivery_skeleton_requested",
+      entityType: "project",
+      entityId: id,
+      issueId: requested.issue.id,
+    });
+    res.status(202).json(requested.issue);
+  });
+
+  router.put("/projects/:id/delivery/skeleton", validate(applyProjectSkeletonSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const project = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+    if (!project) return;
+    const actor = requireSkeletonEditor(req, res, project);
+    if (!actor) return;
+    const result = await deliverySvc.applySkeleton(
+      id,
+      req.body.groups,
+      {
+        userId: actor.actorType === "user" ? actor.actorId : null,
+        agentId: actor.agentId,
+      },
+    );
+    await logActivity(db, {
+      companyId: project.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "project.delivery_skeleton_drafted",
+      entityType: "project",
+      entityId: id,
+      details: { taskGroupCount: req.body.groups.length },
+    });
+    res.json(result);
+  });
+
+  router.post("/projects/:id/delivery/skeleton/confirm", async (req, res) => {
+    const id = req.params.id as string;
+    const project = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+    if (!project) return;
+    const actor = requireProjectManager(req, res, project);
+    if (!actor) return;
+    const result = await deliverySvc.confirmSkeleton(id);
+    await logActivity(db, {
+      companyId: project.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "project.delivery_skeleton_confirmed",
+      entityType: "project",
+      entityId: id,
+    });
+    res.json(result);
+  });
+
+  router.post(
+    "/projects/:id/delivery/stages/:stageId/advance",
+    validate(advanceProjectDeliveryStageSchema),
+    async (req, res) => {
+      const id = req.params.id as string;
+      const project = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+      if (!project) return;
+      const actor = requireProjectManager(req, res, project);
+      if (!actor) return;
+      const result = await deliverySvc.advanceStage(id, req.params.stageId as string);
+      await logActivity(db, {
+        companyId: project.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        action: "project.delivery_stage_advanced",
+        entityType: "project",
+        entityId: id,
+        details: { stageId: req.params.stageId, reason: req.body.reason ?? null },
+      });
+      res.json(result);
+    },
+  );
+
+  router.patch(
+    "/projects/:id/delivery/stages/:stageId/owner",
+    validate(updateProjectDeliveryStageSchema),
+    async (req, res) => {
+      const id = req.params.id as string;
+      const project = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+      if (!project) return;
+      const actor = requireProjectManager(req, res, project);
+      if (!actor) return;
+      const result = await deliverySvc.updateStageOwner(id, req.params.stageId as string, req.body);
+      await logActivity(db, {
+        companyId: project.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        action: "project.delivery_stage_owner_updated",
+        entityType: "project",
+        entityId: id,
+        details: { stageId: req.params.stageId },
+      });
+      res.json(result);
+    },
+  );
+
+  router.patch(
+    "/projects/:id/delivery/task-groups/:groupId/owner",
+    validate(updateProjectTaskGroupSchema),
+    async (req, res) => {
+      const id = req.params.id as string;
+      const project = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+      if (!project) return;
+      const actor = requireProjectManager(req, res, project);
+      if (!actor) return;
+      const result = await deliverySvc.updateTaskGroupOwner(id, req.params.groupId as string, req.body);
+      await logActivity(db, {
+        companyId: project.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        action: "project.delivery_task_group_owner_updated",
+        entityType: "project",
+        entityId: id,
+        details: { groupId: req.params.groupId },
+      });
+      res.json(result);
+    },
+  );
+
+  router.post(
+    "/projects/:id/delivery/stages/:stageId/reopen",
+    validate(reopenProjectDeliveryStageSchema),
+    async (req, res) => {
+      const id = req.params.id as string;
+      const project = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+      if (!project) return;
+      const actor = requireProjectManager(req, res, project);
+      if (!actor) return;
+      const result = await deliverySvc.reopenStage(id, req.params.stageId as string, req.body.reason);
+      await logActivity(db, {
+        companyId: project.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        action: "project.delivery_stage_reopened",
+        entityType: "project",
+        entityId: id,
+        details: { stageId: req.params.stageId, reason: req.body.reason },
+      });
+      res.json(result);
+    },
+  );
 
   router.get("/projects/:id/external-object-summary", async (req, res) => {
     const id = req.params.id as string;

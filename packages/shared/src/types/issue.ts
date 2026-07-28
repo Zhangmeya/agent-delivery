@@ -706,6 +706,10 @@ export interface Issue {
   id: string;
   companyId: string;
   projectId: string | null;
+  deliveryStageId?: string | null;
+  taskGroupId?: string | null;
+  deliveryTaskType?: "execution" | "deliverable" | "gate";
+  isRequired?: boolean;
   projectWorkspaceId: string | null;
   goalId: string | null;
   parentId: string | null;
