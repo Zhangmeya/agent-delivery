@@ -10,6 +10,8 @@ import { goalsApi } from "../api/goals";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { projectsApi } from "../api/projects";
 import { secretsApi } from "../api/secrets";
+import { accessApi } from "../api/access";
+import { agentsApi } from "../api/agents";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
 import { translateStatusLabel } from "../lib/i18n-labels";
@@ -49,6 +51,10 @@ export type ProjectConfigFieldKey =
   | "name"
   | "description"
   | "status"
+  | "pm_agent"
+  | "final_acceptance_owner"
+  | "planned_start_date"
+  | "target_date"
   | "goals"
   | "env"
   | "execution_workspace_enabled"
@@ -265,6 +271,16 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
     queryKey: queryKeys.goals.list(selectedCompanyId!),
     queryFn: () => goalsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
+  });
+  const { data: deliveryAgents = [] } = useQuery({
+    queryKey: queryKeys.agents.list(selectedCompanyId!),
+    queryFn: () => agentsApi.list(selectedCompanyId!),
+    enabled: Boolean(selectedCompanyId && project.deliveryMethod),
+  });
+  const { data: companyUserDirectory } = useQuery({
+    queryKey: queryKeys.access.companyUserDirectory(selectedCompanyId!),
+    queryFn: () => accessApi.listUserDirectory(selectedCompanyId!),
+    enabled: Boolean(selectedCompanyId && project.deliveryMethod),
   });
   const { data: experimentalSettings } = useQuery({
     queryKey: queryKeys.instance.experimentalSettings,
@@ -569,6 +585,63 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
             <StatusBadge status={project.status} />
           )}
         </PropertyRow>
+        {project.deliveryMethod ? (
+          <>
+            <div className="pt-3 text-xs font-medium text-foreground">项目交付</div>
+            <PropertyRow label={<FieldLabel label="PM Agent" state={fieldState("pm_agent")} />}>
+              <select
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                value={project.pmAgentId ?? ""}
+                onChange={(event) => commitField("pm_agent", { pmAgentId: event.target.value || null })}
+              >
+                <option value="">暂不配置</option>
+                {deliveryAgents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>{agent.name}</option>
+                ))}
+              </select>
+            </PropertyRow>
+            <PropertyRow
+              label={<FieldLabel label="最终验收负责人" state={fieldState("final_acceptance_owner")} />}
+            >
+              <select
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                value={project.finalAcceptanceOwnerUserId ?? ""}
+                onChange={(event) => commitField("final_acceptance_owner", {
+                  finalAcceptanceOwnerUserId: event.target.value || null,
+                })}
+              >
+                <option value="">待确认</option>
+                {(companyUserDirectory?.users ?? []).map((member) => (
+                  <option key={member.principalId} value={member.principalId}>
+                    {member.user?.name ?? member.user?.email ?? member.principalId}
+                  </option>
+                ))}
+              </select>
+            </PropertyRow>
+            <PropertyRow
+              label={<FieldLabel label="计划开始日期" state={fieldState("planned_start_date")} />}
+            >
+              <input
+                type="date"
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                value={project.plannedStartDate ?? ""}
+                onChange={(event) => commitField("planned_start_date", {
+                  plannedStartDate: event.target.value || null,
+                })}
+              />
+            </PropertyRow>
+            <PropertyRow label={<FieldLabel label="目标完成日期" state={fieldState("target_date")} />}>
+              <input
+                type="date"
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                value={project.targetDate ?? ""}
+                onChange={(event) => commitField("target_date", {
+                  targetDate: event.target.value || null,
+                })}
+              />
+            </PropertyRow>
+          </>
+        ) : null}
         {project.leadAgentId && (
           <PropertyRow label={t("projectProperties.lead", { defaultValue: "Lead" })}>
             <span className="text-sm font-mono">{project.leadAgentId.slice(0, 8)}</span>

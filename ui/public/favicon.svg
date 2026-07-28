@@ -1,9 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <style>
-    path { stroke: #18181b; }
-    @media (prefers-color-scheme: dark) {
-      path { stroke: #e4e4e7; }
-    }
-  </style>
-  <path stroke-width="2" d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="agent-delivery-mark" x1="24" y1="28" x2="104" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8DEBFF"/>
+      <stop offset=".48" stop-color="#579BFF"/>
+      <stop offset="1" stop-color="#C69EFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="32" fill="#0C1324"/>
+  <path d="M24 32h16l11 51 13-30 13 30 11-51h16L88 98H74L64 75 54 98H40Z" fill="url(#agent-delivery-mark)"/>
 </svg>

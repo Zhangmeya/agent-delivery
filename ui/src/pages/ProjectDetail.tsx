@@ -25,6 +25,7 @@ import { IssuesList } from "../components/IssuesList";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { PageTabBar } from "../components/PageTabBar";
 import { ProjectWorkspacesContent } from "../components/ProjectWorkspacesContent";
+import { ProjectDeliveryBoard } from "../components/ProjectDeliveryBoard";
 import { SummarySlotCard } from "../components/SummarySlotCard";
 import { MembershipAction } from "../components/MembershipAction";
 import { StarToggle } from "../components/StarToggle";
@@ -50,7 +51,7 @@ import {
 
 /* ── Top-level tab types ── */
 
-type ProjectBaseTab = "overview" | "list" | "plugin-operations" | "workspaces" | "configuration" | "budget";
+type ProjectBaseTab = "delivery" | "overview" | "list" | "plugin-operations" | "workspaces" | "configuration" | "budget";
 type ProjectPluginTab = `plugin:${string}`;
 type ProjectTab = ProjectBaseTab | ProjectPluginTab;
 
@@ -63,6 +64,7 @@ function resolveProjectTab(pathname: string, projectId: string): ProjectTab | nu
   const projectsIdx = segments.indexOf("projects");
   if (projectsIdx === -1 || segments[projectsIdx + 1] !== projectId) return null;
   const tab = segments[projectsIdx + 2];
+  if (tab === "delivery") return "delivery";
   if (tab === "overview") return "overview";
   if (tab === "configuration") return "configuration";
   if (tab === "budget") return "budget";
@@ -570,6 +572,10 @@ export function ProjectDetail() {
       navigate(`/projects/${canonicalProjectRef}/overview`, { replace: true });
       return;
     }
+    if (activeTab === "delivery") {
+      navigate(`/projects/${canonicalProjectRef}/delivery`, { replace: true });
+      return;
+    }
     if (activeTab === "configuration") {
       navigate(`/projects/${canonicalProjectRef}/configuration`, { replace: true });
       return;
@@ -719,6 +725,9 @@ export function ProjectDetail() {
     if (cachedTab === "overview") {
       return <Navigate to={`/projects/${canonicalProjectRef}/overview`} replace />;
     }
+    if (cachedTab === "delivery" && project?.deliveryMethod) {
+      return <Navigate to={`/projects/${canonicalProjectRef}/delivery`} replace />;
+    }
     if (cachedTab === "configuration") {
       return <Navigate to={`/projects/${canonicalProjectRef}/configuration`} replace />;
     }
@@ -764,6 +773,8 @@ export function ProjectDetail() {
     }
     if (tab === "overview") {
       navigate(`/projects/${canonicalProjectRef}/overview`);
+    } else if (tab === "delivery") {
+      navigate(`/projects/${canonicalProjectRef}/delivery`);
     } else if (tab === "workspaces") {
       navigate(`/projects/${canonicalProjectRef}/workspaces`);
     } else if (tab === "budget") {
@@ -904,6 +915,7 @@ export function ProjectDetail() {
         <PageTabBar
           items={[
             { value: "list", label: t("Issues", { defaultValue: "Issues" }) },
+            ...(project.deliveryMethod ? [{ value: "delivery", label: "项目交付" }] : []),
             { value: "overview", label: t("Overview", { defaultValue: "Overview" }) },
             ...(project.managedByPlugin ? [{ value: "plugin-operations", label: t("Plugin operations", { defaultValue: "Plugin operations" }) }] : []),
             ...(showWorkspacesTab ? [{ value: "workspaces", label: t("Workspaces", { defaultValue: "Workspaces" }) }] : []),
@@ -929,6 +941,10 @@ export function ProjectDetail() {
             return asset.contentPath;
           }}
         />
+      )}
+
+      {activeTab === "delivery" && project?.id && resolvedCompanyId && (
+        <ProjectDeliveryBoard projectId={project.id} companyId={resolvedCompanyId} />
       )}
 
       {activeTab === "list" && project?.id && resolvedCompanyId && (

@@ -43,14 +43,6 @@ import { isHttpGitRepoUrl } from "../lib/git-repo-url";
 import { MarkdownEditor, type MarkdownEditorRef, type MentionOption } from "./MarkdownEditor";
 import { StatusBadge } from "./StatusBadge";
 
-const projectStatuses = [
-  { value: "backlog", labelKey: "status.backlog" },
-  { value: "planned", labelKey: "status.planned" },
-  { value: "in_progress", labelKey: "status.inProgress" },
-  { value: "completed", labelKey: "status.done" },
-  { value: "cancelled", labelKey: "status.cancelled" },
-];
-
 function PathInstructionsDialog({
   open,
   onOpenChange,
@@ -116,15 +108,18 @@ export function NewProjectDialog() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState("planned");
+  const status = "planned";
   const [goalIds, setGoalIds] = useState<string[]>([]);
   const [targetDate, setTargetDate] = useState("");
+  const [plannedStartDate, setPlannedStartDate] = useState("");
+  const [projectManagerUserId, setProjectManagerUserId] = useState("");
+  const [pmAgentId, setPmAgentId] = useState("");
+  const [finalAcceptanceOwnerUserId, setFinalAcceptanceOwnerUserId] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [workspaceLocalPath, setWorkspaceLocalPath] = useState("");
   const [workspaceRepoUrl, setWorkspaceRepoUrl] = useState("");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
 
-  const [statusOpen, setStatusOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [pathHelpOpen, setPathHelpOpen] = useState(false);
   const descriptionEditorRef = useRef<MarkdownEditorRef>(null);
@@ -169,9 +164,12 @@ export function NewProjectDialog() {
   function reset() {
     setName("");
     setDescription("");
-    setStatus("planned");
     setGoalIds([]);
     setTargetDate("");
+    setPlannedStartDate("");
+    setProjectManagerUserId("");
+    setPmAgentId("");
+    setFinalAcceptanceOwnerUserId("");
     setExpanded(false);
     setPathHelpOpen(false);
     setWorkspaceLocalPath("");
@@ -219,6 +217,11 @@ export function NewProjectDialog() {
         name: name.trim(),
         description: description.trim() || undefined,
         status,
+        deliveryMethod: "digital_twin_story",
+        projectManagerUserId,
+        ...(pmAgentId ? { pmAgentId } : {}),
+        ...(finalAcceptanceOwnerUserId ? { finalAcceptanceOwnerUserId } : {}),
+        ...(plannedStartDate ? { plannedStartDate } : {}),
         // No color is sent — new projects persist color = null (neutral gray). See PAP-68.
         ...(goalIds.length > 0 ? { goalIds } : {}),
         ...(targetDate ? { targetDate } : {}),
@@ -336,6 +339,59 @@ export function NewProjectDialog() {
         </div>
 
         <div className="px-4 pt-3 pb-3 space-y-3 border-t border-border">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>交付方法</span>
+              <input
+                className="w-full rounded border border-border bg-muted px-2 py-1.5 text-foreground"
+                value="数字孪生（故事驱动）"
+                readOnly
+              />
+            </label>
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>项目经理（必选）</span>
+              <select
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-foreground"
+                value={projectManagerUserId}
+                onChange={(event) => setProjectManagerUserId(event.target.value)}
+              >
+                <option value="">请选择项目经理</option>
+                {(companyMembers?.users ?? []).map((member) => (
+                  <option key={member.principalId} value={member.principalId}>
+                    {member.user?.name ?? member.user?.email ?? member.principalId}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>PM Agent（未配置时可先创建）</span>
+              <select
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-foreground"
+                value={pmAgentId}
+                onChange={(event) => setPmAgentId(event.target.value)}
+              >
+                <option value="">暂不配置</option>
+                {(agents ?? []).map((agent) => (
+                  <option key={agent.id} value={agent.id}>{agent.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>最终验收负责人（可待确认）</span>
+              <select
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-foreground"
+                value={finalAcceptanceOwnerUserId}
+                onChange={(event) => setFinalAcceptanceOwnerUserId(event.target.value)}
+              >
+                <option value="">待确认</option>
+                {(companyMembers?.users ?? []).map((member) => (
+                  <option key={member.principalId} value={member.principalId}>
+                    {member.user?.name ?? member.user?.email ?? member.principalId}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div>
             <div className="mb-1 flex items-center gap-1.5">
               <label className="block text-xs text-muted-foreground">{t("newProject.repoUrlLabel")}</label>
@@ -395,27 +451,9 @@ export function NewProjectDialog() {
         {/* Property chips */}
         <div className="flex items-center gap-1.5 px-4 py-2 border-t border-border flex-wrap">
           {/* Status */}
-          <Popover open={statusOpen} onOpenChange={setStatusOpen}>
-            <PopoverTrigger asChild>
-              <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors">
-                <StatusBadge status={status} />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-40 p-1" align="start">
-              {projectStatuses.map((s) => (
-                <button
-                  key={s.value}
-                  className={cn(
-                    "flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-accent/50",
-                    s.value === status && "bg-accent"
-                  )}
-                  onClick={() => { setStatus(s.value); setStatusOpen(false); }}
-                >
-                  {t(s.labelKey)}
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
+          <span className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs">
+            <StatusBadge status={status} />
+          </span>
 
           {selectedGoals.map((goal) => (
             <span
@@ -477,6 +515,16 @@ export function NewProjectDialog() {
           {/* Target date */}
           <div className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs">
             <Calendar className="h-3 w-3 text-muted-foreground" />
+            <span className="text-muted-foreground">计划开始</span>
+            <input
+              type="date"
+              className="bg-transparent outline-none text-xs w-24"
+              value={plannedStartDate}
+              onChange={(e) => setPlannedStartDate(e.target.value)}
+            />
+          </div>
+          <div className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs">
+            <Calendar className="h-3 w-3 text-muted-foreground" />
             <input
               type="date"
               className="bg-transparent outline-none text-xs w-24"
@@ -496,7 +544,7 @@ export function NewProjectDialog() {
           )}
           <Button
             size="sm"
-            disabled={!name.trim() || createProject.isPending}
+            disabled={!name.trim() || !projectManagerUserId || createProject.isPending}
             onClick={handleSubmit}
           >
             {createProject.isPending ? t("newProject.creating") : t("newProject.createProject")}

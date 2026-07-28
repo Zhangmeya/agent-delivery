@@ -1,5 +1,6 @@
 import type {
   Project,
+  ProjectDeliveryOverview,
   ProjectWorkspace,
   WorkspaceOperation,
   WorkspaceRuntimeControlTarget,
@@ -58,4 +59,35 @@ export const projectsApi = {
   removeWorkspace: (projectId: string, workspaceId: string, companyId?: string) =>
     api.delete<ProjectWorkspace>(projectPath(projectId, companyId, `/workspaces/${encodeURIComponent(workspaceId)}`)),
   remove: (id: string, companyId?: string) => api.delete<Project>(projectPath(id, companyId)),
+  getDelivery: (id: string, companyId?: string) =>
+    api.get<ProjectDeliveryOverview>(projectPath(id, companyId, "/delivery")),
+  requestDeliverySkeleton: (id: string, companyId?: string) =>
+    api.post(projectPath(id, companyId, "/delivery/skeleton/generate"), {}),
+  confirmDeliverySkeleton: (id: string, companyId?: string) =>
+    api.post<ProjectDeliveryOverview>(projectPath(id, companyId, "/delivery/skeleton/confirm"), {}),
+  advanceDeliveryStage: (id: string, stageId: string, companyId?: string) =>
+    api.post<ProjectDeliveryOverview>(
+      projectPath(id, companyId, `/delivery/stages/${encodeURIComponent(stageId)}/advance`),
+      {},
+    ),
+  updateDeliveryStageOwner: (
+    id: string,
+    stageId: string,
+    owner: { ownerAgentId?: string | null; ownerUserId?: string | null },
+    companyId?: string,
+  ) =>
+    api.patch<ProjectDeliveryOverview>(
+      projectPath(id, companyId, `/delivery/stages/${encodeURIComponent(stageId)}/owner`),
+      owner,
+    ),
+  updateDeliveryTaskGroupOwner: (
+    id: string,
+    groupId: string,
+    owner: { ownerAgentId?: string | null; ownerUserId?: string | null },
+    companyId?: string,
+  ) =>
+    api.patch<ProjectDeliveryOverview>(
+      projectPath(id, companyId, `/delivery/task-groups/${encodeURIComponent(groupId)}/owner`),
+      owner,
+    ),
 };

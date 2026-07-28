@@ -84,52 +84,57 @@
   --radius: 0.5rem;
   --paperclip-desktop-titlebar-height: 0px;
   --paperclip-available-height: 100vh;
-  --background: oklch(0.976 0.012 240);
-  --foreground: oklch(0.25 0.025 255);
-  --card: oklch(0.995 0.004 240 / 88%);
-  --card-foreground: oklch(0.25 0.025 255);
-  --popover: oklch(0.995 0.004 240 / 96%);
-  --popover-foreground: oklch(0.25 0.025 255);
+  --background: #eef4fb;
+  --foreground: #172033;
+  --card: rgb(255 255 255 / 78%);
+  --card-foreground: #172033;
+  --popover: rgb(247 251 255 / 94%);
+  --popover-foreground: #172033;
   --primary: oklch(0.58 0.19 255);
   --primary-foreground: oklch(0.99 0.002 240);
   --secondary: oklch(0.95 0.03 220);
   --secondary-foreground: oklch(0.32 0.065 235);
-  --muted: oklch(0.958 0.014 248);
-  --muted-foreground: oklch(0.52 0.035 255);
-  --accent: oklch(0.93 0.04 245);
-  --accent-foreground: oklch(0.32 0.085 255);
+  --muted: rgb(239 245 252 / 72%);
+  --muted-foreground: #6c7890;
+  --accent: rgb(227 238 255 / 72%);
+  --accent-foreground: #285ea9;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.87 0.028 240 / 72%);
-  --input: oklch(0.87 0.028 240 / 82%);
+  --border: rgb(119 145 181 / 14%);
+  --input: rgb(126 150 185 / 18%);
   --ring: oklch(0.58 0.19 255);
   --chart-1: oklch(0.62 0.18 255);
   --chart-2: oklch(0.7 0.13 205);
   --chart-3: oklch(0.65 0.16 295);
   --chart-4: oklch(0.74 0.14 75);
   --chart-5: oklch(0.67 0.14 155);
-  --sidebar: oklch(0.97 0.018 224 / 94%);
-  --sidebar-foreground: oklch(0.27 0.035 255);
+  --sidebar: rgb(247 251 255 / 78%);
+  --sidebar-foreground: #2f4059;
   --sidebar-primary: oklch(0.58 0.19 255);
   --sidebar-primary-foreground: oklch(0.99 0.002 240);
-  --sidebar-accent: oklch(0.92 0.04 240);
-  --sidebar-accent-foreground: oklch(0.34 0.09 255);
-  --sidebar-border: oklch(0.86 0.03 230 / 72%);
+  --sidebar-accent: rgb(255 255 255 / 75%);
+  --sidebar-accent-foreground: #1f5fd1;
+  --sidebar-border: rgb(119 145 181 / 14%);
   --sidebar-ring: oklch(0.58 0.19 255);
-  --delivery-surface: oklch(0.995 0.004 240 / 72%);
-  --delivery-surface-strong: oklch(0.995 0.004 240 / 90%);
-  --delivery-surface-subtle: oklch(0.965 0.026 232 / 70%);
+  --delivery-surface: rgb(255 255 255 / 68%);
+  --delivery-surface-strong: rgb(247 251 255 / 86%);
+  --delivery-surface-subtle: rgb(239 245 252 / 58%);
   --delivery-blue: oklch(0.61 0.18 255);
   --delivery-cyan: oklch(0.7 0.13 205);
   --delivery-violet: oklch(0.65 0.16 295);
   --delivery-amber: oklch(0.75 0.15 78);
   --delivery-rose: oklch(0.66 0.18 15);
   --delivery-green: oklch(0.67 0.14 155);
-  --delivery-glass-border: oklch(0.88 0.035 235 / 72%);
-  --delivery-glass-highlight: oklch(1 0 0 / 78%);
-  --delivery-glass-shadow: 0 16px 42px oklch(0.44 0.055 245 / 10%), 0 2px 8px oklch(0.44 0.055 245 / 6%);
-  --delivery-panel-shadow: 0 10px 28px oklch(0.44 0.055 245 / 8%), inset 0 1px 0 oklch(1 0 0 / 72%);
-  --delivery-canvas-background: linear-gradient(135deg, oklch(0.965 0.034 205) 0%, oklch(0.978 0.018 235) 48%, oklch(0.96 0.028 255) 100%);
+  --delivery-glass-border: rgb(255 255 255 / 90%);
+  --delivery-glass-highlight: rgb(255 255 255 / 92%);
+  --delivery-glass-sheen: linear-gradient(145deg, rgb(255 255 255 / 42%) 0%, rgb(255 255 255 / 14%) 48%, rgb(224 237 252 / 12%) 100%);
+  --delivery-glass-shadow: 0 18px 46px rgb(62 91 132 / 11%), 0 3px 10px rgb(62 91 132 / 6%), inset 0 1px 0 rgb(255 255 255 / 92%), inset 0 -1px 0 rgb(255 255 255 / 34%);
+  --delivery-panel-shadow: 0 12px 32px rgb(62 91 132 / 9%), inset 0 1px 0 rgb(255 255 255 / 88%), inset 0 -1px 0 rgb(255 255 255 / 28%);
+  --delivery-canvas-background:
+    radial-gradient(circle at 10% 12%, rgb(141 225 230 / 22%), transparent 30%),
+    radial-gradient(circle at 94% 20%, rgb(173 190 255 / 28%), transparent 34%),
+    radial-gradient(circle at 72% 108%, rgb(177 218 255 / 18%), transparent 36%),
+    linear-gradient(135deg, #edf5fb 0%, #f7f9fd 44%, #edf2fb 100%);
   --gtc-delivery-dashboard-main: minmax(0, 1.85fr) minmax(18rem, 0.8fr);
   --gtc-delivery-dashboard-projects: minmax(10rem, 1.6fr) minmax(5rem, 0.65fr) minmax(4.5rem, 0.55fr) minmax(5.5rem, 0.65fr) minmax(4rem, 0.45fr) minmax(5.5rem, 0.65fr);
   --sp-delivery-dashboard-columns: 0.75rem;
@@ -1958,35 +1963,59 @@ span.paperclip-mention-chip[data-mention-kind="external-object"] {
 
 .delivery-app-shell {
   background: var(--delivery-canvas-background);
+  isolation: isolate;
 }
 
 .delivery-main {
-  background: linear-gradient(180deg, color-mix(in oklab, var(--background) 22%, transparent), color-mix(in oklab, var(--background) 55%, transparent));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--background) 4%, transparent), color-mix(in srgb, var(--background) 10%, transparent));
 }
 
 .delivery-sidebar,
 .delivery-topbar,
 .delivery-properties-panel {
-  box-shadow: inset -1px 0 0 var(--delivery-glass-highlight);
+  border-color: var(--delivery-glass-border);
+  background-image: var(--delivery-glass-sheen);
+  box-shadow: var(--delivery-panel-shadow);
+  backdrop-filter: blur(28px) saturate(122%);
+  -webkit-backdrop-filter: blur(28px) saturate(122%);
+}
+
+.delivery-sidebar {
+  background-color: var(--sidebar);
 }
 
 .delivery-topbar {
-  background: color-mix(in oklab, var(--delivery-surface-strong) 88%, transparent);
-  backdrop-filter: blur(24px) saturate(128%);
-  box-shadow: inset 0 -1px 0 var(--delivery-glass-highlight), 0 5px 18px oklch(0.44 0.055 245 / 5%);
+  background-color: var(--delivery-surface-strong);
+  backdrop-filter: blur(30px) saturate(122%);
+  -webkit-backdrop-filter: blur(30px) saturate(122%);
+  box-shadow: inset 0 -1px 0 var(--delivery-glass-highlight), 0 5px 18px rgb(62 91 132 / 5%);
 }
 
 .delivery-search-trigger {
-  background: color-mix(in oklab, var(--delivery-surface-strong) 82%, transparent);
+  background-color: var(--delivery-surface);
+  background-image: var(--delivery-glass-sheen);
   box-shadow: var(--delivery-panel-shadow);
+  backdrop-filter: blur(24px) saturate(120%);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
 }
 
 .delivery-glass-panel,
 .delivery-detail-panel {
   border: 1px solid var(--delivery-glass-border);
-  background: color-mix(in oklab, var(--delivery-surface-strong) 84%, transparent);
+  background-color: var(--delivery-surface);
+  background-image: var(--delivery-glass-sheen);
   box-shadow: var(--delivery-glass-shadow);
-  backdrop-filter: blur(22px) saturate(125%);
+  backdrop-filter: blur(28px) saturate(122%);
+  -webkit-backdrop-filter: blur(28px) saturate(122%);
+}
+
+.delivery-run-transcript-panel {
+  border-color: var(--delivery-glass-border);
+  background-color: color-mix(in srgb, var(--delivery-surface) 86%, transparent);
+  background-image: var(--delivery-glass-sheen);
+  box-shadow: var(--delivery-panel-shadow);
+  backdrop-filter: blur(24px) saturate(120%);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
 }
 
 .delivery-overview-card {

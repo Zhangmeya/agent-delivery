@@ -3405,7 +3405,7 @@ function RunsTab({
     <div className="flex gap-0">
       {/* Left: run list — border stretches full height, content sticks */}
       <div className={cn(
-        "shrink-0 border border-border rounded-lg",
+        "delivery-glass-panel shrink-0 rounded-lg overflow-hidden",
         selectedRun ? "w-72" : "w-full",
       )}>
         <div className="sticky top-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 2rem)" }}>
@@ -3599,7 +3599,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
           break-glass handlers as the task detail page. */}
       <RunWorkspaceRecoverySurface run={run} />
       {/* Run summary card */}
-      <div className="border border-border rounded-lg overflow-hidden">
+      <div className="delivery-glass-panel rounded-lg overflow-hidden">
         <div className="flex flex-col sm:flex-row">
           {/* Left column: status + timing */}
           <div className="flex-1 p-4 space-y-3">
@@ -4441,7 +4441,7 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
           )}
         </div>
       </div>
-      <div className="max-h-(--sz-38rem) overflow-y-auto rounded-2xl border border-border/70 bg-background/40 p-3 sm:p-4">
+      <div className="delivery-run-transcript-panel max-h-(--sz-38rem) overflow-y-auto rounded-2xl border p-3 sm:p-4">
         <RunTranscriptView
           entries={transcript}
           toolDecisions={toolDecisionLookup.data?.decisions ?? []}

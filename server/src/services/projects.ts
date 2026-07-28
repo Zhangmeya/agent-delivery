@@ -2,6 +2,8 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "@penclipai/db";
 import {
   projects,
+  agents,
+  companyMemberships,
   projectGoals,
   goals,
   issues,
@@ -11,6 +13,7 @@ import {
   projectWorkspaces,
   workspaceRuntimeServices,
 } from "@penclipai/db";
+import { initializeProjectDelivery } from "./project-delivery.js";
 import {
   deriveProjectUrlKey,
   hasNonAsciiContent,
@@ -32,6 +35,7 @@ import { listCurrentRuntimeServicesForProjectWorkspaces } from "./workspace-runt
 import { parseProjectExecutionWorkspacePolicy } from "./execution-workspace-policy.js";
 import { mergeProjectWorkspaceRuntimeConfig, readProjectWorkspaceRuntimeConfig } from "./project-workspace-runtime-config.js";
 import { resolveManagedProjectWorkspaceDir } from "../home-paths.js";
+import { unprocessable } from "../errors.js";
 
 type ProjectRow = typeof projects.$inferSelect;
 type ProjectWorkspaceRow = typeof projectWorkspaces.$inferSelect;
@@ -547,6 +551,36 @@ export function projectService(db: Db) {
   ): Promise<ProjectWithGoals> => {
     const { goalIds: inputGoalIds, ...projectData } = data;
     const ids = resolveGoalIds({ goalIds: inputGoalIds, goalId: projectData.goalId });
+    if (projectData.deliveryMethod === "digital_twin_story") {
+      if (!projectData.projectManagerUserId) {
+        throw unprocessable("Digital-twin delivery projects require a project manager");
+      }
+      const userIds = [
+        projectData.projectManagerUserId,
+        projectData.finalAcceptanceOwnerUserId,
+      ].filter((value): value is string => Boolean(value));
+      if (userIds.length > 0) {
+        const memberships = await db.select({ principalId: companyMemberships.principalId })
+          .from(companyMemberships)
+          .where(and(
+            eq(companyMemberships.companyId, companyId),
+            eq(companyMemberships.principalType, "user"),
+            eq(companyMemberships.status, "active"),
+            inArray(companyMemberships.principalId, userIds),
+          ));
+        const activeUserIds = new Set(memberships.map((membership) => membership.principalId));
+        if (userIds.some((userId) => !activeUserIds.has(userId))) {
+          throw unprocessable("Project manager and acceptance owner must be active company users");
+        }
+      }
+      if (projectData.pmAgentId) {
+        const pmAgent = await db.select({ id: agents.id }).from(agents).where(and(
+          eq(agents.id, projectData.pmAgentId),
+          eq(agents.companyId, companyId),
+        )).then((rows) => rows[0] ?? null);
+        if (!pmAgent) throw unprocessable("PM Agent must belong to the project company");
+      }
+    }
 
     // Note: color is intentionally NOT auto-assigned. New projects default to
     // `color = null` (neutral gray) unless an explicit color is supplied. See PAP-68.
@@ -565,6 +599,13 @@ export function projectService(db: Db) {
       .values({ ...projectData, goalId: legacyGoalId, companyId })
       .returning()
       .then((rows) => rows[0]);
+
+    try {
+      await initializeProjectDelivery(db, row);
+    } catch (error) {
+      await db.delete(projects).where(eq(projects.id, row.id));
+      throw error;
+    }
 
     if (ids && ids.length > 0) {
       await syncGoalLinks(db, row.id, companyId, ids);
@@ -780,11 +821,56 @@ export function projectService(db: Db) {
       const { goalIds: inputGoalIds, ...projectData } = data;
       const ids = resolveGoalIds({ goalIds: inputGoalIds, goalId: projectData.goalId });
       const existingProject = await db
-        .select({ id: projects.id, companyId: projects.companyId, name: projects.name })
+        .select({
+          id: projects.id,
+          companyId: projects.companyId,
+          name: projects.name,
+          deliveryMethod: projects.deliveryMethod,
+          projectManagerUserId: projects.projectManagerUserId,
+          finalAcceptanceOwnerUserId: projects.finalAcceptanceOwnerUserId,
+          pmAgentId: projects.pmAgentId,
+        })
         .from(projects)
         .where(eq(projects.id, id))
         .then((rows) => rows[0] ?? null);
       if (!existingProject) return null;
+
+      if (existingProject.deliveryMethod === "digital_twin_story") {
+        const nextProjectManagerUserId =
+          projectData.projectManagerUserId !== undefined
+            ? projectData.projectManagerUserId
+            : existingProject.projectManagerUserId;
+        if (!nextProjectManagerUserId) {
+          throw unprocessable("Digital-twin delivery projects require a project manager");
+        }
+        const nextAcceptanceOwnerUserId =
+          projectData.finalAcceptanceOwnerUserId !== undefined
+            ? projectData.finalAcceptanceOwnerUserId
+            : existingProject.finalAcceptanceOwnerUserId;
+        const userIds = [nextProjectManagerUserId, nextAcceptanceOwnerUserId]
+          .filter((value): value is string => Boolean(value));
+        const memberships = await db.select({ principalId: companyMemberships.principalId })
+          .from(companyMemberships)
+          .where(and(
+            eq(companyMemberships.companyId, existingProject.companyId),
+            eq(companyMemberships.principalType, "user"),
+            eq(companyMemberships.status, "active"),
+            inArray(companyMemberships.principalId, userIds),
+          ));
+        const activeUserIds = new Set(memberships.map((membership) => membership.principalId));
+        if (userIds.some((userId) => !activeUserIds.has(userId))) {
+          throw unprocessable("Project manager and acceptance owner must be active company users");
+        }
+        const nextPmAgentId =
+          projectData.pmAgentId !== undefined ? projectData.pmAgentId : existingProject.pmAgentId;
+        if (nextPmAgentId) {
+          const pmAgent = await db.select({ id: agents.id }).from(agents).where(and(
+            eq(agents.id, nextPmAgentId),
+            eq(agents.companyId, existingProject.companyId),
+          )).then((rows) => rows[0] ?? null);
+          if (!pmAgent) throw unprocessable("PM Agent must belong to the project company");
+        }
+      }
 
       if (projectData.name !== undefined) {
         const existingShortname = normalizeProjectUrlKey(existingProject.name);

@@ -5,6 +5,7 @@ import type {
   WorkspaceRuntimeService,
 } from "./workspace-runtime.js";
 import type { AgentEnvConfig } from "./secrets.js";
+import type { ProjectDeliveryMethod, ProjectSkeletonStatus } from "./project-delivery.js";
 
 export type ProjectWorkspaceSourceType = "local_path" | "git_repo" | "remote_managed" | "non_git_path";
 export type ProjectWorkspaceVisibility = "default" | "advanced";
@@ -87,6 +88,14 @@ export interface Project {
   description: string | null;
   status: ProjectStatus;
   leadAgentId: string | null;
+  deliveryMethod?: ProjectDeliveryMethod | null;
+  projectManagerUserId?: string | null;
+  pmAgentId?: string | null;
+  finalAcceptanceOwnerUserId?: string | null;
+  plannedStartDate?: string | null;
+  skeletonStatus?: ProjectSkeletonStatus;
+  skeletonError?: string | null;
+  skeletonConfirmedAt?: Date | null;
   targetDate: string | null;
   color: string | null;
   icon: string | null;
