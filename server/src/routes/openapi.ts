@@ -22,6 +22,9 @@ import {
   createIssueSchema,
   updateIssueSchema,
   createIssueLabelSchema,
+  createIssueDeliverableSchema,
+  reviewIssueDeliverableVersionSchema,
+  submitIssueDeliverableVersionSchema,
   addIssueCommentSchema,
   checkoutIssueSchema,
   linkIssueApprovalSchema,
@@ -33,6 +36,11 @@ import {
   upsertIssueWatchdogSchema,
   // Project
   createProjectSchema,
+  advanceProjectDeliveryStageSchema,
+  applyProjectSkeletonSchema,
+  reopenProjectDeliveryStageSchema,
+  updateProjectDeliveryStageSchema,
+  updateProjectTaskGroupSchema,
   updateProjectSchema,
   createProjectWorkspaceSchema,
   updateProjectWorkspaceSchema,
@@ -2381,6 +2389,173 @@ registry.registerPath({
   summary: "Delete a project workspace",
   request: { params: z.object({ id: z.string(), workspaceId: z.string() }) },
   responses: { 200: r.ok(), 401: r.unauthorized },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/projects/{id}/delivery",
+  tags: ["projects"],
+  summary: "Get the project delivery overview",
+  request: { params: z.object({ id: z.string() }) },
+  responses: { 200: r.ok(), 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/projects/{id}/delivery/skeleton/generate",
+  tags: ["projects"],
+  summary: "Request PM Agent project skeleton generation",
+  request: { params: z.object({ id: z.string() }) },
+  responses: { 202: r.ok(), 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 422: r.unprocessable },
+});
+
+registry.registerPath({
+  method: "put",
+  path: "/api/projects/{id}/delivery/skeleton",
+  tags: ["projects"],
+  summary: "Apply a project delivery skeleton draft",
+  request: {
+    params: z.object({ id: z.string() }),
+    body: jsonBody(applyProjectSkeletonSchema),
+  },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/projects/{id}/delivery/skeleton/confirm",
+  tags: ["projects"],
+  summary: "Confirm a project delivery skeleton",
+  request: { params: z.object({ id: z.string() }) },
+  responses: { 200: r.ok(), 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 422: r.unprocessable },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/projects/{id}/delivery/stages/{stageId}/advance",
+  tags: ["projects"],
+  summary: "Advance a project delivery stage",
+  request: {
+    params: z.object({ id: z.string(), stageId: z.string() }),
+    body: jsonBody(advanceProjectDeliveryStageSchema),
+  },
+  responses: {
+    200: r.ok(),
+    400: r.badRequest,
+    401: r.unauthorized,
+    403: r.forbidden,
+    404: r.notFound,
+    422: r.unprocessable,
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/projects/{id}/delivery/stages/{stageId}/owner",
+  tags: ["projects"],
+  summary: "Update a project delivery stage owner",
+  request: {
+    params: z.object({ id: z.string(), stageId: z.string() }),
+    body: jsonBody(updateProjectDeliveryStageSchema),
+  },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/api/projects/{id}/delivery/task-groups/{groupId}/owner",
+  tags: ["projects"],
+  summary: "Update a project delivery task group owner",
+  request: {
+    params: z.object({ id: z.string(), groupId: z.string() }),
+    body: jsonBody(updateProjectTaskGroupSchema),
+  },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/projects/{id}/delivery/stages/{stageId}/reopen",
+  tags: ["projects"],
+  summary: "Reopen a project delivery stage",
+  request: {
+    params: z.object({ id: z.string(), stageId: z.string() }),
+    body: jsonBody(reopenProjectDeliveryStageSchema),
+  },
+  responses: {
+    200: r.ok(),
+    400: r.badRequest,
+    401: r.unauthorized,
+    403: r.forbidden,
+    404: r.notFound,
+    422: r.unprocessable,
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/issues/{issueId}/deliverables",
+  tags: ["issues"],
+  summary: "List deliverables for an issue",
+  request: { params: z.object({ issueId: z.string() }) },
+  responses: { 200: r.ok(), 401: r.unauthorized, 403: r.forbidden, 404: r.notFound, 422: r.unprocessable },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/issues/{issueId}/deliverables",
+  tags: ["issues"],
+  summary: "Create an issue deliverable",
+  request: {
+    params: z.object({ issueId: z.string() }),
+    body: jsonBody(createIssueDeliverableSchema),
+  },
+  responses: {
+    201: r.ok(),
+    400: r.badRequest,
+    401: r.unauthorized,
+    403: r.forbidden,
+    404: r.notFound,
+    422: r.unprocessable,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/issues/{issueId}/deliverables/{deliverableId}/versions",
+  tags: ["issues"],
+  summary: "Submit an issue deliverable version",
+  request: {
+    params: z.object({ issueId: z.string(), deliverableId: z.string() }),
+    body: jsonBody(submitIssueDeliverableVersionSchema),
+  },
+  responses: {
+    201: r.ok(),
+    400: r.badRequest,
+    401: r.unauthorized,
+    403: r.forbidden,
+    404: r.notFound,
+    422: r.unprocessable,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/issues/{issueId}/deliverables/{deliverableId}/versions/{versionId}/review",
+  tags: ["issues"],
+  summary: "Review an issue deliverable version",
+  request: {
+    params: z.object({ issueId: z.string(), deliverableId: z.string(), versionId: z.string() }),
+    body: jsonBody(reviewIssueDeliverableVersionSchema),
+  },
+  responses: {
+    200: r.ok(),
+    400: r.badRequest,
+    401: r.unauthorized,
+    403: r.forbidden,
+    404: r.notFound,
+    422: r.unprocessable,
+  },
 });
 
 // ─── Routines ────────────────────────────────────────────────────────────────
